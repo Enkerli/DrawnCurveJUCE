@@ -168,6 +168,8 @@ void CurveDisplay::paint (juce::Graphics& g)
                     const int pb = juce::roundToInt (ranged * 16383.0f) - 8192;
                     return (pb >= 0 ? "+" : "") + juce::String (pb);
                 }
+                case MessageType::Note:
+                    return juce::String (juce::roundToInt (ranged * 127.0f));
             }
             return {};
         };
@@ -279,7 +281,7 @@ void CurveDisplay::timerCallback()
 namespace Layout
 {
     static constexpr int editorW      = 640;
-    static constexpr int editorH      = 560;   // +40 for direction row
+    static constexpr int editorH      = 560;
     static constexpr int pad          = 6;
     static constexpr int buttonRowH   = 40;
     static constexpr int buttonRow2H  = 34;    // direction buttons
@@ -321,7 +323,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         _lightMode = !_lightMode;
         themeButton.setButtonText (_lightMode ? "Dark" : "Light");
         curveDisplay.setLightMode (_lightMode);
-        applyTheme();   // re-colours sliders, labels, buttons
+        applyTheme();
     };
 
     addAndMakeVisible (syncButton);
@@ -337,6 +339,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 
     // ── Sliders ───────────────────────────────────────────────────────────────
     setupSlider (ccSlider,        ccLabel,        "CC#");
+    ccSlider.setNumDecimalPlacesToDisplay (0);   // CC# and Velocity are both integers
+
     setupSlider (channelSlider,   channelLabel,   "Channel");
     setupSlider (smoothingSlider, smoothingLabel, "Smooth");
     setupSlider (minOutSlider,    minOutLabel,    "Min Out");
@@ -354,11 +358,9 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     maxAttach       = std::make_unique<Attach> (apvts, "maxOutput",      maxOutSlider);
     speedAttach     = std::make_unique<Attach> (apvts, "playbackSpeed",  speedSlider);
 
-    // ── Message-type radio buttons ────────────────────────────────────────────
-    // ComboBox popups fail silently in AUv3 on iOS (no TopLevelWindow), so we
-    // use three TextButtons as a popup-free radio group instead.
-    static const std::array<const char*, 3> kMsgLabels { "CC", "Ch Press", "Pitch Bend" };
-    for (int i = 0; i < 3; ++i)
+    // ── Message-type radio buttons (4: CC / Ch Prs / Pitch / Note) ───────────
+    static const std::array<const char*, 4> kMsgLabels { "CC", "Ch Prs", "Pitch", "Note" };
+    for (int i = 0; i < 4; ++i)
     {
         msgTypeBtns[i].setButtonText (kMsgLabels[i]);
         addAndMakeVisible (msgTypeBtns[i]);
@@ -391,7 +393,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     proc.apvts.addParameterListener ("messageType",       this);
     proc.apvts.addParameterListener ("playbackDirection", this);
 
-    // Apply correct colours for the initial (dark) theme.
+    // Apply correct colours and CC-slot state for the initial theme.
     applyTheme();
 
     // Restore sync UI state (e.g. after state load with syncEnabled=true).
@@ -434,7 +436,7 @@ void DrawnCurveEditor::updateMsgTypeButtons()
     const juce::Colour inactiveBg   = _lightMode ? juce::Colour (0xffe0e0e8)      : juce::Colour (0xff333355);
     const juce::Colour inactiveText = _lightMode ? juce::Colour (0xff3a3a3c)      : juce::Colours::lightgrey;
 
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < 4; ++i)
     {
         const bool active = (i == sel);
         msgTypeBtns[i].setColour (juce::TextButton::buttonColourId,
@@ -445,19 +447,36 @@ void DrawnCurveEditor::updateMsgTypeButtons()
             active ? juce::Colours::white : inactiveText);
     }
 
-    updateCCVisibility();
+    updateCCSlot();
 }
 
-void DrawnCurveEditor::updateCCVisibility()
+void DrawnCurveEditor::updateCCSlot()
 {
-    // CC# slider is only meaningful for CC messages; dim it for other types.
-    const int  sel  = static_cast<int> (
+    const int  sel    = static_cast<int> (
         proc.apvts.getRawParameterValue ("messageType")->load());
-    const bool isCC = (sel == 0);
-    ccSlider.setEnabled (isCC);
-    ccLabel .setEnabled (isCC);
-    ccSlider.setAlpha   (isCC ? 1.0f : 0.4f);
-    ccLabel .setAlpha   (isCC ? 1.0f : 0.4f);
+    const bool isNote = (sel == 3);
+    const bool isCC   = (sel == 0);
+
+    // Swap attachment: ccNumber <-> noteVelocity
+    ccAttach.reset();
+    if (isNote)
+    {
+        ccAttach = std::make_unique<Attach> (proc.apvts, "noteVelocity", ccSlider);
+        ccLabel.setText ("Vel", juce::dontSendNotification);
+        ccSlider.setEnabled (true);
+        ccLabel .setEnabled (true);
+        ccSlider.setAlpha (1.0f);
+        ccLabel .setAlpha (1.0f);
+    }
+    else
+    {
+        ccAttach = std::make_unique<Attach> (proc.apvts, "ccNumber", ccSlider);
+        ccLabel.setText ("CC#", juce::dontSendNotification);
+        ccSlider.setEnabled (isCC);
+        ccLabel .setEnabled (isCC);
+        ccSlider.setAlpha (isCC ? 1.0f : 0.4f);
+        ccLabel .setAlpha (isCC ? 1.0f : 0.4f);
+    }
 }
 
 void DrawnCurveEditor::updateDirButtons()
@@ -512,7 +531,6 @@ void DrawnCurveEditor::onSyncToggled (bool isSync)
 //==============================================================================
 void DrawnCurveEditor::applyTheme()
 {
-    // Resolve palette colours for the current mode.
     const bool light = _lightMode;
 
     const juce::Colour textCol  = light ? juce::Colour (0xff1c1c1e) : juce::Colours::white;
@@ -547,10 +565,8 @@ void DrawnCurveEditor::applyTheme()
         b->setColour (juce::TextButton::textColourOffId, btnText);
     }
 
-    // ── Message-type radio buttons (active button stays blue) ─────────────────
+    // ── Message-type + direction radio buttons ─────────────────────────────────
     updateMsgTypeButtons();
-
-    // ── Direction radio buttons ────────────────────────────────────────────────
     updateDirButtons();
 
     repaint();
@@ -568,11 +584,11 @@ void DrawnCurveEditor::resized()
     using namespace Layout;
     auto area = getLocalBounds().reduced (pad);
 
-    // ── Button row 1 (Play · Clear · [CC][Ch Press][Pitch Bend] · [Sync] · [Light/Dark]) ──
+    // ── Button row 1 (Play · Clear · [CC][ChPrs][Pitch][Note] · [Sync] · [Dark/Light]) ──
     {
         auto row = area.removeFromTop (buttonRowH);
 
-        // Right side first so removeFromRight doesn't shrink the left portion.
+        // Right side first.
         themeButton.setBounds (row.removeFromRight (68));
         row.removeFromRight (pad);
         syncButton .setBounds (row.removeFromRight (62));
@@ -581,19 +597,19 @@ void DrawnCurveEditor::resized()
         playButton .setBounds (row.removeFromLeft (100));
         row.removeFromLeft (pad);
         clearButton.setBounds (row.removeFromLeft (80));
-
-        // Message-type radio buttons in remaining space.
         row.removeFromLeft (pad * 3);
-        static constexpr std::array<int, 3> kMsgW { 55, 100, 110 };
-        for (int i = 0; i < 3; ++i)
+
+        // 4 equal-width message-type buttons in remaining space.
+        const int msgBtnW = (row.getWidth() - pad * 3) / 4;
+        for (int i = 0; i < 4; ++i)
         {
-            msgTypeBtns[i].setBounds (row.removeFromLeft (kMsgW[i]));
-            if (i < 2) row.removeFromLeft (pad);
+            msgTypeBtns[i].setBounds (row.removeFromLeft (msgBtnW));
+            if (i < 3) row.removeFromLeft (pad);
         }
     }
     area.removeFromTop (pad);
 
-    // ── Button row 2 (Direction: Fwd · Rev · Ping-Pong) ───────────────────────
+    // ── Button row 2 (-> Fwd · <- Rev · <> P-P) ──────────────────────────────
     {
         auto row = area.removeFromTop (buttonRow2H);
         const int dirBtnW = (row.getWidth() - pad * 2) / 3;
@@ -625,7 +641,7 @@ void DrawnCurveEditor::resized()
         sl3 .setBounds (row);
     };
 
-    // ── Param row 1: CC#, Channel, Smooth ─────────────────────────────────────
+    // ── Param row 1: CC#/Vel, Channel, Smooth ─────────────────────────────────
     placeRow3 (ccLabel, ccSlider, channelLabel, channelSlider, smoothingLabel, smoothingSlider);
     area.removeFromTop (pad);
 

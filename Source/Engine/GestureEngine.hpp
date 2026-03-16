@@ -37,6 +37,7 @@ private:
     std::atomic<const LaneSnapshot*> _snapshot{nullptr};
     std::atomic<bool>  _isPlaying{false};
     std::atomic<float> _currentPhase{0.0f};
+    std::atomic<bool>  _noteOffNeeded{false};  // set by setPlaying(false), consumed by processBlock
 
     LaneRuntime _runtime; // render-thread only
 

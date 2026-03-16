@@ -14,10 +14,13 @@ void GestureEngine::clearSnapshot() {
 void GestureEngine::setPlaying(bool playing) {
     _isPlaying.store(playing, std::memory_order_release);
     if (!playing)
-        _runtime.lastSentValue = -1;   // force re-send on next play
+        _noteOffNeeded.store(true, std::memory_order_release);
+        // NOTE: lastSentValue is NOT reset here so the cleanup path can send Note Off.
+        // It is reset inside processBlock after the Note Off is sent.
 }
 
 void GestureEngine::reset() {
+    _noteOffNeeded.store(false, std::memory_order_relaxed);  // cancel any pending note-off
     _runtime.playheadSeconds = 0.0;
     _runtime.lastSentValue   = -1;
     _runtime.smoothedValue   = 0.0f;
@@ -40,7 +43,25 @@ float GestureEngine::sampleCurve(const LaneSnapshot& snap, float phase) const {
 void GestureEngine::processBlock(uint32_t frameCount, double sampleRate, const MIDIOut& midiOut,
                                   float speedRatio, PlaybackDirection direction) {
     const auto* snap = _snapshot.load(std::memory_order_acquire);
-    if (!snap || !snap->valid || !_isPlaying.load(std::memory_order_acquire))
+    if (!snap || !snap->valid)
+        return;
+
+    // ── Cleanup path: send Note Off if playback just stopped ─────────────────
+    // _noteOffNeeded is set by setPlaying(false) before _isPlaying goes false,
+    // so we catch it here on the very next processBlock call.
+    if (_noteOffNeeded.exchange(false, std::memory_order_acq_rel))
+    {
+        if (snap->messageType == MessageType::Note
+            && _runtime.lastSentValue >= 0
+            && midiOut)
+        {
+            midiOut(0x80u | (snap->midiChannel & 0x0Fu),
+                    static_cast<uint8_t> (_runtime.lastSentValue), 0u);
+        }
+        _runtime.lastSentValue = -1;   // force re-send on next play for all modes
+    }
+
+    if (!_isPlaying.load(std::memory_order_acquire))
         return;
 
     // effectiveDuration shrinks as speedRatio increases (faster = shorter loop).
@@ -118,6 +139,24 @@ void GestureEngine::processBlock(uint32_t frameCount, double sampleRate, const M
                                      (uint8_t)(v & 0x7F),           // LSB
                                      (uint8_t)((v >> 7) & 0x7F));   // MSB
                 _runtime.lastSentValue = v;
+            }
+            break;
+        }
+        case MessageType::Note:
+        {
+            // Y value maps to MIDI pitch 0-127.
+            // Sends Note Off for the previous pitch then Note On for the new one.
+            int note = std::clamp((int)std::lround(ranged * 127.0f), 0, 127);
+            if (note != _runtime.lastSentValue) {
+                if (midiOut) {
+                    if (_runtime.lastSentValue >= 0)
+                        midiOut(0x80u | (snap->midiChannel & 0x0Fu),
+                                static_cast<uint8_t> (_runtime.lastSentValue), 0u);
+                    midiOut(0x90u | (snap->midiChannel & 0x0Fu),
+                            static_cast<uint8_t> (note),
+                            snap->noteVelocity);
+                }
+                _runtime.lastSentValue = note;
             }
             break;
         }

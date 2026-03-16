@@ -13,6 +13,7 @@ namespace ParamID
     static const juce::String syncEnabled       { "syncEnabled"       };
     static const juce::String syncBeats         { "syncBeats"         };
     static const juce::String playbackDirection { "playbackDirection" };
+    static const juce::String noteVelocity      { "noteVelocity"      };
 }
 
 // Helper: channel pressure is a 2-byte MIDI message; everything else is 3-byte.
@@ -48,7 +49,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout DrawnCurveProcessor::createP
 
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParamID::messageType, 1 }, "Message Type",
-        juce::StringArray { "CC", "Channel Pressure", "Pitch Bend" }, 0));
+        juce::StringArray { "CC", "Channel Pressure", "Pitch Bend", "Note" }, 0));
+
+    // Note velocity (1-127), used only when messageType == Note.
+    layout.add (std::make_unique<juce::AudioParameterInt>(
+        juce::ParameterID { ParamID::noteVelocity, 1 }, "Note Velocity", 1, 127, 100));
 
     // Speed: 0.25× to 4×, log-centred at 1× (skew=0.5 → midpoint = sqrt(0.25*4) = 1.0)
     layout.add (std::make_unique<juce::AudioParameterFloat>(
@@ -241,8 +246,11 @@ void DrawnCurveProcessor::finalizeCapture()
     float maxOut   = apvts.getRawParameterValue (ParamID::maxOutput)->load();
     auto  msgType  = static_cast<MessageType> (
                          static_cast<int> (apvts.getRawParameterValue (ParamID::messageType)->load()));
+    uint8_t noteVel = static_cast<uint8_t> (
+                         static_cast<int> (apvts.getRawParameterValue (ParamID::noteVelocity)->load()));
 
     auto* snap   = new LaneSnapshot (_capture.finalize (ccNum, ch, minOut, maxOut, smooth, msgType));
+    snap->noteVelocity = noteVel;
     _currentSnap = snap;
 
     {
@@ -300,6 +308,7 @@ void DrawnCurveProcessor::getStateInformation (juce::MemoryBlock& destData)
         state.setProperty ("maxOut",    _currentSnap->maxOut,                                     nullptr);
         state.setProperty ("smooth",    _currentSnap->smoothing,                                  nullptr);
         state.setProperty ("msgType",   static_cast<int> (_currentSnap->messageType),             nullptr);
+        state.setProperty ("noteVel",   static_cast<int> (_currentSnap->noteVelocity),            nullptr);
     }
 
     std::unique_ptr<juce::XmlElement> xml (state.createXml());
@@ -329,8 +338,9 @@ void DrawnCurveProcessor::setStateInformation (const void* data, int sizeInBytes
             snap->minOut      = static_cast<float>   (static_cast<double> (state.getProperty ("minOut",   0.0)));
             snap->maxOut      = static_cast<float>   (static_cast<double> (state.getProperty ("maxOut",   1.0)));
             snap->smoothing   = static_cast<float>   (static_cast<double> (state.getProperty ("smooth",  0.08)));
-            snap->messageType = static_cast<MessageType> (static_cast<int> (state.getProperty ("msgType", 0)));
-            snap->valid       = true;
+            snap->messageType  = static_cast<MessageType> (static_cast<int> (state.getProperty ("msgType",  0)));
+            snap->noteVelocity = static_cast<uint8_t>    (static_cast<int> (state.getProperty ("noteVel",  100)));
+            snap->valid        = true;
 
             _currentSnap = snap;
             {

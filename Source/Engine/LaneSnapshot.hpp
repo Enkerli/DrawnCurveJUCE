@@ -7,6 +7,7 @@ enum class MessageType : uint8_t {
     CC              = 0,   // Control Change   (0xB0) — data1=ccNumber, data2=value 0-127
     ChannelPressure = 1,   // Channel Pressure (0xD0) — data1=value 0-127 (2-byte message)
     PitchBend       = 2,   // Pitch Bend       (0xE0) — 14-bit value, centre=8192
+    Note            = 3,   // Note On/Off      (0x90/0x80) — Y maps to pitch 0-127
 };
 
 // Playback direction for the curve loop.
@@ -27,5 +28,6 @@ struct LaneSnapshot {
     float       maxOut          = 1.0f;
     float       smoothing       = 0.08f;
     MessageType messageType     = MessageType::CC;
+    uint8_t     noteVelocity    = 100;   // used only in Note mode (1-127)
     bool        valid           = false;
 };

@@ -72,8 +72,8 @@ private:
     std::unique_ptr<Attach> ccAttach, channelAttach, smoothingAttach,
                              minAttach, maxAttach, speedAttach;
 
-    // Message-type radio buttons: [0]=CC  [1]=Channel Pressure  [2]=Pitch Bend
-    std::array<juce::TextButton, 3> msgTypeBtns;
+    // Message-type radio buttons: [0]=CC  [1]=Channel Pressure  [2]=Pitch Bend  [3]=Note
+    std::array<juce::TextButton, 4> msgTypeBtns;
 
     bool _lightMode { false };
 
@@ -87,9 +87,9 @@ private:
     // Swaps speed slider attachment and dims Play button based on sync state.
     void onSyncToggled (bool isSync);
 
-    // Called on UI thread to highlight the active button and dim CC# if needed.
+    // Called on UI thread to highlight the active button and update the CC#/Vel slot.
     void updateMsgTypeButtons();
-    void updateCCVisibility();
+    void updateCCSlot();   // swaps CC# ↔ Velocity attachment depending on message type
     void updateDirButtons();
 
     // AudioProcessorValueTreeState::Listener — keeps buttons in sync with
