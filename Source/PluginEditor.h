@@ -26,11 +26,18 @@ public:
 
     void setLightMode (bool light);
 
+    // Grid divisions control how many equal sections divide both axes.
+    // Range: 2 (coarse) to 8 (fine); default 4.  Each step adds/removes
+    // one tick mark and one grid line on both axes.
+    void setGridDivisions (int n) { _gridDivisions = juce::jlimit (2, 8, n); repaint(); }
+    int  getGridDivisions() const { return _gridDivisions; }
+
 private:
     DrawnCurveProcessor& proc;
     double captureStartTime { 0.0 };
     bool   isCapturing      { false };
     bool   _lightMode       { false };
+    int    _gridDivisions   { 4 };    // updated by [-]/[+] buttons in the editor
     juce::Path capturePath;   // live visual trail while drawing
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CurveDisplay)
@@ -50,6 +57,18 @@ public:
     void resized ()                override;
 
 private:
+    // Custom LookAndFeel that substitutes the platform system font so that
+    // Unicode arrows/symbols render correctly (JUCE's built-in font omits them).
+    struct SymbolLF : public juce::LookAndFeel_V4
+    {
+        juce::Font getTextButtonFont (juce::TextButton&, int /*height*/) override
+        {
+            return juce::Font (juce::Font::getDefaultSansSerifFontName(),
+                               13.0f, juce::Font::plain);
+        }
+    };
+    SymbolLF _symbolLF;
+
     DrawnCurveProcessor& proc;   // named 'proc' to avoid shadowing AudioProcessorEditor::processor
 
     CurveDisplay curveDisplay;
@@ -61,6 +80,10 @@ private:
 
     // Playback-direction radio buttons: [0]=Forward  [1]=Reverse  [2]=Ping-Pong
     std::array<juce::TextButton, 3> dirBtns;
+
+    // Grid tick [-] / [+] buttons — live on the right of the direction row.
+    juce::TextButton tickMinusBtn { "-" };
+    juce::TextButton tickPlusBtn  { "+" };
 
     // Parameter sliders + labels
     juce::Slider ccSlider, channelSlider, smoothingSlider,
