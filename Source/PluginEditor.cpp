@@ -256,7 +256,7 @@ void CurveDisplay::paint (juce::Graphics& g)
         g.drawText ("Draw a curve here", plot, juce::Justification::centred, false);
     }
 
-    // ── Axis labels ────────────────────────────────────────────────────────────
+    // ── Axis labels + scale banding ───────────────────────────────────────────
     {
         const auto  msgType = static_cast<MessageType> (
             static_cast<int> (proc.apvts.getRawParameterValue ("messageType")->load()));
@@ -268,43 +268,138 @@ void CurveDisplay::paint (juce::Graphics& g)
         const float speed   = proc.getEffectiveSpeedRatio();
         const float dur     = (recDur > 0.0f) ? recDur / std::max (speed, 0.001f) : 0.0f;
 
-        // Convert a normalised output (0=bottom of plot, 1=top) to a display string.
-        auto yLabel = [&] (float norm) -> juce::String
+        // ── Note-name helper ──────────────────────────────────────────────────
+        static const char* kNoteNames[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
+        auto midiNoteName = [] (int note) -> juce::String
         {
-            const float ranged = minOut + norm * (maxOut - minOut);
-            switch (msgType)
-            {
-                case MessageType::CC:
-                case MessageType::ChannelPressure:
-                    return juce::String (juce::roundToInt (ranged * 127.0f));
-                case MessageType::PitchBend:
-                {
-                    const int pb = juce::roundToInt (ranged * 16383.0f) - 8192;
-                    return (pb >= 0 ? "+" : "") + juce::String (pb);
-                }
-                case MessageType::Note:
-                    return juce::String (juce::roundToInt (ranged * 127.0f));
-            }
-            return {};
+            const int pc  = note % 12;
+            const int oct = note / 12 - 1;   // MIDI 60 = C4
+            return juce::String (kNoteNames[pc]) + juce::String (oct);
         };
 
-        g.setFont (juce::Font (10.0f));
-        g.setColour (T.hint);
+        // ── Scale banding + Y-axis in Note mode ──────────────────────────────
+        const bool isNote = (msgType == MessageType::Note);
+        const ScaleConfig sc = isNote ? proc.getScaleConfig() : ScaleConfig{};
+        const bool hasScale  = isNote && (sc.mask != 0xFFF);
 
-        // ── Y axis (left margin) ─────────────────────────────────────────────
-        const int lblW = juce::roundToInt (kAxisMarginL) - 2;
-        const int lblH = 12;
-        for (int i = 0; i <= _yDivisions; ++i)
+        // Y-coordinate for a normalised plot value (0=bottom, 1=top).
+        auto normToY = [&] (float norm) -> float
         {
-            const float norm   = (float)i / (float)_yDivisions;
-            const int   yPx    = juce::roundToInt ((1.0f - norm) * plotH);
-            const int   labelY = juce::jlimit (1, juce::roundToInt (plotH) - lblH - 1,
-                                               yPx - lblH / 2);
-            g.drawText (yLabel (norm), 0, labelY, lblW, lblH,
-                        juce::Justification::centredRight, false);
+            return plotY + (1.0f - norm) * plotH;
+        };
+
+        // Normalised value for MIDI note N.
+        auto noteToNorm = [&] (int n) -> float
+        {
+            return (static_cast<float> (n) / 127.0f - minOut)
+                   / std::max (maxOut - minOut, 0.001f);
+        };
+
+        if (hasScale)
+        {
+            // Collect all scale notes within the visible MIDI range.
+            const int loNote = std::max (0,   juce::roundToInt (minOut * 127.0f) - 1);
+            const int hiNote = std::min (127, juce::roundToInt (maxOut * 127.0f) + 1);
+
+            struct BandNote { int note; float y; };
+            std::vector<BandNote> visible;
+            visible.reserve (24);
+
+            for (int n = hiNote; n >= loNote; --n)
+            {
+                const int interval = ((n % 12) - (int)sc.root + 12) % 12;
+                if ((sc.mask >> interval) & 1)
+                {
+                    const float norm = noteToNorm (n);
+                    if (norm >= -0.05f && norm <= 1.05f)
+                        visible.push_back ({ n, normToY (norm) });
+                }
+            }
+
+            // Draw alternating bands between consecutive scale notes.
+            if (visible.size() >= 2)
+            {
+                const juce::Colour bandA = T.gridLine.withAlpha (0.18f);
+                const juce::Colour bandB = T.gridLine.withAlpha (0.08f);
+
+                // Top edge of the topmost band = top of plot area.
+                float prevBandTop = plotY;
+
+                for (size_t i = 0; i < visible.size(); ++i)
+                {
+                    // Band extends from the midpoint above this note to the midpoint below.
+                    const float noteY  = visible[i].y;
+                    const float halfUp = (i == 0)
+                        ? (noteY - plotY) * 0.5f
+                        : (visible[i - 1].y - noteY) * 0.5f;
+                    const float halfDn = (i + 1 < visible.size())
+                        ? (noteY - visible[i + 1].y) * 0.5f
+                        : (plotY + plotH - noteY) * 0.5f;
+
+                    const float bandTop = noteY - halfUp;
+                    const float bandBot = noteY + halfDn;
+
+                    g.setColour ((i & 1) ? bandB : bandA);
+                    g.fillRect (plotX, bandTop, plotW, bandBot - bandTop);
+                }
+            }
+
+            // Y-axis note name labels.
+            g.setFont (juce::Font (9.5f));
+            g.setColour (T.hint);
+            const int lblW = juce::roundToInt (kAxisMarginL) - 2;
+            const int lblH = 11;
+
+            for (const auto& bn : visible)
+            {
+                const int labelY = juce::jlimit (1, juce::roundToInt (plotH) - lblH - 1,
+                                                 juce::roundToInt (bn.y) - lblH / 2);
+                g.drawText (midiNoteName (bn.note), 0, labelY, lblW, lblH,
+                            juce::Justification::centredRight, false);
+            }
+        }
+        else
+        {
+            // ── Standard Y-axis (non-scale, or non-Note mode) ──────────────
+            auto yLabel = [&] (float norm) -> juce::String
+            {
+                const float ranged = minOut + norm * (maxOut - minOut);
+                switch (msgType)
+                {
+                    case MessageType::CC:
+                    case MessageType::ChannelPressure:
+                        return juce::String (juce::roundToInt (ranged * 127.0f));
+                    case MessageType::PitchBend:
+                    {
+                        const int pb = juce::roundToInt (ranged * 16383.0f) - 8192;
+                        return (pb >= 0 ? "+" : "") + juce::String (pb);
+                    }
+                    case MessageType::Note:
+                        // Chromatic Note mode: show note names at division ticks.
+                        return midiNoteName (juce::roundToInt (ranged * 127.0f));
+                }
+                return {};
+            };
+
+            g.setFont (juce::Font (10.0f));
+            g.setColour (T.hint);
+
+            const int lblW = juce::roundToInt (kAxisMarginL) - 2;
+            const int lblH = 12;
+            for (int i = 0; i <= _yDivisions; ++i)
+            {
+                const float norm   = (float)i / (float)_yDivisions;
+                const int   yPx    = juce::roundToInt ((1.0f - norm) * plotH);
+                const int   labelY = juce::jlimit (1, juce::roundToInt (plotH) - lblH - 1,
+                                                   yPx - lblH / 2);
+                g.drawText (yLabel (norm), 0, labelY, lblW, lblH,
+                            juce::Justification::centredRight, false);
+            }
         }
 
         // ── X axis (bottom margin) ────────────────────────────────────────────
+        g.setFont (juce::Font (10.0f));
+        g.setColour (T.hint);
         const int xLblY = juce::roundToInt (h - kAxisMarginB + 2);
         const int xLblH = juce::roundToInt (kAxisMarginB - 3);
         for (int i = 0; i <= _xDivisions; ++i)
@@ -316,12 +411,13 @@ void CurveDisplay::paint (juce::Graphics& g)
                         juce::Justification::centred, false);
         }
 
-        // ── Duration overlay (top-right of plot) ────────────────────────────
+        // ── Duration overlay (top-right of plot) ─────────────────────────────
+        g.setFont (juce::Font (10.0f));
+        g.setColour (T.hint);
         if (dur > 0.0f)
         {
             g.drawText (juce::String (dur, 2) + "s",
-                        juce::roundToInt (plotX + plotW - 46), 2,
-                        46, 12,
+                        juce::roundToInt (plotX + plotW - 46), 2, 46, 12,
                         juce::Justification::centredRight, false);
         }
     }
@@ -401,6 +497,7 @@ namespace Layout
     static constexpr int pad          = 6;
     static constexpr int buttonRowH   = 40;
     static constexpr int buttonRow2H  = 34;    // direction buttons
+    static constexpr int scaleRowH    = 28;    // scale preset + root note (Note mode only)
     static constexpr int paramLabelH  = 14;
     static constexpr int paramSliderH = 30;
     static constexpr int paramRowH    = paramLabelH + paramSliderH;  // 44
@@ -548,6 +645,75 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     tickXMinusBtn.onClick = [this] { curveDisplay.setXDivisions (curveDisplay.getXDivisions() - 1); };
     tickXPlusBtn .onClick = [this] { curveDisplay.setXDivisions (curveDisplay.getXDivisions() + 1); };
 
+    // ── Scale quantization rows ───────────────────────────────────────────────
+    static const std::array<const char*, 8> kScaleNames
+        { "Chrom", "Major", "Minor", "Dorian", "Penta+", "Penta-", "Blues", "Custom" };
+
+    static const std::array<const char*, 12> kRootNames
+        { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+
+    // Scale preset buttons
+    addAndMakeVisible (scaleLabel);
+    scaleLabel.setFont (juce::Font (11.0f));
+    for (int i = 0; i < kNumScalePresets; ++i)
+    {
+        scalePresetBtns[i].setButtonText (kScaleNames[i]);
+        scalePresetBtns[i].setLookAndFeel (&_symbolLF);
+        addAndMakeVisible (scalePresetBtns[i]);
+        scalePresetBtns[i].onClick = [this, i]
+        {
+            if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
+                *p = i;
+            proc.updateEngineScale();
+            updateScalePresetButtons();
+            updateScaleVisibility();   // custom mask row may appear/disappear
+        };
+    }
+
+    // Root note buttons (C ... B)
+    addAndMakeVisible (rootLabel);
+    rootLabel.setFont (juce::Font (11.0f));
+    for (int i = 0; i < kNumPitchClasses; ++i)
+    {
+        rootNoteBtns[i].setButtonText (kRootNames[i]);
+        rootNoteBtns[i].setLookAndFeel (&_symbolLF);
+        addAndMakeVisible (rootNoteBtns[i]);
+        rootNoteBtns[i].onClick = [this, i]
+        {
+            if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleRoot")))
+                *p = i;
+            proc.updateEngineScale();
+            updateRootNoteButtons();
+            curveDisplay.repaint();   // Y-axis note names update
+        };
+    }
+
+    // Custom mask buttons (one per pitch class)
+    addAndMakeVisible (notesLabel);
+    notesLabel.setFont (juce::Font (11.0f));
+    for (int i = 0; i < kNumPitchClasses; ++i)
+    {
+        customMaskBtns[i].setButtonText (kRootNames[i]);
+        customMaskBtns[i].setLookAndFeel (&_symbolLF);
+        addAndMakeVisible (customMaskBtns[i]);
+        customMaskBtns[i].onClick = [this, i]
+        {
+            // Toggle bit i in the current custom mask.
+            const int cur = static_cast<int> (proc.apvts.getRawParameterValue ("scaleCustomMask")->load());
+            const int next = cur ^ (1 << i);
+            if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleCustomMask")))
+                *p = next;
+            proc.updateEngineScale();
+            updateCustomMaskButtons();
+            curveDisplay.repaint();
+        };
+    }
+
+    // Register APVTS listeners for scale params so UI stays in sync after state restore.
+    proc.apvts.addParameterListener ("scaleMode",       this);
+    proc.apvts.addParameterListener ("scaleRoot",       this);
+    proc.apvts.addParameterListener ("scaleCustomMask", this);
+
     // ── Curve display ─────────────────────────────────────────────────────────
     addAndMakeVisible (curveDisplay);
 
@@ -564,6 +730,9 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 
     // Restore sync UI state (e.g. after state load with syncEnabled=true).
     onSyncToggled (proc.apvts.getRawParameterValue ("syncEnabled")->load() > 0.5f);
+
+    // Show/hide scale rows based on current messageType.
+    updateScaleVisibility();
 }
 
 DrawnCurveEditor::~DrawnCurveEditor()
@@ -576,6 +745,14 @@ DrawnCurveEditor::~DrawnCurveEditor()
     proc.apvts.removeParameterListener ("playbackDirection", this);
     proc.apvts.removeParameterListener ("minOutput",         this);
     proc.apvts.removeParameterListener ("maxOutput",         this);
+    proc.apvts.removeParameterListener ("scaleMode",         this);
+    proc.apvts.removeParameterListener ("scaleRoot",         this);
+    proc.apvts.removeParameterListener ("scaleCustomMask",   this);
+
+    // Reset L&F on scale buttons.
+    for (auto& b : scalePresetBtns) b.setLookAndFeel (nullptr);
+    for (auto& b : rootNoteBtns)    b.setLookAndFeel (nullptr);
+    for (auto& b : customMaskBtns)  b.setLookAndFeel (nullptr);
 }
 
 void DrawnCurveEditor::setupSlider (juce::Slider&       s,
@@ -595,11 +772,17 @@ void DrawnCurveEditor::setupSlider (juce::Slider&       s,
 void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
 {
     if (paramID == "messageType")
-        juce::MessageManager::callAsync ([this] { updateMsgTypeButtons(); });
+        juce::MessageManager::callAsync ([this] { updateMsgTypeButtons(); updateScaleVisibility(); });
     else if (paramID == "playbackDirection")
         juce::MessageManager::callAsync ([this] { updateDirButtons(); });
     else if (paramID == "minOutput" || paramID == "maxOutput")
         juce::MessageManager::callAsync ([this] { updateRangeSlider(); });
+    else if (paramID == "scaleMode")
+        juce::MessageManager::callAsync ([this] { updateScalePresetButtons(); updateScaleVisibility(); });
+    else if (paramID == "scaleRoot")
+        juce::MessageManager::callAsync ([this] { updateRootNoteButtons(); curveDisplay.repaint(); });
+    else if (paramID == "scaleCustomMask")
+        juce::MessageManager::callAsync ([this] { updateCustomMaskButtons(); curveDisplay.repaint(); });
 }
 
 void DrawnCurveEditor::updateMsgTypeButtons()
@@ -694,6 +877,81 @@ void DrawnCurveEditor::updateRangeLabel()
 }
 
 //==============================================================================
+// Scale quantization helpers
+//==============================================================================
+
+void DrawnCurveEditor::updateScaleVisibility()
+{
+    const bool isNote   = (static_cast<int> (proc.apvts.getRawParameterValue ("messageType")->load()) == 3);
+    const bool isCustom = isNote
+                       && (static_cast<int> (proc.apvts.getRawParameterValue ("scaleMode")->load()) == 7);
+
+    scaleLabel.setVisible (isNote);
+    for (auto& b : scalePresetBtns) b.setVisible (isNote);
+    rootLabel .setVisible (isNote);
+    for (auto& b : rootNoteBtns)    b.setVisible (isNote);
+
+    notesLabel.setVisible (isNote && isCustom);
+    for (auto& b : customMaskBtns)  b.setVisible (isNote && isCustom);
+
+    resized();   // redistribute vertical space now that row visibility changed
+}
+
+void DrawnCurveEditor::updateScalePresetButtons()
+{
+    const int sel = static_cast<int> (proc.apvts.getRawParameterValue ("scaleMode")->load());
+
+    const juce::Colour inactiveBg   = _lightMode ? juce::Colour (0xffe0e0e8) : juce::Colour (0xff333355);
+    const juce::Colour inactiveText = _lightMode ? juce::Colour (0xff3a3a3c) : juce::Colours::lightgrey;
+
+    for (int i = 0; i < kNumScalePresets; ++i)
+    {
+        const bool active = (i == sel);
+        scalePresetBtns[i].setColour (juce::TextButton::buttonColourId,
+            active ? juce::Colour (0xff2979ff) : inactiveBg);
+        scalePresetBtns[i].setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff2979ff));
+        scalePresetBtns[i].setColour (juce::TextButton::textColourOffId,
+            active ? juce::Colours::white : inactiveText);
+    }
+}
+
+void DrawnCurveEditor::updateRootNoteButtons()
+{
+    const int sel = static_cast<int> (proc.apvts.getRawParameterValue ("scaleRoot")->load());
+
+    const juce::Colour inactiveBg   = _lightMode ? juce::Colour (0xffe0e0e8) : juce::Colour (0xff333355);
+    const juce::Colour inactiveText = _lightMode ? juce::Colour (0xff3a3a3c) : juce::Colours::lightgrey;
+
+    for (int i = 0; i < kNumPitchClasses; ++i)
+    {
+        const bool active = (i == sel);
+        rootNoteBtns[i].setColour (juce::TextButton::buttonColourId,
+            active ? juce::Colour (0xff2979ff) : inactiveBg);
+        rootNoteBtns[i].setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff2979ff));
+        rootNoteBtns[i].setColour (juce::TextButton::textColourOffId,
+            active ? juce::Colours::white : inactiveText);
+    }
+}
+
+void DrawnCurveEditor::updateCustomMaskButtons()
+{
+    const int mask = static_cast<int> (proc.apvts.getRawParameterValue ("scaleCustomMask")->load());
+
+    const juce::Colour inactiveBg   = _lightMode ? juce::Colour (0xffe0e0e8) : juce::Colour (0xff333355);
+    const juce::Colour inactiveText = _lightMode ? juce::Colour (0xff3a3a3c) : juce::Colours::lightgrey;
+
+    for (int i = 0; i < kNumPitchClasses; ++i)
+    {
+        const bool active = (mask >> i) & 1;
+        customMaskBtns[i].setColour (juce::TextButton::buttonColourId,
+            active ? juce::Colour (0xff2979ff) : inactiveBg);
+        customMaskBtns[i].setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff2979ff));
+        customMaskBtns[i].setColour (juce::TextButton::textColourOffId,
+            active ? juce::Colours::white : inactiveText);
+    }
+}
+
+//==============================================================================
 void DrawnCurveEditor::onSyncToggled (bool isSync)
 {
     syncButton.setButtonText (isSync ? "Sync ON" : "Sync");
@@ -766,9 +1024,16 @@ void DrawnCurveEditor::applyTheme()
         b->setColour (juce::TextButton::textColourOffId, btnText);
     }
 
-    // ── Message-type + direction radio buttons ─────────────────────────────────
+    // ── Message-type + direction + scale radio buttons ────────────────────────
     updateMsgTypeButtons();
     updateDirButtons();
+    updateScalePresetButtons();
+    updateRootNoteButtons();
+    updateCustomMaskButtons();
+
+    // Scale / root / notes labels
+    for (auto* l : { &scaleLabel, &rootLabel, &notesLabel })
+        l->setColour (juce::Label::textColourId, dimText);
 
     repaint();
 }
@@ -856,6 +1121,53 @@ void DrawnCurveEditor::resized()
         lbl3.setBounds (row.removeFromTop (paramLabelH));
         sl3 .setBounds (row);
     };
+
+    // ── Scale rows (visible in Note mode only) ────────────────────────────────
+    const bool isNote   = (static_cast<int> (proc.apvts.getRawParameterValue ("messageType")->load()) == 3);
+    const bool isCustom = isNote && (static_cast<int> (proc.apvts.getRawParameterValue ("scaleMode")->load()) == 7);
+
+    if (isNote)
+    {
+        area.removeFromTop (pad);
+        auto scaleRow = area.removeFromTop (scaleRowH);
+
+        // Left: "Scale" label (32 px) + 8 preset buttons (equal width)
+        scaleLabel.setBounds (scaleRow.removeFromLeft (32).withSizeKeepingCentre (32, 14));
+        scaleRow.removeFromLeft (3);
+        const int presetW = (scaleRow.getWidth() / 5 * 3 - kNumScalePresets * 2) / kNumScalePresets;
+        for (int i = 0; i < kNumScalePresets; ++i)
+        {
+            scalePresetBtns[i].setBounds (scaleRow.removeFromLeft (presetW));
+            if (i < kNumScalePresets - 1) scaleRow.removeFromLeft (2);
+        }
+
+        // Right part of same row: "Key" label + 12 root note buttons
+        scaleRow.removeFromLeft (pad);
+        rootLabel.setBounds (scaleRow.removeFromLeft (24).withSizeKeepingCentre (24, 14));
+        scaleRow.removeFromLeft (3);
+        const int rootW = (scaleRow.getWidth() - (kNumPitchClasses - 1) * 2) / kNumPitchClasses;
+        for (int i = 0; i < kNumPitchClasses; ++i)
+        {
+            rootNoteBtns[i].setBounds (scaleRow.removeFromLeft (rootW));
+            if (i < kNumPitchClasses - 1) scaleRow.removeFromLeft (2);
+        }
+
+        // Custom mask row (shown only when Custom scale is selected)
+        if (isCustom)
+        {
+            area.removeFromTop (3);
+            auto maskRow = area.removeFromTop (scaleRowH);
+
+            notesLabel.setBounds (maskRow.removeFromLeft (32).withSizeKeepingCentre (32, 14));
+            maskRow.removeFromLeft (3);
+            const int maskW = (maskRow.getWidth() - (kNumPitchClasses - 1) * 2) / kNumPitchClasses;
+            for (int i = 0; i < kNumPitchClasses; ++i)
+            {
+                customMaskBtns[i].setBounds (maskRow.removeFromLeft (maskW));
+                if (i < kNumPitchClasses - 1) maskRow.removeFromLeft (2);
+            }
+        }
+    }
 
     // ── Param row 1: CC#/Vel, Channel, Smooth ─────────────────────────────────
     placeRow3 (ccLabel, ccSlider, channelLabel, channelSlider, smoothingLabel, smoothingSlider);

@@ -26,6 +26,10 @@ namespace ParamID
     static const juce::String syncBeats         { "syncBeats"         };
     static const juce::String playbackDirection { "playbackDirection" };
     static const juce::String noteVelocity      { "noteVelocity"      };
+    // Scale quantization (Note mode only; default = Chromatic = no-op for other modes)
+    static const juce::String scaleMode         { "scaleMode"         };
+    static const juce::String scaleRoot         { "scaleRoot"         };
+    static const juce::String scaleCustomMask   { "scaleCustomMask"   };
 }
 
 // Helper: channel pressure is a 2-byte MIDI message; everything else is 3-byte.
@@ -86,6 +90,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout DrawnCurveProcessor::createP
         juce::ParameterID { ParamID::playbackDirection, 1 }, "Playback Direction",
         juce::StringArray { "Forward", "Reverse", "Ping-Pong" }, 0));
 
+    // Scale quantization (Note mode only).
+    // Index 0 = Chromatic (no-op) is the default so existing presets are unaffected.
+    layout.add (std::make_unique<juce::AudioParameterInt>(
+        juce::ParameterID { ParamID::scaleMode, 1 }, "Scale Mode", 0, 7, 0));
+
+    // Root pitch class: 0=C, 1=C#, ..., 11=B.
+    layout.add (std::make_unique<juce::AudioParameterInt>(
+        juce::ParameterID { ParamID::scaleRoot, 1 }, "Scale Root", 0, 11, 0));
+
+    // Custom scale bitmask (12-bit, root-relative).
+    // 4095 (0xFFF) = all notes active = chromatic = safe default.
+    layout.add (std::make_unique<juce::AudioParameterInt>(
+        juce::ParameterID { ParamID::scaleCustomMask, 1 }, "Scale Custom Mask", 0, 4095, 4095));
+
     return layout;
 }
 
@@ -94,6 +112,8 @@ DrawnCurveProcessor::DrawnCurveProcessor()
     : AudioProcessor (BusesProperties()),   // no audio I/O — pure MIDI effect
       apvts (*this, nullptr, "DrawnCurve", createParams())
 {
+    // Push initial scale config so the engine is correct before the first block.
+    updateEngineScale();
 }
 
 DrawnCurveProcessor::~DrawnCurveProcessor()
@@ -334,6 +354,7 @@ void DrawnCurveProcessor::setStateInformation (const void* data, int sizeInBytes
 
     auto state = juce::ValueTree::fromXml (*xml);
     apvts.replaceState (state);   // restores all params automatically
+    updateEngineScale();          // sync scale config to engine after state restore
 
     juce::String tableB64 = state.getProperty ("tableData", juce::String());
     if (tableB64.isNotEmpty())
@@ -362,6 +383,43 @@ void DrawnCurveProcessor::setStateInformation (const void* data, int sizeInBytes
             }
         }
     }
+}
+
+//==============================================================================
+// Scale quantization helpers
+//==============================================================================
+
+/// Preset masks (root-relative, bit i = root+i semitone is active).
+/// Index matches scaleMode parameter values 0-7.
+static constexpr uint16_t kScalePresetMasks[8] =
+{
+    0xFFF,   // 0 Chromatic     (all 12 semitones)
+    0xAB5,   // 1 Major         (0,2,4,5,7,9,11)
+    0x5AD,   // 2 Natural Minor (0,2,3,5,7,8,10)
+    0x6AD,   // 3 Dorian        (0,2,3,5,7,9,10)
+    0x295,   // 4 Pentatonic Maj(0,2,4,7,9)
+    0x4A9,   // 5 Pentatonic Min(0,3,5,7,10)
+    0x4E9,   // 6 Blues         (0,3,5,6,7,10)
+    0x000,   // 7 Custom        — mask comes from scaleCustomMask parameter
+};
+
+ScaleConfig DrawnCurveProcessor::getScaleConfig() const noexcept
+{
+    const int     mode = static_cast<int> (apvts.getRawParameterValue (ParamID::scaleMode)->load());
+    const uint8_t root = static_cast<uint8_t> (apvts.getRawParameterValue (ParamID::scaleRoot)->load());
+
+    uint16_t mask;
+    if (mode == 7)  // Custom
+        mask = static_cast<uint16_t> (apvts.getRawParameterValue (ParamID::scaleCustomMask)->load());
+    else
+        mask = kScalePresetMasks[std::clamp (mode, 0, 7)];
+
+    return { mask, root };
+}
+
+void DrawnCurveProcessor::updateEngineScale()
+{
+    _engine.setScaleConfig (getScaleConfig());
 }
 
 //==============================================================================

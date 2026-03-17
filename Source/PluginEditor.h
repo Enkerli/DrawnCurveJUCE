@@ -248,6 +248,23 @@ private:
     /// [0]=CC  [1]=Channel Pressure  [2]=Pitch Bend  [3]=Note
     std::array<juce::TextButton, 4> msgTypeBtns;
 
+    // ── Scale quantization rows (visible only in Note mode) ───────────────────
+    // Row A — scale preset picker (8 options) + root note (12 pitch classes)
+    // Row B — custom mask (12 pitch-class toggles, visible only when Custom selected)
+
+    // Names mirror kScalePresetMasks order in PluginProcessor.cpp.
+    static constexpr int kNumScalePresets = 8;
+    std::array<juce::TextButton, kNumScalePresets> scalePresetBtns;  ///< Chrom/Maj/Min/…/Custom
+    juce::Label scaleLabel { {}, "Scale" };
+
+    static constexpr int kNumPitchClasses = 12;
+    std::array<juce::TextButton, kNumPitchClasses> rootNoteBtns;     ///< C C# D D# E … B
+    juce::Label rootLabel  { {}, "Key" };
+
+    /// Toggle buttons for custom scale mask — pitch-class buttons styled as circles.
+    std::array<juce::TextButton, kNumPitchClasses> customMaskBtns;
+    juce::Label notesLabel { {}, "Notes" };
+
     // ── State ─────────────────────────────────────────────────────────────────
     bool _lightMode { false };
 
@@ -274,6 +291,18 @@ private:
 
     /// Highlights the active direction button.
     void updateDirButtons();
+
+    /// Show/hide scale rows and trigger resized().  Call when messageType or scaleMode changes.
+    void updateScaleVisibility();
+
+    /// Highlight the active scale preset button.
+    void updateScalePresetButtons();
+
+    /// Highlight the active root note button.
+    void updateRootNoteButtons();
+
+    /// Sync the 12 custom-mask toggle buttons to the current scaleCustomMask parameter.
+    void updateCustomMaskButtons();
 
     /// Syncs rangeSlider thumbs from APVTS (called after external parameter changes).
     void updateRangeSlider();

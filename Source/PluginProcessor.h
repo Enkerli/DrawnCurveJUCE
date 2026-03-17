@@ -131,6 +131,14 @@ public:
         return _effectiveSpeedRatio.load (std::memory_order_relaxed);
     }
 
+    /// Build a ScaleConfig from the current APVTS state.
+    /// Safe to call from the UI thread (e.g. CurveDisplay::paint).
+    ScaleConfig getScaleConfig() const noexcept;
+
+    /// Re-read scale params and push to the engine.
+    /// Called from parameterChanged whenever a scale parameter changes.
+    void updateEngineScale();
+
 private:
     // ── Engine ────────────────────────────────────────────────────────────────
     GestureEngine         _engine;
