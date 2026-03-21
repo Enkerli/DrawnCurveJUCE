@@ -118,8 +118,15 @@ public:
     juce::Colour activeLabel  { 0xffffffff };   ///< Selected label text / icon colour
     juce::Colour borderColour { 0x33ffffff };   ///< Dividers + outer ring
 
-    // ── Callback ──────────────────────────────────────────────────────────────
+    // ── Callbacks ─────────────────────────────────────────────────────────────
+
+    /// Fired when the selected segment *changes* (not when the same segment is re-tapped).
     std::function<void (int)> onChange;
+
+    /// Fired on *every* tap, even when the same segment is re-tapped.
+    /// @param index       The tapped segment index.
+    /// @param wasAlready  true if this segment was already the selected one.
+    std::function<void (int index, bool wasAlready)> onTap;
 
     //==========================================================================
     void paint (juce::Graphics& g) override
@@ -184,9 +191,11 @@ public:
         const int n = (int) _segments.size();
         if (n == 0) return;
 
-        const int idx = juce::jlimit (0, n - 1,
-                                      (int) ((float) e.x / (float) getWidth() * n));
-        setSelectedIndex (idx);
+        const int  idx       = juce::jlimit (0, n - 1,
+                                             (int) ((float) e.x / (float) getWidth() * n));
+        const bool wasAlready = (idx == _selected);
+        setSelectedIndex (idx);   // fires onChange only if changed
+        if (onTap) onTap (idx, wasAlready);
     }
 
 private:

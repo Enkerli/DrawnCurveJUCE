@@ -2,6 +2,7 @@
 #include "LaneSnapshot.hpp"
 #include <atomic>
 #include <functional>
+#include <array>
 #include <cstdint>
 
 /**
@@ -14,7 +15,17 @@
  * UI thread  : setSnapshot / clearSnapshot / setPlaying / setScaleConfig
  * Audio thread: processBlock (or fallback HiRes timer — never both at once)
  * All cross-thread state uses std::atomic with explicit ordering.
+ *
+ * Multi-lane
+ * ──────────
+ * Up to kMaxLanes lanes play simultaneously.  Each lane has its own snapshot,
+ * runtime state, and scale config.  Playback (isPlaying) and the global phase
+ * display (currentPhase) are shared across all lanes so they stay in sync.
+ * Each lane's curve advances its own playheadSeconds using the common speed
+ * ratio, so lanes recorded at different durations loop at their natural rates.
  */
+
+static constexpr int kMaxLanes = 3;
 
 // ---------------------------------------------------------------------------
 /**
@@ -25,22 +36,6 @@
  *         0xFFF = chromatic (all notes) = no quantization.
  *
  * root  — root pitch class (0=C, 1=C#/Db, …, 11=B).
- *
- * Built-in preset masks (all root-relative):
- *   Chromatic      : 0xFFF   (all 12)
- *   Major          : 0xAB5   (0,2,4,5,7,9,11)
- *   Natural Minor  : 0x5AD   (0,2,3,5,7,8,10)
- *   Dorian         : 0x6AD   (0,2,3,5,7,9,10)
- *   Pentatonic Maj : 0x295   (0,2,4,7,9)
- *   Pentatonic Min : 0x4A9   (0,3,5,7,10)
- *   Blues          : 0x4E9   (0,3,5,6,7,10)
- *   Custom         : user-defined mask
- *
- * The bitmask decimal notation (user-facing): bits are read left-to-right as
- * C, C#, D, D#, E, F, F#, G, G#, A, A#, B (i.e., C = most significant of the
- * 12-bit value). This is the reverse of the internal root-relative ordering.
- * Conversion is handled in the UI layer; the engine always uses root-relative
- * internal ordering.
  */
 struct ScaleConfig
 {
@@ -59,30 +54,34 @@ struct LaneRuntime
 
 // ---------------------------------------------------------------------------
 /**
- * Real-time-safe MIDI playback engine.
+ * Real-time-safe MIDI playback engine supporting up to kMaxLanes lanes.
  */
 class GestureEngine
 {
 public:
     using MIDIOut = std::function<void(uint8_t status, uint8_t data1, uint8_t data2)>;
 
+    GestureEngine();
+
     // ── UI-thread API ─────────────────────────────────────────────────────────
-    void setSnapshot    (const LaneSnapshot* snapshot);
-    void clearSnapshot  ();
+    void setSnapshot    (int lane, const LaneSnapshot* snapshot);
+    void clearSnapshot  (int lane);
+    void clearAllSnapshots();
     void setPlaying     (bool playing);
     void reset          ();
 
-    /// Update scale quantization config atomically (safe to call any time).
-    void setScaleConfig (ScaleConfig config);
+    /// Update scale quantization config for one lane atomically.
+    void setScaleConfig (int lane, ScaleConfig config);
 
     // ── Query API (UI or render thread) ──────────────────────────────────────
     bool  getPlaying()      const;
+    /// Phase of lane 0 (or the first valid lane) — for UI playhead display.
     float getCurrentPhase() const;
 
     // ── Render-thread API ─────────────────────────────────────────────────────
     /**
-     * Advance the playhead and emit MIDI.
-     * @param speedRatio  >1 = faster; <1 = slower.
+     * Advance all lane playheads and emit MIDI.
+     * @param speedRatio  >1 = faster; <1 = slower.  Applied equally to all lanes.
      * @param direction   Forward / Reverse / PingPong.
      */
     void processBlock (uint32_t frameCount, double sampleRate, const MIDIOut& midiOut,
@@ -90,25 +89,23 @@ public:
                        PlaybackDirection direction = PlaybackDirection::Forward);
 
     // ── Utility (also called from UI for Y-axis display) ─────────────────────
-    /**
-     * Quantize rawNote to the nearest active scale note.
-     * @param movingUp  Tiebreaker: true prefers the higher note on equal distance.
-     * @return  Clamped MIDI note in [0, 127].
-     */
     static int quantizeNote (int rawNote, ScaleConfig sc, bool movingUp);
 
 private:
-    std::atomic<const LaneSnapshot*> _snapshot     { nullptr };
-    std::atomic<bool>                _isPlaying     { false   };
-    std::atomic<float>               _currentPhase  { 0.0f   };
-    std::atomic<bool>                _noteOffNeeded { false   };
+    std::array<std::atomic<const LaneSnapshot*>, kMaxLanes> _snapshots;
+    std::array<std::atomic<bool>,                kMaxLanes> _noteOffNeeded;
+    std::array<std::atomic<uint32_t>,            kMaxLanes> _scalesPacked;
 
-    /// Packed ScaleConfig: bits 0-11 = mask, bits 12-15 = root.
-    std::atomic<uint32_t>            _scalePacked   { 0xFFF   };
+    std::atomic<bool>  _isPlaying    { false };
+    std::atomic<float> _currentPhase { 0.0f  };
 
-    LaneRuntime _runtime;   ///< Render-thread only
+    std::array<LaneRuntime, kMaxLanes> _runtimes;   ///< Render-thread only
 
     float sampleCurve (const LaneSnapshot& snap, float phase) const;
+
+    void processLane (int lane, uint32_t frameCount, double sampleRate,
+                      const MIDIOut& midiOut,
+                      float speedRatio, PlaybackDirection direction);
 
     static uint32_t    packScale   (ScaleConfig s) noexcept { return (uint32_t(s.root) << 12) | s.mask; }
     static ScaleConfig unpackScale (uint32_t p)    noexcept { return { uint16_t(p & 0xFFF), uint8_t(p >> 12) }; }
