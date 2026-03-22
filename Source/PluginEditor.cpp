@@ -1078,7 +1078,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     };
 
     // Mask label
-    maskLabel.setFont (juce::Font (juce::FontOptions{}.withName (juce::Font::getDefaultMonospacedFontName()).withHeight (11.0f)));
+    maskLabel.setFont (juce::Font (juce::FontOptions{}.withName (juce::Font::getDefaultMonospacedFontName()).withHeight (12.0f)));
     maskLabel.setJustificationType (juce::Justification::centred);
     maskLabel.setEditable (false, true, false);
     addAndMakeVisible (maskLabel);
@@ -1620,9 +1620,9 @@ void DrawnCurveEditor::applyTheme()
         b->setColour (juce::TextButton::textColourOffId, btnText);
     }
 
-    maskLabel.setColour (juce::Label::textColourId,            dimText);
-    maskLabel.setColour (juce::Label::backgroundColourId,      tbBg);
-    maskLabel.setColour (juce::Label::outlineColourId,         tbLine);
+    maskLabel.setColour (juce::Label::textColourId,            textCol);
+    maskLabel.setColour (juce::Label::backgroundColourId,      btnBg);
+    maskLabel.setColour (juce::Label::outlineColourId,         dimText);
     maskLabel.setColour (juce::Label::textWhenEditingColourId, textCol);
 
     // Sync button
@@ -1854,7 +1854,7 @@ void DrawnCurveEditor::resized()
             auto row = ne.removeFromTop (scaleRowH);
             scaleLabel.setBounds (row.removeFromLeft (32).withSizeKeepingCentre (32, 14));
             row.removeFromLeft (3);
-            maskLabel.setBounds (row.removeFromRight (42).withSizeKeepingCentre (42, 18));
+            maskLabel.setBounds (row.removeFromRight (48).withSizeKeepingCentre (48, 20));
             row.removeFromRight (3);
             const int presetW = (row.getWidth() - (kNumScalePresets - 1) * 2) / kNumScalePresets;
             for (int i = 0; i < kNumScalePresets; ++i)
