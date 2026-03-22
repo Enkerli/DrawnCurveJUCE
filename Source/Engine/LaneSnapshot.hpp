@@ -58,5 +58,7 @@ struct LaneSnapshot
     float       smoothing       = 0.08f;       ///< One-pole smoother coefficient (0 = off)
     MessageType messageType     = MessageType::CC;
     uint8_t     noteVelocity    = 100;         ///< Velocity used in Note mode (1-127)
+    float       phaseOffset     = 0.0f;        ///< Curve lookup offset [0, 1); shifts start position
+    bool        oneShot         = false;       ///< true → play once then stop (don't loop)
     bool        valid           = false;       ///< false → engine treats snapshot as empty
 };

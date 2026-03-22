@@ -267,15 +267,19 @@ private:
 
     juce::Slider smoothingSlider;
     juce::Slider rangeSlider;
-    juce::Label  smoothingLabel, rangeLabel;
+    juce::Slider phaseOffsetSlider;
+    juce::Label  smoothingLabel, rangeLabel, phaseOffsetLabel;
     std::unique_ptr<Attach> smoothingAttach;
+    std::unique_ptr<Attach> phaseOffsetAttach;
 
     // ── Routing matrix — one row per lane ─────────────────────────────────────
-    // Each row: type button | detail label | channel label | teach | mute
+    // Each row: type button | detail label | channel label | loop | teach | mute
     // laneTypeBtn cycles through CC/PB/Note/Aft on click; right-click = popup menu.
+    // laneLoopBtn toggles loop (∞) vs one-shot (1×).
     std::array<juce::TextButton, kMaxLanes> laneTypeBtn;
     std::array<juce::Label,      kMaxLanes> laneDetailLabel;
     std::array<juce::Label,      kMaxLanes> laneChannelLabel;
+    std::array<juce::TextButton, kMaxLanes> laneLoopBtn;
     std::array<juce::TextButton, kMaxLanes> laneTeachBtn;
     std::array<juce::TextButton, kMaxLanes> laneMuteBtn;
 

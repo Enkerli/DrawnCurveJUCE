@@ -83,6 +83,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout DrawnCurveProcessor::createP
             juce::ParameterID { laneParam (L, ParamID::noteVelocity), 1 },
             lname + "Note Velocity", 1, 127, 100));
 
+        layout.add (std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID { laneParam (L, ParamID::loopMode), 1 },
+            lname + "One-Shot", false));  ///< false = Loop, true = One-Shot
+
+        layout.add (std::make_unique<juce::AudioParameterInt>(
+            juce::ParameterID { laneParam (L, ParamID::phaseOffset), 1 },
+            lname + "Phase Offset", 0, 100, 0));  ///< Curve start offset in percent
+
     }
 
     // ── Global scale quantization (shared by all Note-mode lanes) ─────────────
@@ -200,6 +208,13 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         }
     }
 
+    // ── Read direction first — needed by the sync reset below ─────────────────
+    // getRawParameterValue() returns the denormalized actual index for
+    // AudioParameterChoice (confirmed from JUCE 8 source).  static_cast<int>
+    // of exactly 0.0f / 1.0f / 2.0f is always correct.
+    const auto dir = static_cast<PlaybackDirection> (
+        static_cast<int> (apvts.getRawParameterValue (ParamID::playbackDirection)->load()));
+
     // ── Compute effective speed + handle host transport sync ──────────────────
     const bool syncOn = apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
     float effectiveSpeed = apvts.getRawParameterValue (ParamID::playbackSpeed)->load();
@@ -218,9 +233,15 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                     // Host just started — clear the user-pause latch so the
                     // plugin resumes with the transport (pressing Play in the
                     // DAW is an explicit intent to restart).
+                    //
+                    // Use resetForDirection() instead of reset() so the smoother
+                    // is seeded from the correct starting phase for the current
+                    // direction.  Without this, Reverse would glide from 0 to the
+                    // end-of-curve value on the first block of every sync cycle,
+                    // making it sound indistinguishable from Forward.
                     _userManualPauseInSync.store (false, std::memory_order_release);
                     juce::SpinLock::ScopedLockType lock (_engineLock);
-                    _engine.reset();
+                    _engine.resetForDirection (dir);
                     _engine.setPlaying (true);
                 }
                 else if (! hostNowPlaying && wasPlaying)
@@ -266,9 +287,6 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     }
 
     // ── Advance engine on the audio thread ────────────────────────────────────
-    const auto dir = static_cast<PlaybackDirection> (
-        static_cast<int> (apvts.getRawParameterValue (ParamID::playbackDirection)->load()));
-
     {
         juce::SpinLock::ScopedLockType lock (_engineLock);
         _engine.processBlock (
@@ -356,8 +374,13 @@ void DrawnCurveProcessor::finalizeCapture (int lane)
     const uint8_t noteVel = static_cast<uint8_t> (
         static_cast<int> (apvts.getRawParameterValue (laneParam (lane, ParamID::noteVelocity))->load()));
 
+    const bool  oneShot     = apvts.getRawParameterValue (laneParam (lane, ParamID::loopMode))->load() > 0.5f;
+    const float phaseOffPct = apvts.getRawParameterValue (laneParam (lane, ParamID::phaseOffset))->load();
+
     auto* snap = new LaneSnapshot (_capture.finalize (ccNum, ch, minOut, maxOut, smooth, msgType));
     snap->noteVelocity = noteVel;
+    snap->oneShot      = oneShot;
+    snap->phaseOffset  = phaseOffPct / 100.0f;
     _laneSnaps[static_cast<size_t>(lane)] = snap;
 
     {
@@ -385,6 +408,9 @@ void DrawnCurveProcessor::updateLaneSnapshot (int lane)
     const uint8_t noteVel = static_cast<uint8_t> (
         static_cast<int> (apvts.getRawParameterValue (laneParam (lane, ParamID::noteVelocity))->load()));
 
+    const bool  oneShot     = apvts.getRawParameterValue (laneParam (lane, ParamID::loopMode))->load() > 0.5f;
+    const float phaseOffPct = apvts.getRawParameterValue (laneParam (lane, ParamID::phaseOffset))->load();
+
     // Clone the existing snapshot, then overwrite only the param-driven fields.
     auto* snap = new LaneSnapshot (*existing);
     snap->ccNumber       = ccNum;
@@ -394,6 +420,8 @@ void DrawnCurveProcessor::updateLaneSnapshot (int lane)
     snap->maxOut         = maxOut;
     snap->messageType    = msgType;
     snap->noteVelocity   = noteVel;
+    snap->oneShot        = oneShot;
+    snap->phaseOffset    = phaseOffPct / 100.0f;
 
     _laneSnaps[static_cast<size_t>(lane)] = snap;
 

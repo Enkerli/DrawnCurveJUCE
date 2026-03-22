@@ -71,6 +71,12 @@ public:
     void setPlaying     (bool playing);
     void reset          ();
 
+    /// Reset all lanes and seed each smoother from the correct starting phase
+    /// for the given direction.  Use this in host-sync start events so that
+    /// Reverse/PingPong begin at their correct curve position without a
+    /// "glide from zero" artefact caused by the standard reset()'s cold-start.
+    void resetForDirection (PlaybackDirection dir);
+
     /// Send a Note Off for one lane (sets _noteOffNeeded) without stopping other lanes.
     /// Call from beginCapture() on the UI thread before drawing a new curve.
     void stopLane       (int lane);

@@ -64,7 +64,7 @@ namespace Layout
 
     // Right column sections
     static constexpr int transportH   = 94;    // direction(38)+pad(4)+syncRow(44)+margins(8)
-    static constexpr int shapingH     = 132;   // laneFocus(28)+gap(4)+smooth(44)+gap(4)+range(44)+margins(8)
+    static constexpr int shapingH     = 180;   // laneFocus(28)+gap(4)+smooth(44)+gap(4)+range(44)+gap(4)+phase(44)+margins(8)
     static constexpr int routingMatH  = 148;   // header(16)+3×row(28)+gaps(2×3=6)+gap(4)+detail(28)+margins(8) = 148
 
     // Left column
@@ -77,13 +77,14 @@ namespace Layout
     static constexpr int paramRowH    = paramLabelH + paramSliderH;  // 44
 
     // Routing matrix row geometry (fits 244 px column)
-    // dot(12)+gap(4)+target(72)+gap(4)+detail(28)+gap(4)+chan(22)+gap(4)+teach(36)+gap(4)+mute(20) = 210 + margins(6) = 216 < 244
+    // dot(12)+gap(4)+target(72)+gap(4)+detail(28)+gap(4)+chan(22)+gap(4)+loop(20)+gap(4)+teach(32)+gap(4)+mute(20) = 230 + margins(8) = 238 < 244
     static constexpr int matRowH     = 28;
     static constexpr int matDotW     = 12;
     static constexpr int matTargetW  = 72;
     static constexpr int matDetailW  = 28;
     static constexpr int matChanW    = 22;
-    static constexpr int matTeachW   = 36;
+    static constexpr int matLoopW    = 20;
+    static constexpr int matTeachW   = 32;
     static constexpr int matMuteW    = 20;
     static constexpr int matInnerGap = 4;
 }
@@ -778,6 +779,11 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         updateRangeLabel();
     };
 
+    // Phase offset slider (per focused lane, like smoothingSlider)
+    setupSlider (phaseOffsetSlider, phaseOffsetLabel, "Phase");
+    phaseOffsetSlider.setTextValueSuffix ("%");
+    phaseOffsetSlider.setNumDecimalPlacesToDisplay (0);
+
     // Bind shaping to lane 0 at startup.
     bindShapingToLane (0);
 
@@ -916,6 +922,27 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         };
         addAndMakeVisible (laneChannelLabel[static_cast<size_t>(L)]);
 
+        // Loop / One-Shot button  ("∞" = loop, "1×" = one-shot)
+        laneLoopBtn[static_cast<size_t>(L)].setLookAndFeel (&_symbolLF);
+        addAndMakeVisible (laneLoopBtn[static_cast<size_t>(L)]);
+        {
+            const bool isOneShot =
+                proc.apvts.getRawParameterValue (laneParam (L, "loopMode"))->load() > 0.5f;
+            laneLoopBtn[static_cast<size_t>(L)].setButtonText (isOneShot ? "1x" : u8"\u221E");
+        }
+        laneLoopBtn[static_cast<size_t>(L)].onClick = [this, L]
+        {
+            if (auto* pLoop = dynamic_cast<juce::AudioParameterBool*> (
+                                  proc.apvts.getParameter (laneParam (L, "loopMode"))))
+            {
+                const bool nowOneShot = ! pLoop->get();
+                *pLoop = nowOneShot;
+                laneLoopBtn[static_cast<size_t>(L)].setButtonText (nowOneShot ? "1x" : u8"\u221E");
+                // Re-bake so the running snapshot picks up the new mode immediately.
+                proc.updateLaneSnapshot (L);
+            }
+        };
+
         // Teach button
         laneTeachBtn[static_cast<size_t>(L)].setLookAndFeel (&_symbolLF);
         addAndMakeVisible (laneTeachBtn[static_cast<size_t>(L)]);
@@ -951,6 +978,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         proc.apvts.addParameterListener (laneParam (L, "midiChannel"),  this);
         proc.apvts.addParameterListener (laneParam (L, "noteVelocity"), this);
         proc.apvts.addParameterListener (laneParam (L, "enabled"),      this);
+        proc.apvts.addParameterListener (laneParam (L, "loopMode"),    this);
+        proc.apvts.addParameterListener (laneParam (L, "phaseOffset"), this);
         proc.apvts.addParameterListener (laneParam (L, "minOutput"),    this);
         proc.apvts.addParameterListener (laneParam (L, "maxOutput"),    this);
         proc.apvts.addParameterListener (laneParam (L, "smoothing"),    this);
@@ -1114,6 +1143,7 @@ DrawnCurveEditor::~DrawnCurveEditor()
 {
     // Reset all L&Fs before structs are destroyed.
     for (auto& b : laneTypeBtn)   b.setLookAndFeel (nullptr);
+    for (auto& b : laneLoopBtn)   b.setLookAndFeel (nullptr);
     for (auto& b : laneTeachBtn)  b.setLookAndFeel (nullptr);
     for (auto& b : laneMuteBtn)   b.setLookAndFeel (nullptr);
     for (auto& b : scalePresetBtns) b.setLookAndFeel (nullptr);
@@ -1129,7 +1159,7 @@ DrawnCurveEditor::~DrawnCurveEditor()
     for (int L = 0; L < kMaxLanes; ++L)
     {
         for (const auto& base : { "msgType", "ccNumber", "midiChannel", "noteVelocity",
-                                   "enabled", "minOutput", "maxOutput", "smoothing" })
+                                   "enabled", "loopMode", "phaseOffset", "minOutput", "maxOutput", "smoothing" })
             proc.apvts.removeParameterListener (laneParam (L, base), this);
     }
     // Global scale params
@@ -1183,6 +1213,10 @@ void DrawnCurveEditor::bindShapingToLane (int lane)
     // Smoothing attachment
     smoothingAttach.reset();
     smoothingAttach = std::make_unique<Attach> (proc.apvts, laneParam (lane, "smoothing"), smoothingSlider);
+
+    // Phase offset attachment
+    phaseOffsetAttach.reset();
+    phaseOffsetAttach = std::make_unique<Attach> (proc.apvts, laneParam (lane, "phaseOffset"), phaseOffsetSlider);
 
     // Range slider — no APVTS attachment for two-value sliders; set directly.
     rangeSlider.setMinValue (proc.apvts.getRawParameterValue (laneParam (lane, "minOutput"))->load(),
@@ -1317,6 +1351,19 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
             return;
         }
 
+        if (paramID == laneParam (L, "loopMode"))
+        {
+            // Re-bake oneShot flag into running snapshot immediately.
+            proc.updateLaneSnapshot (L);
+            juce::MessageManager::callAsync ([this, L] {
+                const bool isOneShot =
+                    proc.apvts.getRawParameterValue (laneParam (L, "loopMode"))->load() > 0.5f;
+                laneLoopBtn[static_cast<size_t>(L)].setButtonText (isOneShot ? "1x" : u8"\u221E");
+                applyTheme();
+            });
+            return;
+        }
+
         if (paramID == laneParam (L, "minOutput") || paramID == laneParam (L, "maxOutput"))
         {
             // Re-bake range into snapshot immediately; also update the slider display.
@@ -1329,6 +1376,13 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
         if (paramID == laneParam (L, "smoothing"))
         {
             // Re-bake smoothing into snapshot immediately (attachment fires this).
+            proc.updateLaneSnapshot (L);
+            return;
+        }
+
+        if (paramID == laneParam (L, "phaseOffset"))
+        {
+            // Re-bake phase offset into snapshot immediately (attachment fires this).
             proc.updateLaneSnapshot (L);
             return;
         }
@@ -1490,7 +1544,7 @@ void DrawnCurveEditor::applyTheme()
     const juce::Colour btnText  = light ? juce::Colour (0xff28261F) : juce::Colours::white;
 
     // Sliders
-    for (auto* s : { &smoothingSlider, &speedSlider })
+    for (auto* s : { &smoothingSlider, &speedSlider, &phaseOffsetSlider })
     {
         s->setColour (juce::Slider::textBoxTextColourId,       textCol);
         s->setColour (juce::Slider::textBoxBackgroundColourId, tbBg);
@@ -1503,7 +1557,7 @@ void DrawnCurveEditor::applyTheme()
     rangeSlider.setColour (juce::Slider::trackColourId,      accent.withAlpha (0.45f));
     rangeSlider.setColour (juce::Slider::backgroundColourId, tbBg);
 
-    for (auto* l : { &smoothingLabel, &rangeLabel, &speedLabel })
+    for (auto* l : { &smoothingLabel, &rangeLabel, &speedLabel, &phaseOffsetLabel })
         l->setColour (juce::Label::textColourId, dimText);
 
     // Utility buttons
@@ -1571,6 +1625,16 @@ void DrawnCurveEditor::applyTheme()
             lbl->setColour (juce::Label::outlineColourId,    tbLine);
             lbl->setColour (juce::Label::textWhenEditingColourId, textCol);
             lbl->setAlpha (rowAlpha);
+        }
+
+        // Loop / One-Shot button: glows when one-shot active
+        {
+            const bool oneShot = proc.apvts.getRawParameterValue (laneParam (L, "loopMode"))->load() > 0.5f;
+            laneLoopBtn[static_cast<size_t>(L)].setColour (juce::TextButton::buttonColourId,
+                                   oneShot ? accent.withAlpha (0.22f) : btnBg);
+            laneLoopBtn[static_cast<size_t>(L)].setColour (juce::TextButton::textColourOffId,
+                                   oneShot ? accent : btnText);
+            laneLoopBtn[static_cast<size_t>(L)].setAlpha (rowAlpha);
         }
 
         // Teach button: glows amber while pending
@@ -1685,6 +1749,9 @@ void DrawnCurveEditor::paint (juce::Graphics& g)
                 g.drawFittedText ("Ch", hx, hy, matChanW, hh,
                                   juce::Justification::centredLeft, 1);
                 hx += matChanW + matInnerGap;
+                g.drawFittedText ("Lp", hx, hy, matLoopW, hh,
+                                  juce::Justification::centredLeft, 1);
+                hx += matLoopW + matInnerGap;
                 g.drawFittedText ("Teach", hx, hy, matTeachW, hh,
                                   juce::Justification::centredLeft, 1);
                 hx += matTeachW + matInnerGap;
@@ -1784,6 +1851,14 @@ void DrawnCurveEditor::resized()
             rangeLabel .setBounds (row.removeFromTop (paramLabelH));
             rangeSlider.setBounds (row);
         }
+        ss.removeFromTop (4);
+
+        // Phase offset
+        {
+            auto row = ss.removeFromTop (paramRowH);
+            phaseOffsetLabel .setBounds (row.removeFromTop (paramLabelH));
+            phaseOffsetSlider.setBounds (row);
+        }
     }
     rightCol.removeFromTop (pad);
 
@@ -1815,6 +1890,10 @@ void DrawnCurveEditor::resized()
 
             // Channel
             laneChannelLabel[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matChanW));
+            row.removeFromLeft (matInnerGap);
+
+            // Loop / One-Shot
+            laneLoopBtn[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matLoopW));
             row.removeFromLeft (matInnerGap);
 
             // Teach

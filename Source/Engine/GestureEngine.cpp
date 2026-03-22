@@ -72,6 +72,35 @@ void GestureEngine::reset()
     _currentPhase.store (0.0f, std::memory_order_relaxed);
 }
 
+void GestureEngine::resetForDirection (PlaybackDirection dir)
+{
+    // Choose raw start phase: Reverse starts from the end (1.0), everything else from 0.
+    const float rawPhase = (dir == PlaybackDirection::Reverse) ? 1.0f : 0.0f;
+
+    for (int i = 0; i < kMaxLanes; ++i)
+    {
+        // Preserve any pending Note Off — same policy as reset().
+        if (! _noteOffNeeded[static_cast<size_t>(i)].load (std::memory_order_acquire))
+            _runtimes[static_cast<size_t>(i)].lastSentValue = -1;
+
+        _runtimes[static_cast<size_t>(i)].playheadSeconds = 0.0;
+
+        // Seed the smoother from the curve's value at the correct starting phase
+        // (raw direction phase + phaseOffset) so that the first block of output
+        // begins at the right position without a "glide from zero" artefact.
+        const auto* snap = _snapshots[static_cast<size_t>(i)].load (std::memory_order_acquire);
+        const float offset    = (snap && snap->valid) ? snap->phaseOffset : 0.0f;
+        const float seedPhase = std::fmod (rawPhase + offset + 1.0f, 1.0f);
+        _runtimes[static_cast<size_t>(i)].smoothedValue =
+            (snap && snap->valid) ? sampleCurve (*snap, seedPhase) : 0.0f;
+
+        // Store the unshifted playhead phase (0 or 1 depending on direction).
+        _lanePhases[static_cast<size_t>(i)].store (rawPhase, std::memory_order_relaxed);
+    }
+
+    _currentPhase.store (rawPhase, std::memory_order_relaxed);
+}
+
 void GestureEngine::stopLane (int lane)
 {
     if (lane < 0 || lane >= kMaxLanes) return;
@@ -87,11 +116,12 @@ void GestureEngine::resetLane (int lane)
     // so any pending Note Off still fires correctly in processLane.
     _runtimes[static_cast<size_t>(lane)].playheadSeconds = 0.0;
 
-    // Pre-seed the smoother from the curve's value at phase 0 so that
-    // playback begins at the correct pitch/value without glissanding up
-    // from silence (which happened when smoothedValue started at 0.0).
+    // Pre-seed the smoother from the curve's value at the effective start phase
+    // (phase 0 shifted by phaseOffset) so that playback begins at the correct
+    // value without a "glide from zero" artefact.
     const auto* snap = _snapshots[static_cast<size_t>(lane)].load (std::memory_order_acquire);
-    _runtimes[static_cast<size_t>(lane)].smoothedValue = (snap && snap->valid) ? sampleCurve (*snap, 0.0f) : 0.0f;
+    const float seedPhase = (snap && snap->valid) ? snap->phaseOffset : 0.0f;
+    _runtimes[static_cast<size_t>(lane)].smoothedValue = (snap && snap->valid) ? sampleCurve (*snap, seedPhase) : 0.0f;
 
     _lanePhases[static_cast<size_t>(lane)].store (0.0f, std::memory_order_relaxed);
 }
@@ -215,6 +245,11 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
                                 / static_cast<double> (std::max (speedRatio, 0.001f));
 
     // ── Advance playhead ──────────────────────────────────────────────────────
+    // One-shot sentinel: playheadSeconds == -1 means "already completed this pass".
+    // reset() / resetLane() clear the sentinel by setting playheadSeconds = 0.
+    if (snap->oneShot && rt.playheadSeconds < 0.0)
+        return;   // one-shot complete — lane is silent until next reset
+
     rt.playheadSeconds += static_cast<double> (frameCount) / sampleRate;
 
     // ── Phase (direction-dependent) ───────────────────────────────────────────
@@ -222,14 +257,34 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
     if (direction == PlaybackDirection::Reverse)
     {
         if (rt.playheadSeconds >= effectiveDur)
+        {
+            if (snap->oneShot)
+            {
+                // Reverse one-shot: curve played from end to beginning — done.
+                if (snap->messageType == MessageType::Note)
+                    _noteOffNeeded[static_cast<size_t>(lane)].store (true, std::memory_order_release);
+                rt.playheadSeconds = -1.0;   // sentinel: skip on future blocks
+                return;
+            }
             rt.playheadSeconds = std::fmod (rt.playheadSeconds, effectiveDur);
+        }
         phase = 1.0f - static_cast<float> (rt.playheadSeconds / effectiveDur);
     }
     else if (direction == PlaybackDirection::PingPong)
     {
         const double ppDur = 2.0 * effectiveDur;
         if (rt.playheadSeconds >= ppDur)
+        {
+            if (snap->oneShot)
+            {
+                // PingPong one-shot: one full round-trip (0→1→0) — done.
+                if (snap->messageType == MessageType::Note)
+                    _noteOffNeeded[static_cast<size_t>(lane)].store (true, std::memory_order_release);
+                rt.playheadSeconds = -1.0;
+                return;
+            }
             rt.playheadSeconds = std::fmod (rt.playheadSeconds, ppDur);
+        }
         const double frac = rt.playheadSeconds / effectiveDur;
         phase = (frac <= 1.0) ? static_cast<float> (frac)
                               : static_cast<float> (2.0 - frac);
@@ -237,11 +292,22 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
     else  // Forward
     {
         if (rt.playheadSeconds >= effectiveDur)
+        {
+            if (snap->oneShot)
+            {
+                // Forward one-shot: curve played from beginning to end — done.
+                if (snap->messageType == MessageType::Note)
+                    _noteOffNeeded[static_cast<size_t>(lane)].store (true, std::memory_order_release);
+                rt.playheadSeconds = -1.0;
+                return;
+            }
             rt.playheadSeconds = std::fmod (rt.playheadSeconds, effectiveDur);
+        }
         phase = static_cast<float> (rt.playheadSeconds / effectiveDur);
     }
 
-    // Store per-lane phase for the UI playhead.
+    // Store per-lane phase for the UI playhead (unshifted, so the playhead
+    // always tracks 0→1 regardless of phaseOffset).
     _lanePhases[static_cast<size_t>(lane)].store (phase, std::memory_order_relaxed);
 
     // Also update _currentPhase from the lowest-indexed valid lane so the
@@ -257,7 +323,10 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
             _currentPhase.store (phase, std::memory_order_relaxed);
     }
 
-    const float target = sampleCurve (*snap, phase);
+    // Apply phase offset: shifts which part of the curve is sampled without
+    // affecting the playhead display or loop boundary logic above.
+    const float sampledPhase = std::fmod (phase + snap->phaseOffset + 1.0f, 1.0f);
+    const float target = sampleCurve (*snap, sampledPhase);
 
     // ── One-pole smoother ─────────────────────────────────────────────────────
     const float alpha = (snap->smoothing <= 0.0f)

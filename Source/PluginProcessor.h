@@ -76,6 +76,8 @@ namespace ParamID
     inline const juce::String minOutput    { "minOutput"    };
     inline const juce::String maxOutput    { "maxOutput"    };
     inline const juce::String noteVelocity { "noteVelocity" };
+    inline const juce::String loopMode    { "loopMode"    };   ///< 0 = Loop, 1 = One-Shot
+    inline const juce::String phaseOffset { "phaseOffset" };   ///< Curve lookup start [0, 100]
     inline const juce::String scaleMode    { "scaleMode"    };
     inline const juce::String scaleRoot    { "scaleRoot"    };
     inline const juce::String scaleMask    { "scaleMask"    };
