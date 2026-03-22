@@ -354,6 +354,50 @@ void DrawnCurveProcessor::finalizeCapture (int lane)
     }
 }
 
+void DrawnCurveProcessor::updateLaneSnapshot (int lane)
+{
+    if (lane < 0 || lane >= kMaxLanes) return;
+    const auto* existing = _laneSnaps[lane];
+    if (! existing || ! existing->valid) return;   // nothing drawn yet — nothing to update
+
+    const uint8_t ccNum  = static_cast<uint8_t> (
+        static_cast<int> (apvts.getRawParameterValue (laneParam (lane, ParamID::ccNumber))->load()));
+    const uint8_t ch     = static_cast<uint8_t> (
+        static_cast<int> (apvts.getRawParameterValue (laneParam (lane, ParamID::midiChannel))->load()) - 1);
+    const float smooth   = apvts.getRawParameterValue (laneParam (lane, ParamID::smoothing))->load();
+    const float minOut   = apvts.getRawParameterValue (laneParam (lane, ParamID::minOutput))->load();
+    const float maxOut   = apvts.getRawParameterValue (laneParam (lane, ParamID::maxOutput))->load();
+    const auto  msgType  = static_cast<MessageType> (
+        static_cast<int> (apvts.getRawParameterValue (laneParam (lane, ParamID::msgType))->load()));
+    const uint8_t noteVel = static_cast<uint8_t> (
+        static_cast<int> (apvts.getRawParameterValue (laneParam (lane, ParamID::noteVelocity))->load()));
+
+    // Clone the existing snapshot, then overwrite only the param-driven fields.
+    auto* snap = new LaneSnapshot (*existing);
+    snap->ccNumber       = ccNum;
+    snap->midiChannel    = ch;
+    snap->smoothing      = smooth;
+    snap->minOut         = minOut;
+    snap->maxOut         = maxOut;
+    snap->messageType    = msgType;
+    snap->noteVelocity   = noteVel;
+
+    _laneSnaps[lane] = snap;
+
+    // When switching TO Note mode, send Note Off for any CC/PB value in flight.
+    // When switching FROM Note mode, the engine will naturally stop sending Note-Ons.
+    if (msgType != existing->messageType)
+        _engine.stopLane (lane);
+
+    {
+        juce::SpinLock::ScopedLockType lock (_engineLock);
+        _engine.setSnapshot (lane, snap);
+    }
+    // Note: do NOT delete existing — it may still be in use by the audio thread until
+    // the next processBlock acquires the new pointer.  Small intentional leak per update;
+    // finalizeCapture() already has the same pattern (_laneSnaps overwrite without delete).
+}
+
 void DrawnCurveProcessor::clearSnapshot (int lane)
 {
     {

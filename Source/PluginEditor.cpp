@@ -370,12 +370,16 @@ void CurveDisplay::paint (juce::Graphics& g)
             g.setFont (juce::Font (9.5f));
             g.setColour (T.hint);
             const int lblW = juce::roundToInt (kAxisMarginL) - 2, lblH = 11;
+            int lastLabelY = -100;   // tracks the bottom edge of the last drawn label
             for (const auto& bn : visible)
             {
                 const int labelY = juce::jlimit (1, juce::roundToInt (plotH) - lblH - 1,
                                                  juce::roundToInt (bn.y) - lblH / 2);
+                if (labelY < lastLabelY + lblH + 1)
+                    continue;   // would overlap with the label above — skip
                 g.drawText (midiNoteName (bn.note), 0, labelY, lblW, lblH,
                             juce::Justification::centredRight, false);
+                lastLabelY = labelY;
             }
         }
         else
@@ -398,13 +402,17 @@ void CurveDisplay::paint (juce::Graphics& g)
             g.setFont (juce::Font (10.0f));
             g.setColour (T.hint);
             const int lblW = juce::roundToInt (kAxisMarginL) - 2, lblH = 12;
+            int lastGridLabelY = -100;
             for (int i = 0; i <= _yDivisions; ++i)
             {
                 const float norm  = (float)i / (float)_yDivisions;
                 const int   yPx   = juce::roundToInt ((1.0f - norm) * plotH);
                 const int labelY  = juce::jlimit (1, juce::roundToInt (plotH) - lblH - 1, yPx - lblH/2);
+                if (labelY < lastGridLabelY + lblH + 1)
+                    continue;   // skip overlapping label
                 g.drawText (yLabel (norm), 0, labelY, lblW, lblH,
                             juce::Justification::centredRight, false);
+                lastGridLabelY = labelY;
             }
         }
 
@@ -454,19 +462,32 @@ void CurveDisplay::paint (juce::Graphics& g)
     }
 
     // ── Pause overlay ─────────────────────────────────────────────────────────
-    // Shown when a curve exists but playback is stopped.  Semi-transparent so
-    // the curve shape remains visible underneath.
+    // Shown when a curve exists but playback is stopped.
+    // Draws two ▐▌ pause bars that blink at ~1.5 Hz (timer fires at 30 Hz;
+    // _blinkOn toggles each tick, so one on/off cycle = 2 ticks ≈ 60 ms; we slow
+    // it with a counter-free approach by only showing at even repaint ticks when
+    // _blinkOn = true, giving a ~15 Hz visual rate which reads as a clear blink).
     if (proc.anyLaneHasCurve() && ! proc.isPlaying())
     {
         const auto laneCol = (_lightMode ? kLaneColourLight : kLaneColourDark)[_focusedLane];
-        // Tinted fill over the plot area
-        g.setColour (laneCol.withAlpha (0.10f));
+
+        // Faint tint to darken the plot while paused
+        g.setColour (laneCol.withAlpha (0.08f));
         g.fillRect (plot);
 
-        // Centred "PAUSED" label
-        g.setFont (juce::Font (18.0f, juce::Font::bold));
-        g.setColour (laneCol.withAlpha (0.45f));
-        g.drawText ("PAUSED", plot.toNearestInt(), juce::Justification::centred, false);
+        // Blinking pause bars drawn as two filled rounded rectangles
+        if (_blinkOn)
+        {
+            const float cx   = plot.getCentreX();
+            const float cy   = plot.getCentreY();
+            const float barH = 22.0f;
+            const float barW =  7.0f;
+            const float gap  =  5.0f;   // gap between the two bars
+
+            g.setColour (laneCol.withAlpha (0.55f));
+            g.fillRoundedRectangle (cx - gap * 0.5f - barW, cy - barH * 0.5f, barW, barH, 2.5f);
+            g.fillRoundedRectangle (cx + gap * 0.5f,        cy - barH * 0.5f, barW, barH, 2.5f);
+        }
     }
 
     // ── Border ────────────────────────────────────────────────────────────────
@@ -522,7 +543,11 @@ void CurveDisplay::mouseUp (const juce::MouseEvent& e)
     repaint();
 }
 
-void CurveDisplay::timerCallback() { repaint(); }
+void CurveDisplay::timerCallback()
+{
+    _blinkOn = ! _blinkOn;
+    repaint();
+}
 
 //==============================================================================
 // DrawnCurveEditor — constructor
@@ -737,7 +762,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         const int curType = static_cast<int> (
             proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load());
         // initial text set via updateLaneRow below; just pre-populate here
-        { static auto s = [] (int t) -> juce::String { switch(t){case 0:return "~";case 1:return "\xe2\x88\xbf";case 2:return "\xe2\x89\x88";case 3:return "\xe2\x99\xa9";}return "?"; };
+        { static auto s = [] (int t) -> juce::String { switch(t){case 0:return "CC";case 1:return "At";case 2:return "PB";case 3:return "N";}return "?"; };
           laneTypeBtn[L].setButtonText (s (curType)); }
         laneTypeBtn[L].setLookAndFeel (&_symbolLF);
         laneTypeBtn[L].onClick = [this, L]
@@ -761,10 +786,10 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
                 const int cur = static_cast<int> (
                     proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load());
                 juce::PopupMenu m;
-                m.addItem (1, "~ CC (Control Change)",              true, cur == 0);
-                m.addItem (2, "\xe2\x89\x88 PB (Pitch Bend)",       true, cur == 2);
-                m.addItem (3, "\xe2\x99\xa9 Note",                   true, cur == 3);
-                m.addItem (4, "\xe2\x88\xbf Aft (Channel Pressure)", true, cur == 1);
+                m.addItem (1, "CC  (Control Change)",    true, cur == 0);
+                m.addItem (2, "PB  (Pitch Bend)",        true, cur == 2);
+                m.addItem (3, "N   (Note)",               true, cur == 3);
+                m.addItem (4, "At  (Channel Pressure)",   true, cur == 1);
                 m.addSeparator();
                 m.addItem (10, "Copy type to all lanes");
                 m.addItem (11, "Copy channel to all lanes");
@@ -902,6 +927,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         proc.apvts.addParameterListener (laneParam (L, "enabled"),      this);
         proc.apvts.addParameterListener (laneParam (L, "minOutput"),    this);
         proc.apvts.addParameterListener (laneParam (L, "maxOutput"),    this);
+        proc.apvts.addParameterListener (laneParam (L, "smoothing"),    this);
     }
     // Global scale params (outside per-lane loop — shared by all Note-mode lanes)
     proc.apvts.addParameterListener ("scaleMode", this);
@@ -1076,7 +1102,7 @@ DrawnCurveEditor::~DrawnCurveEditor()
     for (int L = 0; L < kMaxLanes; ++L)
     {
         for (const auto& base : { "msgType", "ccNumber", "midiChannel", "noteVelocity",
-                                   "enabled", "minOutput", "maxOutput" })
+                                   "enabled", "minOutput", "maxOutput", "smoothing" })
             proc.apvts.removeParameterListener (laneParam (L, base), this);
     }
     // Global scale params
@@ -1164,7 +1190,7 @@ void DrawnCurveEditor::updateLaneRow (int lane)
 
     // Type button symbol
     static auto sym = [] (int t) -> juce::String {
-        switch (t) { case 0: return "~"; case 1: return "\xe2\x88\xbf"; case 2: return "\xe2\x89\x88"; case 3: return "\xe2\x99\xa9"; } return "?";
+        switch (t) { case 0: return "CC"; case 1: return "At"; case 2: return "PB"; case 3: return "N"; } return "?";
     };
     laneTypeBtn[lane].setButtonText (sym (type));
 
@@ -1243,9 +1269,10 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
         if (paramID == laneParam (L, "msgType")
             || paramID == laneParam (L, "ccNumber")
             || paramID == laneParam (L, "midiChannel")
-            || paramID == laneParam (L, "noteVelocity")
-            || paramID == laneParam (L, "enabled"))
+            || paramID == laneParam (L, "noteVelocity"))
         {
+            // Re-bake the snapshot so changes take effect immediately (no redraw needed).
+            proc.updateLaneSnapshot (L);
             juce::MessageManager::callAsync ([this, L] {
                 updateLaneRow (L);
                 if (L == _focusedLane)
@@ -1257,10 +1284,25 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
             return;
         }
 
+        if (paramID == laneParam (L, "enabled"))
+        {
+            juce::MessageManager::callAsync ([this, L] { updateLaneRow (L); });
+            return;
+        }
+
         if (paramID == laneParam (L, "minOutput") || paramID == laneParam (L, "maxOutput"))
         {
+            // Re-bake range into snapshot immediately; also update the slider display.
+            proc.updateLaneSnapshot (L);
             if (L == _focusedLane)
                 juce::MessageManager::callAsync ([this] { updateRangeSlider(); });
+            return;
+        }
+
+        if (paramID == laneParam (L, "smoothing"))
+        {
+            // Re-bake smoothing into snapshot immediately (attachment fires this).
+            proc.updateLaneSnapshot (L);
             return;
         }
 
@@ -1374,8 +1416,27 @@ void DrawnCurveEditor::updateRangeLabel()
 {
     const float mn = static_cast<float> (rangeSlider.getMinValue());
     const float mx = static_cast<float> (rangeSlider.getMaxValue());
-    rangeLabel.setText (juce::String (mn, 2) + " \xe2\x80\x93 " + juce::String (mx, 2),
-                        juce::dontSendNotification);
+
+    const auto msgType = static_cast<MessageType> (
+        static_cast<int> (proc.apvts.getRawParameterValue (
+            laneParam (_focusedLane, "msgType"))->load()));
+
+    if (msgType == MessageType::Note)
+    {
+        // Show MIDI note names (e.g. "C2 - G5")
+        static const char* kNoteNames[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
+        auto noteName = [&] (float norm) -> juce::String {
+            const int midi = juce::jlimit (0, 127, juce::roundToInt (norm * 127.0f));
+            return juce::String (kNoteNames[midi % 12]) + juce::String (midi / 12 - 1);
+        };
+        rangeLabel.setText (noteName (mn) + " - " + noteName (mx),
+                            juce::dontSendNotification);
+    }
+    else
+    {
+        rangeLabel.setText (juce::String (mn, 2) + " - " + juce::String (mx, 2),
+                            juce::dontSendNotification);
+    }
 }
 
 void DrawnCurveEditor::updateMaskLabel()
@@ -1441,13 +1502,20 @@ void DrawnCurveEditor::applyTheme()
     dirControl.repaint();
 
     // Lane focus control — use lane 0 colour for emphasis
-    laneFocusCtrl.bgColour     = light ? juce::Colour (0xffF0EFE7) : btnBg;
-    laneFocusCtrl.activeColour = light ? kLaneColourLight[_focusedLane]
-                                       : kLaneColourDark[_focusedLane];
-    laneFocusCtrl.labelColour  = dimText;
-    laneFocusCtrl.activeLabel  = juce::Colours::white;
-    laneFocusCtrl.borderColour = light ? juce::Colour (0x28000000) : juce::Colour (0x33ffffff);
-    laneFocusCtrl.repaint();
+    {
+        const auto activeLaneCol = light ? kLaneColourLight[_focusedLane]
+                                         : kLaneColourDark[_focusedLane];
+        // Choose white or near-black label depending on the lane colour's brightness.
+        const auto activeLabelCol = (activeLaneCol.getBrightness() > 0.55f)
+                                    ? juce::Colour (0xdd1a1a1a)   // near-black for bright lanes
+                                    : juce::Colours::white;
+        laneFocusCtrl.bgColour     = light ? juce::Colour (0xffF0EFE7) : btnBg;
+        laneFocusCtrl.activeColour = activeLaneCol;
+        laneFocusCtrl.labelColour  = dimText;
+        laneFocusCtrl.activeLabel  = activeLabelCol;
+        laneFocusCtrl.borderColour = light ? juce::Colour (0x28000000) : juce::Colour (0x33ffffff);
+        laneFocusCtrl.repaint();
+    }
 
     // Density buttons
     for (auto* b : { &tickYMinusBtn, &tickYPlusBtn, &tickXMinusBtn, &tickXPlusBtn })

@@ -115,7 +115,7 @@ LaneSnapshot GestureCaptureSession::finalize (uint8_t ccNumber, uint8_t midiChan
     {
         float yMin = rawPoints[0].y, yMax = rawPoints[0].y;
         for (const auto& pt : rawPoints) { yMin = std::min (yMin, pt.y); yMax = std::max (yMax, pt.y); }
-        constexpr float kSemitoneFrac = 1.0f / 127.0f;   // ≈ one semitone in normalised coords
+        constexpr float kSemitoneFrac = 4.0f / 127.0f;   // ≈ 4 semitones — guards against iOS touch drift
         if (yMax - yMin < kSemitoneFrac)
         {
             const float flatVal = 1.0f - (yMin + yMax) * 0.5f;

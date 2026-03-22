@@ -138,6 +138,10 @@ public:
     /// and load it into the engine for the given lane.
     void finalizeCapture (int lane = 0);
 
+    /// Re-bake params (type, CC#, channel, range, smoothing, velocity) into the
+    /// existing snapshot table without requiring a redraw.  No-op if no curve exists.
+    void updateLaneSnapshot (int lane);
+
     /// Clear the curve for one lane and stop it from playing.
     void clearSnapshot (int lane);
 
