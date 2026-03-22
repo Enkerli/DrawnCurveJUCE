@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1024" viewBox="0 0 1440 1024">
+<style>
+    .bg { fill: #111315; }
+    .panel { fill: #191c20; stroke: #5f6b7a; stroke-width: 1.5; }
+    .panel2 { fill: #1f242a; stroke: #5f6b7a; stroke-width: 1.5; }
+    .grid { stroke: #2c333b; stroke-width: 1; }
+    .stroke { stroke: #5f6b7a; stroke-width: 1.5; fill: none; }
+    .curve { stroke: #75b7ff; stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .curve2 { stroke: #9fe3bf; stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .text { fill: #e9edf2; font-family: Inter, Arial, sans-serif; }
+    .muted { fill: #9aa7b5; font-family: Inter, Arial, sans-serif; }
+    .label { font-size: 14px; font-weight: 600; }
+    .small { font-size: 12px; }
+    .title { font-size: 28px; font-weight: 700; }
+    .subtitle { font-size: 16px; font-weight: 500; }
+    .button { fill: #1f242a; stroke: #5f6b7a; stroke-width: 1.2; }
+    .buttonAccent { fill: #1a2b3e; stroke: #75b7ff; stroke-width: 1.2; }
+    .thumb { fill: #75b7ff; }
+</style>
+
+    <rect class="bg" x="0" y="0" width="1440" height="1024"/>
+    <text class="text title" x="56" y="64">DrawnCurve / Circular Time</text>
+    <text class="muted subtitle" x="56" y="92">Performance-first. Gesture capture around a polar loop with minimal visible tooling.</text>
+    
+<rect class="panel" x="56" y="124" width="1328" height="844" rx="22"/>
+
+<rect class="panel2" x="88" y="156" width="260" height="742" rx="18"/>
+<text class="muted small" x="112" y="186">COMPACT STATUS COLUMN</text>
+<rect class="buttonAccent" x="112" y="212" width="96" height="36" rx="10"/><text class="text label" x="144" y="236">Play</text>
+<rect class="button" x="220" y="212" width="96" height="36" rx="10"/><text class="text label" x="250" y="236">Sync</text>
+
+<text class="text label" x="112" y="302">Rate</text>
+<line class="stroke" x1="112" y1="324" x2="312" y2="324"/><circle class="thumb" cx="226" cy="324" r="10"/>
+<text class="text label" x="112" y="386">Direction</text>
+<rect class="buttonAccent" x="112" y="400" width="64" height="30" rx="8"/><text class="text small" x="129" y="420">Fwd</text>
+<rect class="button" x="184" y="400" width="64" height="30" rx="8"/><text class="text small" x="201" y="420">Rev</text>
+<rect class="button" x="256" y="400" width="64" height="30" rx="8"/><text class="text small" x="264" y="420">Ping</text>
+
+<text class="text label" x="112" y="492">Range</text>
+<line class="stroke" x1="112" y1="514" x2="312" y2="514"/><circle class="thumb" cx="154" cy="514" r="9"/><circle class="thumb" cx="276" cy="514" r="9"/>
+<text class="text label" x="112" y="576">Smooth</text>
+<line class="stroke" x1="112" y1="598" x2="312" y2="598"/><circle class="thumb" cx="214" cy="598" r="10"/>
+<text class="text label" x="112" y="660">Mode</text>
+<text class="muted small" x="112" y="686">CC / Aft / PB / Note</text>
+
+<rect class="panel2" x="376" y="156" width="976" height="742" rx="18"/>
+<text class="muted small" x="404" y="186">MAIN LOOP SURFACE / direct touch on ring or full disc</text>
+
+<circle cx="864" cy="528" r="276" fill="none" stroke="#2c333b" stroke-width="1.5"/>
+<circle cx="864" cy="528" r="220" fill="none" stroke="#2c333b" stroke-width="1.5"/>
+<circle cx="864" cy="528" r="164" fill="none" stroke="#2c333b" stroke-width="1.5"/>
+<line class="grid" x1="864" y1="528" x2="1140.0" y2="528.0"/><line class="grid" x1="864" y1="528" x2="1103.0" y2="666.0"/><line class="grid" x1="864" y1="528" x2="1002.0" y2="767.0"/><line class="grid" x1="864" y1="528" x2="864.0" y2="804.0"/><line class="grid" x1="864" y1="528" x2="726.0" y2="767.0"/><line class="grid" x1="864" y1="528" x2="625.0" y2="666.0"/><line class="grid" x1="864" y1="528" x2="588.0" y2="528.0"/><line class="grid" x1="864" y1="528" x2="625.0" y2="390.0"/><line class="grid" x1="864" y1="528" x2="726.0" y2="289.0"/><line class="grid" x1="864" y1="528" x2="864.0" y2="252.0"/><line class="grid" x1="864" y1="528" x2="1002.0" y2="289.0"/><line class="grid" x1="864" y1="528" x2="1103.0" y2="390.0"/>
+<path class="curve" d="M1140,528 C1128,454 1087,388 1020,346 C936,292 835,288 760,332 C683,376 634,458 632,544 C630,626 675,704 748,750 C826,800 930,806 1012,768"/>
+<path class="curve2" d="M1112,528 A248 248 0 0 1 1040 704" stroke-dasharray="4 8"/>
+<circle class="thumb" cx="1112" cy="528" r="8"/>
+<text class="text label" x="836" y="532">loop</text>
+
+<rect class="button" x="1072" y="196" width="244" height="64" rx="12"/>
+<text class="text label" x="1094" y="224">Floating micro HUD</text>
+<text class="muted small" x="1094" y="246">hideable • no palette in the way</text>
+</svg>

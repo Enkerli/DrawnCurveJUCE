@@ -107,5 +107,21 @@ LaneSnapshot GestureCaptureSession::finalize (uint8_t ccNumber, uint8_t midiChan
         snap.table[static_cast<size_t> (i)] = std::clamp (1.0f - y, 0.0f, 1.0f);
     }
 
+    // ── Flat-gesture guard ────────────────────────────────────────────────────
+    // If the Y-spread across all captured points is less than one MIDI semitone
+    // (~1/127 ≈ 0.0079 of the full range), the gesture is effectively a tap at
+    // a single pitch.  Fill the whole table with that value so no micro-ramp
+    // causes repeated Note Off/On glissandos in a fast loop.
+    {
+        float yMin = rawPoints[0].y, yMax = rawPoints[0].y;
+        for (const auto& pt : rawPoints) { yMin = std::min (yMin, pt.y); yMax = std::max (yMax, pt.y); }
+        constexpr float kSemitoneFrac = 1.0f / 127.0f;   // ≈ one semitone in normalised coords
+        if (yMax - yMin < kSemitoneFrac)
+        {
+            const float flatVal = 1.0f - (yMin + yMax) * 0.5f;
+            snap.table.fill (std::clamp (flatVal, 0.0f, 1.0f));
+        }
+    }
+
     return snap;
 }

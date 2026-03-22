@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1024" viewBox="0 0 1440 1024">
+<style>
+    .bg { fill: #111315; }
+    .panel { fill: #191c20; stroke: #5f6b7a; stroke-width: 1.5; }
+    .panel2 { fill: #1f242a; stroke: #5f6b7a; stroke-width: 1.5; }
+    .grid { stroke: #2c333b; stroke-width: 1; }
+    .stroke { stroke: #5f6b7a; stroke-width: 1.5; fill: none; }
+    .curve { stroke: #75b7ff; stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .curve2 { stroke: #9fe3bf; stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .text { fill: #e9edf2; font-family: Inter, Arial, sans-serif; }
+    .muted { fill: #9aa7b5; font-family: Inter, Arial, sans-serif; }
+    .label { font-size: 14px; font-weight: 600; }
+    .small { font-size: 12px; }
+    .title { font-size: 28px; font-weight: 700; }
+    .subtitle { font-size: 16px; font-weight: 500; }
+    .button { fill: #1f242a; stroke: #5f6b7a; stroke-width: 1.2; }
+    .buttonAccent { fill: #1a2b3e; stroke: #75b7ff; stroke-width: 1.2; }
+    .thumb { fill: #75b7ff; }
+</style>
+
+    <rect class="bg" x="0" y="0" width="1440" height="1024"/>
+    <text class="text title" x="56" y="64">DrawnCurve / Timeline Clip</text>
+    <text class="muted subtitle" x="56" y="92">Scalable lane-based view. Better for later multi-lane expansion than for immediate performance.</text>
+    
+<rect class="panel" x="56" y="124" width="1328" height="844" rx="22"/>
+
+<rect class="panel2" x="84" y="156" width="1272" height="88" rx="18"/>
+<rect class="buttonAccent" x="108" y="182" width="92" height="36" rx="10"/><text class="text label" x="136" y="206">Play</text>
+<rect class="button" x="212" y="182" width="92" height="36" rx="10"/><text class="text label" x="239" y="206">Loop</text>
+<rect class="button" x="316" y="182" width="118" height="36" rx="10"/><text class="text label" x="348" y="206">Length</text>
+<rect class="button" x="1160" y="182" width="160" height="36" rx="10"/><text class="text label" x="1212" y="206">Zoom</text>
+
+<rect class="panel2" x="84" y="268" width="1272" height="594" rx="18"/>
+<text class="muted small" x="108" y="296">LANE STACK / same curve engine per lane, mapping later</text>
+
+<rect class="panel" x="108" y="324" width="1224" height="150" rx="14"/>
+<text class="text label" x="128" y="350">Lane 1</text>
+<line class="grid" x1="128" y1="364" x2="128" y2="454"/><line class="grid" x1="128" y1="532" x2="128" y2="622"/><line class="grid" x1="128" y1="700" x2="128" y2="790"/><line class="grid" x1="228" y1="364" x2="228" y2="454"/><line class="grid" x1="228" y1="532" x2="228" y2="622"/><line class="grid" x1="228" y1="700" x2="228" y2="790"/><line class="grid" x1="328" y1="364" x2="328" y2="454"/><line class="grid" x1="328" y1="532" x2="328" y2="622"/><line class="grid" x1="328" y1="700" x2="328" y2="790"/><line class="grid" x1="428" y1="364" x2="428" y2="454"/><line class="grid" x1="428" y1="532" x2="428" y2="622"/><line class="grid" x1="428" y1="700" x2="428" y2="790"/><line class="grid" x1="528" y1="364" x2="528" y2="454"/><line class="grid" x1="528" y1="532" x2="528" y2="622"/><line class="grid" x1="528" y1="700" x2="528" y2="790"/><line class="grid" x1="628" y1="364" x2="628" y2="454"/><line class="grid" x1="628" y1="532" x2="628" y2="622"/><line class="grid" x1="628" y1="700" x2="628" y2="790"/><line class="grid" x1="728" y1="364" x2="728" y2="454"/><line class="grid" x1="728" y1="532" x2="728" y2="622"/><line class="grid" x1="728" y1="700" x2="728" y2="790"/><line class="grid" x1="828" y1="364" x2="828" y2="454"/><line class="grid" x1="828" y1="532" x2="828" y2="622"/><line class="grid" x1="828" y1="700" x2="828" y2="790"/><line class="grid" x1="928" y1="364" x2="928" y2="454"/><line class="grid" x1="928" y1="532" x2="928" y2="622"/><line class="grid" x1="928" y1="700" x2="928" y2="790"/><line class="grid" x1="1028" y1="364" x2="1028" y2="454"/><line class="grid" x1="1028" y1="532" x2="1028" y2="622"/><line class="grid" x1="1028" y1="700" x2="1028" y2="790"/><line class="grid" x1="1128" y1="364" x2="1128" y2="454"/><line class="grid" x1="1128" y1="532" x2="1128" y2="622"/><line class="grid" x1="1128" y1="700" x2="1128" y2="790"/><line class="grid" x1="1228" y1="364" x2="1228" y2="454"/><line class="grid" x1="1228" y1="532" x2="1228" y2="622"/><line class="grid" x1="1228" y1="700" x2="1228" y2="790"/><line class="grid" x1="128" y1="380" x2="1312" y2="380"/><line class="grid" x1="128" y1="548" x2="1312" y2="548"/><line class="grid" x1="128" y1="716" x2="1312" y2="716"/><line class="grid" x1="128" y1="402" x2="1312" y2="402"/><line class="grid" x1="128" y1="570" x2="1312" y2="570"/><line class="grid" x1="128" y1="738" x2="1312" y2="738"/><line class="grid" x1="128" y1="424" x2="1312" y2="424"/><line class="grid" x1="128" y1="592" x2="1312" y2="592"/><line class="grid" x1="128" y1="760" x2="1312" y2="760"/><line class="grid" x1="128" y1="446" x2="1312" y2="446"/><line class="grid" x1="128" y1="614" x2="1312" y2="614"/><line class="grid" x1="128" y1="782" x2="1312" y2="782"/>
+<path class="curve" d="M128,438 C224,420 274,388 354,392 C438,396 512,442 598,430 C710,414 756,362 850,354 C962,344 1050,414 1132,406 C1200,399 1264,374 1312,380"/>
+
+<rect class="panel" x="108" y="492" width="1224" height="150" rx="14"/>
+<text class="text label" x="128" y="518">Lane 2</text>
+<path class="curve2" d="M128,606 C198,560 276,560 364,582 C436,600 510,616 598,586 C668,562 724,514 806,518 C902,522 980,620 1086,612 C1172,606 1230,562 1312,548"/>
+
+<rect class="panel" x="108" y="660" width="1224" height="150" rx="14"/>
+<text class="text label" x="128" y="686">Lane 3</text>
+<path class="curve" d="M128,780 C212,770 288,726 378,726 C466,726 516,786 604,786 C704,786 748,716 852,716 C966,716 1042,780 1136,780 C1218,780 1262,748 1312,738"/>
+
+<rect class="panel2" x="84" y="884" width="1272" height="52" rx="14"/>
+<text class="muted small" x="108" y="916">Bottom strip reserved for later mapping / routing. Keep hidden in performance mode.</text>
+</svg>

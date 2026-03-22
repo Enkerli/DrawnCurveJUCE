@@ -83,18 +83,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout DrawnCurveProcessor::createP
             juce::ParameterID { laneParam (L, ParamID::noteVelocity), 1 },
             lname + "Note Velocity", 1, 127, 100));
 
-        layout.add (std::make_unique<juce::AudioParameterInt>(
-            juce::ParameterID { laneParam (L, ParamID::scaleMode), 1 },
-            lname + "Scale Mode", 0, 7, 0));
-
-        layout.add (std::make_unique<juce::AudioParameterInt>(
-            juce::ParameterID { laneParam (L, ParamID::scaleRoot), 1 },
-            lname + "Scale Root", 0, 11, 0));
-
-        layout.add (std::make_unique<juce::AudioParameterInt>(
-            juce::ParameterID { laneParam (L, ParamID::scaleMask), 1 },
-            lname + "Scale Custom Mask", 0, 4095, 4095));
     }
+
+    // ── Global scale quantization (shared by all Note-mode lanes) ─────────────
+    layout.add (std::make_unique<juce::AudioParameterInt>(
+        juce::ParameterID { ParamID::scaleMode, 1 },
+        "Scale Mode", 0, 7, 0));
+
+    layout.add (std::make_unique<juce::AudioParameterInt>(
+        juce::ParameterID { ParamID::scaleRoot, 1 },
+        "Scale Root", 0, 11, 0));
+
+    layout.add (std::make_unique<juce::AudioParameterInt>(
+        juce::ParameterID { ParamID::scaleMask, 1 },
+        "Scale Custom Mask", 0, 4095, 4095));
 
     return layout;
 }
@@ -123,6 +125,10 @@ void DrawnCurveProcessor::prepareToPlay (double sampleRate, int /*samplesPerBloc
 
 void DrawnCurveProcessor::releaseResources()
 {
+    // Signal a MIDI panic before the plugin is torn down.  The engine's
+    // setPlaying(false) also sets _noteOffNeeded on all lanes; the panic
+    // additionally sweeps all 128 notes so nothing stays held in the host.
+    _panicNeeded.store (true, std::memory_order_release);
     _engine.setPlaying (false);
 }
 
@@ -135,27 +141,35 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     _lastProcessBlockMs.store (juce::Time::currentTimeMillis(), std::memory_order_relaxed);
 
-    // ── Teach / Learn: scan incoming MIDI for CC messages ────────────────────
+    // ── Teach: scan incoming MIDI for a message matching the lane's type ─────
+    // For CC lanes, captures the incoming CC number and stores it, then ends.
+    // For all other types (Note, PB, Aft), the lane is isolated (solo) until
+    // the user manually dismisses Teach by tapping the button again — no
+    // incoming-message capture is performed.
     {
         const int pending = _teachPendingLane.load (std::memory_order_relaxed);
         if (pending >= 0)
         {
-            for (const auto meta : midiMessages)
+            const int msgType = static_cast<int> (
+                apvts.getRawParameterValue (laneParam (pending, ParamID::msgType))->load());
+            if (msgType == 0)   // CC lane: capture the first incoming CC number
             {
-                const auto msg = meta.getMessage();
-                if (msg.isController())
+                for (const auto meta : midiMessages)
                 {
-                    // Apply CC# to the pending lane's parameter.
-                    // Note: writing an APVTS parameter from the audio thread is technically
-                    // discouraged, but JUCE AudioParameterInt uses an atomic store internally
-                    // and this is widely practiced for learn workflows.
-                    const juce::String pid = laneParam (pending, ParamID::ccNumber);
-                    if (auto* p = dynamic_cast<juce::AudioParameterInt*> (apvts.getParameter (pid)))
-                        *p = msg.getControllerNumber();
-                    _teachPendingLane.store (-1, std::memory_order_relaxed);
-                    break;
+                    const auto msg = meta.getMessage();
+                    if (msg.isController())
+                    {
+                        // Writing APVTS param from the audio thread: JUCE AudioParameterInt
+                        // uses an atomic store, so this is safe and widely used for learn.
+                        const juce::String pid = laneParam (pending, ParamID::ccNumber);
+                        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (apvts.getParameter (pid)))
+                            *p = msg.getControllerNumber();
+                        _teachPendingLane.store (-1, std::memory_order_relaxed);
+                        break;
+                    }
                 }
             }
+            // For Note / PB / Aft lanes: no auto-capture; user taps Teach again to exit.
         }
     }
 
@@ -223,6 +237,20 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     }
 
     _effectiveSpeedRatio.store (effectiveSpeed, std::memory_order_relaxed);
+
+    // ── Push per-lane mute state to engine (detects enabled→disabled transition) ─
+    // When a Teach session is active, that lane is isolated: all other lanes
+    // are suppressed regardless of their own enabled parameter.
+    {
+        const int soloLane = _teachPendingLane.load (std::memory_order_relaxed);
+        for (int L = 0; L < kMaxLanes; ++L)
+        {
+            const bool paramEnabled =
+                apvts.getRawParameterValue (laneParam (L, ParamID::laneEnabled))->load() > 0.5f;
+            const bool soloPass = (soloLane < 0) || (L == soloLane);
+            _engine.setLaneEnabled (L, paramEnabled && soloPass);
+        }
+    }
 
     // ── Advance engine on the audio thread ────────────────────────────────────
     const auto dir = static_cast<PlaybackDirection> (
@@ -417,17 +445,19 @@ static constexpr uint16_t kScalePresetMasks[8] =
     0x000,   // 7 Custom
 };
 
-ScaleConfig DrawnCurveProcessor::getScaleConfig (int lane) const noexcept
+ScaleConfig DrawnCurveProcessor::getScaleConfig (int /*lane*/) const noexcept
 {
+    // Scale is now global — the lane argument is retained for API compatibility
+    // but ignored; all Note-mode lanes share the same quantization.
     const int     mode = static_cast<int> (
-        apvts.getRawParameterValue (laneParam (lane, ParamID::scaleMode))->load());
+        apvts.getRawParameterValue (ParamID::scaleMode)->load());
     const uint8_t root = static_cast<uint8_t> (
-        apvts.getRawParameterValue (laneParam (lane, ParamID::scaleRoot))->load());
+        apvts.getRawParameterValue (ParamID::scaleRoot)->load());
 
     uint16_t mask;
     if (mode == 7)
         mask = static_cast<uint16_t> (
-            apvts.getRawParameterValue (laneParam (lane, ParamID::scaleMask))->load());
+            apvts.getRawParameterValue (ParamID::scaleMask)->load());
     else
         mask = kScalePresetMasks[std::clamp (mode, 0, 7)];
 

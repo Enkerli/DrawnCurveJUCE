@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DrawnCurve — Design Systems</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #D8D5CE;
+  color: #1E1B18;
+  padding: 48px 40px 120px;
+  line-height: 1.5;
+}
+
+/* ── Page typography ── */
+.eyebrow {
+  font-size: 11px; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase;
+  color: #999; margin-bottom: 6px;
+}
+h1 { font-size: 26px; font-weight: 700; margin-bottom: 6px; }
+.page-intro { font-size: 13px; color: #777; margin-bottom: 56px; max-width: 580px; }
+
+/* ── System section ── */
+.sys { margin-bottom: 72px; }
+.sys-name { font-size: 17px; font-weight: 700; margin-bottom: 3px; }
+.sys-desc { font-size: 12px; color: #777; margin-bottom: 20px; max-width: 640px; }
+
+/* ── Plugin shell ── */
+.plugin {
+  width: 640px; height: 560px;
+  padding: 10px;
+  display: flex; flex-direction: column; gap: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 32px rgba(0,0,0,.15), 0 1px 4px rgba(0,0,0,.1);
+  background: var(--bg);
+  border-radius: var(--r-panel);
+}
+
+/* ── Top bar ── */
+.topbar {
+  height: 44px; flex-shrink: 0;
+  display: flex; align-items: center; gap: 5px;
+  padding: 0 8px;
+  background: var(--surf);
+  border: 1px solid var(--bdr);
+  border-radius: var(--r-ctrl);
+}
+
+.btn {
+  height: 30px; padding: 0 13px;
+  border: 1px solid var(--bdr);
+  border-radius: var(--r-btn);
+  background: var(--surf-r);
+  color: var(--t2);
+  font: 600 11px/1 'Inter', sans-serif;
+  cursor: pointer;
+  display: flex; align-items: center;
+  transition: all 80ms;
+  user-select: none; white-space: nowrap;
+}
+.btn.on { background: var(--acc); color: var(--acc-on); border-color: var(--acc); }
+.sp { flex: 1; }
+
+/* ── Curve area ── */
+.curve-area {
+  flex: 1; position: relative; overflow: hidden;
+  border-radius: var(--r-panel);
+  background: var(--surf-i);
+}
+.curve-area svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* ── Bottom strip ── */
+.strip {
+  height: 106px; flex-shrink: 0;
+  display: flex; gap: 8px;
+}
+
+.cblk {
+  padding: 9px 11px;
+  background: var(--surf);
+  border: 1px solid var(--bdr);
+  border-radius: var(--r-ctrl);
+  display: flex; flex-direction: column; gap: 0;
+  overflow: hidden;
+}
+
+.clbl {
+  font: 600 9px/1 'Inter', sans-serif;
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--t2); margin-bottom: 8px;
+}
+
+/* ── Slider ── */
+.trk {
+  position: relative; height: 4px;
+  background: var(--trk);
+  border-radius: 2px; margin: 10px 0 4px;
+}
+.fill { position: absolute; top: 0; height: 100%; background: var(--acc); border-radius: 2px; }
+.thumb {
+  position: absolute; top: 50%;
+  width: 16px; height: 16px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--acc);
+  box-shadow: 0 1px 4px rgba(0,0,0,.25);
+}
+.thumb.out {
+  background: var(--surf);
+  border: 2px solid var(--acc);
+  box-shadow: none;
+}
+.hint {
+  font: 400 10px/1 'DM Mono', monospace;
+  color: var(--t3); margin-top: auto;
+}
+
+/* ── Mode buttons ── */
+.mrow { display: flex; gap: 3px; margin-top: auto; }
+.mbtn {
+  flex: 1; height: 24px;
+  border: 1px solid var(--bdr);
+  border-radius: var(--r-btn);
+  background: var(--surf-r);
+  color: var(--t2);
+  font: 600 10px/1 'Inter', sans-serif;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.mbtn.on { background: var(--acc-s); color: var(--acc); border-color: var(--acc); }
+
+/* ── Detail row (below plugin) ── */
+.drow { display: flex; gap: 12px; width: 640px; margin-top: 14px; }
+.dcard {
+  background: #E8E5DE; border-radius: 10px; padding: 18px;
+}
+.dlbl {
+  font: 600 9px/1 'Inter', sans-serif;
+  letter-spacing: .1em; text-transform: uppercase;
+  color: #999; margin-bottom: 14px;
+}
+
+/* ── Token grid ── */
+.tgrid { display: flex; flex-wrap: wrap; gap: 8px; }
+.tok { display: flex; align-items: center; gap: 6px; font: 400 11px/1 'DM Mono', monospace; color: #666; }
+.sw { width: 18px; height: 18px; border-radius: 4px; border: 1px solid rgba(0,0,0,.1); flex-shrink: 0; }
+
+/* ── Divider ── */
+hr { border: none; border-top: 1px solid rgba(0,0,0,.12); margin: 64px 0; }
+
+/* ─────────────────────────────────────────────
+   SYSTEM A — ATLAS
+   Warm light, indigo, physical sliding direction
+───────────────────────────────────────────── */
+.A {
+  --bg:     #F5F2ED;
+  --surf:   #FDFCFA;
+  --surf-r: #F0EDE7;
+  --surf-i: #EAE6DF;
+  --bdr:    #D4CEC8;
+  --t1:     #1E1B17;
+  --t2:     #6A6360;
+  --t3:     #A09B97;
+  --acc:    #3D35B8;
+  --acc-s:  #EDEEFF;
+  --acc-on: #FFF;
+  --trk:    #DDD9D3;
+  --r-panel: 12px;
+  --r-ctrl:  10px;
+  --r-btn:   7px;
+}
+
+/* Atlas direction: sliding thumb */
+.dir-A { position: relative; margin-top: 4px; }
+.dir-A .trk-A {
+  position: relative; height: 8px;
+  background: var(--trk); border-radius: 4px; cursor: pointer;
+}
+.dir-A .thmb-A {
+  position: absolute; top: 50%;
+  height: 32px; width: 52px;
+  transform: translate(-50%, -50%);
+  background: var(--acc);
+  border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+  font: 700 15px/1 'Inter', sans-serif;
+  color: var(--acc-on);
+  cursor: pointer;
+  transition: left 200ms cubic-bezier(.34,1.3,.64,1);
+  box-shadow: 0 2px 10px rgba(61,53,184,.3);
+}
+.dir-A .lbls-A {
+  display: flex; justify-content: space-between;
+  margin-top: 7px; padding: 0 2px;
+}
+.dir-A .lbls-A span {
+  font: 600 10px/1 'Inter', sans-serif;
+  letter-spacing: .06em; text-transform: uppercase;
+  color: var(--t3);
+}
+.dir-A .lbls-A span.cur { color: var(--acc); }
+
+/* ─────────────────────────────────────────────
+   SYSTEM B — LINEN
+   Cool paper, forest green, dot-on-ledger direction
+───────────────────────────────────────────── */
+.B {
+  --bg:     #EEEAD F;  /* slight yellow-white */
+  --surf:   #F9F8F1;
+  --surf-r: #F0EFE7;
+  --surf-i: #E7E3D6;
+  --bdr:    #C9C5B5;
+  --t1:     #28261F;
+  --t2:     #706D64;
+  --t3:     #A9A59B;
+  --acc:    #0B6E4F;
+  --acc-s:  #E6F3EE;
+  --acc-on: #FFF;
+  --trk:    #D5D1C1;
+  --r-panel: 8px;
+  --r-ctrl:  8px;
+  --r-btn:   5px;
+}
+
+/* Linen direction: three circles on a ledger */
+.dir-B { position: relative; margin-top: 2px; }
+.dir-B .ledger {
+  position: absolute; top: 15px; left: 22px; right: 22px;
+  height: 2px; background: var(--trk); border-radius: 1px;
+}
+.dir-B .dots {
+  display: flex; justify-content: space-between; position: relative;
+}
+.dir-B .dot-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+}
+.dir-B .dot {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; cursor: pointer;
+  border: 2px solid var(--bdr);
+  background: var(--surf-r); color: var(--t2);
+  transition: all 120ms;
+  user-select: none;
+}
+.dir-B .dot.cur { background: var(--acc); border-color: var(--acc); color: #fff; }
+.dir-B .dot-lbl {
+  font: 600 9px/1 'Inter', sans-serif;
+  letter-spacing: .07em; text-transform: uppercase; color: var(--t3);
+}
+.dir-B .dot-lbl.cur { color: var(--acc); }
+
+/* ─────────────────────────────────────────────
+   SYSTEM C — FIELD
+   Cool grey-blue, electric blue, segmented direction
+───────────────────────────────────────────── */
+.C {
+  --bg:     #EDF0F5;
+  --surf:   #F7F9FB;
+  --surf-r: #ECEEF3;
+  --surf-i: #E2E6ED;
+  --bdr:    #C7CDD7;
+  --t1:     #2A3347;
+  --t2:     #6B7A93;
+  --t3:     #9BAABB;
+  --acc:    #1A5CE8;
+  --acc-s:  #E5EDFF;
+  --acc-on: #FFF;
+  --trk:    #CBD1DC;
+  --r-panel: 5px;
+  --r-ctrl:  5px;
+  --r-btn:   3px;
+}
+
+/* Field direction: three-zone segmented control */
+.dir-C {
+  display: flex; margin-top: 6px;
+  border: 1px solid var(--bdr);
+  border-radius: var(--r-btn);
+  overflow: hidden; height: 34px;
+  background: var(--surf-r);
+}
+.dir-C .seg {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  font: 600 11px/1 'Inter', sans-serif;
+  color: var(--t2); cursor: pointer;
+  transition: all 100ms;
+  user-select: none;
+}
+.dir-C .seg + .seg { border-left: 1px solid var(--bdr); }
+.dir-C .seg.cur { background: var(--acc); color: #fff; }
+
+</style>
+</head>
+<body>
+
+<p class="eyebrow">DrawnCurve</p>
+<h1>Design Systems</h1>
+<p class="page-intro">Three coherent design languages. Each has a distinct shape vocabulary, interaction model for controls, and colour semantics — not the same layout in three colour palettes.</p>
+
+
+<!-- ════════════════════════════════════════════
+     SYSTEM A — ATLAS
+════════════════════════════════════════════ -->
+<div class="sys">
+  <p class="eyebrow">System A</p>
+  <p class="sys-name">Atlas — warm light, physical weight</p>
+  <p class="sys-desc">Warm-white surfaces. Controls feel placed, not stamped. The direction switch is a thumb that slides — you move it, it snaps. Indigo accent carries selection and motion. Radius is generous; nothing has sharp corners.</p>
+
+  <div class="plugin A">
+    <!-- Top bar -->
+    <div class="topbar">
+      <button class="btn on">Play</button>
+      <button class="btn">Sync</button>
+      <div class="sp"></div>
+      <button class="btn on" style="font-size:10px;">CC</button>
+      <button class="btn" style="font-size:10px;">Aft</button>
+      <button class="btn" style="font-size:10px;">PB</button>
+      <button class="btn" style="font-size:10px;">Note</button>
+      <div class="sp"></div>
+      <button class="btn" style="font-size:13px; padding:0 10px;">?</button>
+    </div>
+
+    <!-- Curve area -->
+    <div class="curve-area">
+      <svg viewBox="0 0 620 344" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="gA" width="62" height="68.8" patternUnits="userSpaceOnUse">
+            <path d="M62 0H0V68.8" fill="none" stroke="#D4CEC8" stroke-width=".7"/>
+          </pattern>
+          <linearGradient id="fillA" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#3D35B8" stop-opacity=".12"/>
+            <stop offset="100%" stop-color="#3D35B8" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <rect width="620" height="344" fill="#EAE6DF"/>
+        <rect width="620" height="344" fill="url(#gA)"/>
+        <line x1="0" y1="172" x2="620" y2="172" stroke="#D4CEC8" stroke-width="1" stroke-dasharray="6 6"/>
+        <path d="M0,214 C80,162 156,92 240,112 C306,128 366,204 444,190 C504,178 562,122 620,132 L620,344 L0,344Z" fill="url(#fillA)"/>
+        <path d="M0,214 C80,162 156,92 240,112 C306,128 366,204 444,190 C504,178 562,122 620,132" fill="none" stroke="#3D35B8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <!-- playhead -->
+        <line x1="218" y1="0" x2="218" y2="344" stroke="#1E1B17" stroke-width="1" opacity=".18"/>
+        <circle cx="218" cy="112" r="5" fill="#1E1B17" opacity=".35"/>
+      </svg>
+    </div>
+
+    <!-- Bottom strip -->
+    <div class="strip">
+
+      <!-- Rate -->
+      <div class="cblk" style="width:118px; flex-shrink:0;">
+        <span class="clbl">Rate</span>
+        <div class="trk">
+          <div class="fill" style="width:52%"></div>
+          <div class="thumb" style="left:52%"></div>
+        </div>
+        <span class="hint">1.00×</span>
+      </div>
+
+      <!-- Direction — Atlas: sliding thumb -->
+      <div class="cblk" style="flex:1;">
+        <span class="clbl">Direction</span>
+        <div class="dir-A" data-sys="A" data-pos="2">
+          <div class="trk-A">
+            <div class="thmb-A">▶</div>
+          </div>
+          <div class="lbls-A">
+            <span>Rev</span>
+            <span>P–P</span>
+            <span class="cur">Fwd</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Range -->
+      <div class="cblk" style="width:148px; flex-shrink:0;">
+        <span class="clbl">Range</span>
+        <div class="trk">
+          <div class="fill" style="left:20%; width:58%"></div>
+          <div class="thumb out" style="left:20%"></div>
+          <div class="thumb out" style="left:78%"></div>
+        </div>
+        <span class="hint">20 – 78</span>
+      </div>
+
+      <!-- Smooth + Mode -->
+      <div class="cblk" style="width:148px; flex-shrink:0;">
+        <span class="clbl">Smooth</span>
+        <div class="trk" style="margin-bottom:0;">
+          <div class="fill" style="width:32%"></div>
+          <div class="thumb" style="left:32%"></div>
+        </div>
+        <div class="mrow">
+          <button class="mbtn on">CC</button>
+          <button class="mbtn">Aft</button>
+          <button class="mbtn">PB</button>
+          <button class="mbtn">Note</button>
+        </div>
+      </div>
+
+    </div><!-- /.strip -->
+  </div><!-- /.plugin.A -->
+
+  <!-- Detail row -->
+  <div class="drow">
+    <div class="dcard" style="flex:2;">
+      <div class="dlbl">Tokens</div>
+      <div class="tgrid">
+        <div class="tok"><div class="sw" style="background:#FDFCFA"></div>surface</div>
+        <div class="tok"><div class="sw" style="background:#F5F2ED"></div>bg</div>
+        <div class="tok"><div class="sw" style="background:#EAE6DF"></div>inset</div>
+        <div class="tok"><div class="sw" style="background:#3D35B8"></div>accent</div>
+        <div class="tok"><div class="sw" style="background:#EDEEFF; border-color:#D4CEC8;"></div>acc-subtle</div>
+        <div class="tok"><div class="sw" style="background:#1E1B17"></div>text</div>
+        <div class="tok"><div class="sw" style="background:#D4CEC8"></div>border</div>
+      </div>
+      <div style="margin-top:12px; font:400 11px/1.4 'DM Mono',monospace; color:#999;">
+        Inter · 10/12 ctrl · 7px btn<br>sliding-thumb direction · 12px panel radius
+      </div>
+    </div>
+
+    <div class="dcard" style="flex:3;">
+      <div class="dlbl">Direction control — interaction model</div>
+      <!-- Large Atlas dir slider for close-up -->
+      <div class="A" style="padding:8px 0 0;">
+        <div class="dir-A dir-A-demo" data-sys="A-demo" data-pos="2" style="padding: 0 12px;">
+          <div class="trk-A">
+            <div class="thmb-A" style="height:40px; width:64px; font-size:18px; border-radius:20px;">▶</div>
+          </div>
+          <div class="lbls-A" style="margin-top:12px;">
+            <span style="font-size:12px;">◀ Rev</span>
+            <span style="font-size:12px;">◆ P–P</span>
+            <span class="cur" style="font-size:12px;">Fwd ▶</span>
+          </div>
+        </div>
+        <p style="font:400 11px/1.5 'Inter',sans-serif; color:#999; margin-top:16px; padding:0 12px;">
+          Tap anywhere on track to snap. The thumb position <em>is</em> the state — no label needs to be read first. Spring easing on snap gives physical weight without animation for its own sake.
+        </p>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /.sys A -->
+
+<hr>
+
+<!-- ════════════════════════════════════════════
+     SYSTEM B — LINEN
+════════════════════════════════════════════ -->
+<div class="sys">
+  <p class="eyebrow">System B</p>
+  <p class="sys-name">Linen — cool paper, forest green</p>
+  <p class="sys-desc">A cooler off-white, closer to drafting paper than ivory. Forest green accent is quieter than blue — supports the curve without competing. Direction switch as three circles on a ledger: discrete, deliberate, no sliding ambiguity. Radius is tighter throughout.</p>
+
+  <div class="plugin B">
+    <div class="topbar">
+      <button class="btn on">Play</button>
+      <button class="btn">Sync</button>
+      <div class="sp"></div>
+      <button class="btn on" style="font-size:10px;">CC</button>
+      <button class="btn" style="font-size:10px;">Aft</button>
+      <button class="btn" style="font-size:10px;">PB</button>
+      <button class="btn" style="font-size:10px;">Note</button>
+      <div class="sp"></div>
+      <button class="btn" style="font-size:13px; padding:0 10px;">?</button>
+    </div>
+
+    <div class="curve-area">
+      <svg viewBox="0 0 620 344" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="gB" width="62" height="68.8" patternUnits="userSpaceOnUse">
+            <path d="M62 0H0V68.8" fill="none" stroke="#C9C5B5" stroke-width=".7"/>
+          </pattern>
+          <linearGradient id="fillB" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#0B6E4F" stop-opacity=".1"/>
+            <stop offset="100%" stop-color="#0B6E4F" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <rect width="620" height="344" fill="#E7E3D6"/>
+        <rect width="620" height="344" fill="url(#gB)"/>
+        <line x1="0" y1="172" x2="620" y2="172" stroke="#C9C5B5" stroke-width="1" stroke-dasharray="5 6"/>
+        <path d="M0,214 C80,162 156,92 240,112 C306,128 366,204 444,190 C504,178 562,122 620,132 L620,344 L0,344Z" fill="url(#fillB)"/>
+        <path d="M0,214 C80,162 156,92 240,112 C306,128 366,204 444,190 C504,178 562,122 620,132" fill="none" stroke="#0B6E4F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="218" y1="0" x2="218" y2="344" stroke="#28261F" stroke-width="1" opacity=".16"/>
+        <circle cx="218" cy="112" r="5" fill="#28261F" opacity=".3"/>
+      </svg>
+    </div>
+
+    <div class="strip">
+
+      <div class="cblk" style="width:118px; flex-shrink:0;">
+        <span class="clbl">Rate</span>
+        <div class="trk">
+          <div class="fill" style="width:52%"></div>
+          <div class="thumb" style="left:52%"></div>
+        </div>
+        <span class="hint">1.00×</span>
+      </div>
+
+      <!-- Direction — Linen: circles on ledger -->
+      <div class="cblk" style="flex:1;">
+        <span class="clbl">Direction</span>
+        <div class="dir-B" data-pos="2">
+          <div class="ledger"></div>
+          <div class="dots">
+            <div class="dot-wrap">
+              <div class="dot">◀</div>
+              <span class="dot-lbl">Rev</span>
+            </div>
+            <div class="dot-wrap">
+              <div class="dot">◆</div>
+              <span class="dot-lbl">P–P</span>
+            </div>
+            <div class="dot-wrap">
+              <div class="dot cur">▶</div>
+              <span class="dot-lbl cur">Fwd</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cblk" style="width:148px; flex-shrink:0;">
+        <span class="clbl">Range</span>
+        <div class="trk">
+          <div class="fill" style="left:20%; width:58%"></div>
+          <div class="thumb out" style="left:20%"></div>
+          <div class="thumb out" style="left:78%"></div>
+        </div>
+        <span class="hint">20 – 78</span>
+      </div>
+
+      <div class="cblk" style="width:148px; flex-shrink:0;">
+        <span class="clbl">Smooth</span>
+        <div class="trk" style="margin-bottom:0;">
+          <div class="fill" style="width:32%"></div>
+          <div class="thumb" style="left:32%"></div>
+        </div>
+        <div class="mrow">
+          <button class="mbtn on">CC</button>
+          <button class="mbtn">Aft</button>
+          <button class="mbtn">PB</button>
+          <button class="mbtn">Note</button>
+        </div>
+      </div>
+
+    </div>
+  </div><!-- /.plugin.B -->
+
+  <div class="drow">
+    <div class="dcard" style="flex:2;">
+      <div class="dlbl">Tokens</div>
+      <div class="tgrid">
+        <div class="tok"><div class="sw" style="background:#F9F8F1"></div>surface</div>
+        <div class="tok"><div class="sw" style="background:#EEEAD8"></div>bg</div>
+        <div class="tok"><div class="sw" style="background:#E7E3D6"></div>inset</div>
+        <div class="tok"><div class="sw" style="background:#0B6E4F"></div>accent</div>
+        <div class="tok"><div class="sw" style="background:#E6F3EE; border-color:#C9C5B5;"></div>acc-subtle</div>
+        <div class="tok"><div class="sw" style="background:#28261F"></div>text</div>
+        <div class="tok"><div class="sw" style="background:#C9C5B5"></div>border</div>
+      </div>
+      <div style="margin-top:12px; font:400 11px/1.4 'DM Mono',monospace; color:#999;">
+        Inter · 8px ctrl · 5px btn<br>dot-on-ledger direction · 8px panel radius
+      </div>
+    </div>
+
+    <div class="dcard" style="flex:3;">
+      <div class="dlbl">Scale lattice (2A) — Note mode</div>
+      <!-- The neutral 5+7 lattice in Linen colours -->
+      <svg viewBox="0 0 400 102" xmlns="http://www.w3.org/2000/svg" style="width:100%; display:block; margin-top:4px;">
+        <!-- Connector zigzag -->
+        <path d="M29,70 L57,38 L86,70 L114,38 L143,70 L200,70 L228,38 L257,70 L285,38 L314,70 L342,38 L371,70"
+              stroke="#C9C5B5" stroke-width="1.2" fill="none" stroke-dasharray="3 6" opacity=".7"/>
+        <!-- Bottom row: natural notes -->
+        <!-- C (root = outer ring) -->
+        <circle cx="29" cy="70" r="24" fill="#0B6E4F"/>
+        <circle cx="29" cy="70" r="29" fill="none" stroke="#0B6E4F" stroke-width="2"/>
+        <text x="29" y="75" text-anchor="middle" fill="white" font-size="13" font-weight="700" font-family="Inter,sans-serif">C</text>
+        <!-- D active -->
+        <circle cx="86" cy="70" r="24" fill="#0B6E4F"/>
+        <text x="86" y="75" text-anchor="middle" fill="white" font-size="13" font-weight="700" font-family="Inter,sans-serif">D</text>
+        <!-- E inactive -->
+        <circle cx="143" cy="70" r="24" fill="#F9F8F1" stroke="#C9C5B5" stroke-width="1.5"/>
+        <text x="143" y="75" text-anchor="middle" fill="#A9A59B" font-size="13" font-weight="500" font-family="Inter,sans-serif">E</text>
+        <!-- F active -->
+        <circle cx="200" cy="70" r="24" fill="#0B6E4F"/>
+        <text x="200" y="75" text-anchor="middle" fill="white" font-size="13" font-weight="700" font-family="Inter,sans-serif">F</text>
+        <!-- G active -->
+        <circle cx="257" cy="70" r="24" fill="#0B6E4F"/>
+        <text x="257" y="75" text-anchor="middle" fill="white" font-size="13" font-weight="700" font-family="Inter,sans-serif">G</text>
+        <!-- A active -->
+        <circle cx="314" cy="70" r="24" fill="#0B6E4F"/>
+        <text x="314" y="75" text-anchor="middle" fill="white" font-size="13" font-weight="700" font-family="Inter,sans-serif">A</text>
+        <!-- B active -->
+        <circle cx="371" cy="70" r="24" fill="#0B6E4F"/>
+        <text x="371" y="75" text-anchor="middle" fill="white" font-size="13" font-weight="700" font-family="Inter,sans-serif">B</text>
+        <!-- Top row: chromatic notes (smaller) -->
+        <!-- C# active (in key) -->
+        <circle cx="57" cy="38" r="18" fill="#E6F3EE" stroke="#0B6E4F" stroke-width="1.5"/>
+        <text x="57" y="43" text-anchor="middle" fill="#0B6E4F" font-size="10" font-weight="600" font-family="Inter,sans-serif">C♯</text>
+        <!-- E♭ inactive -->
+        <circle cx="114" cy="38" r="18" fill="#F9F8F1" stroke="#C9C5B5" stroke-width="1.5"/>
+        <text x="114" y="43" text-anchor="middle" fill="#A9A59B" font-size="10" font-family="Inter,sans-serif">E♭</text>
+        <!-- F# inactive -->
+        <circle cx="228" cy="38" r="18" fill="#F9F8F1" stroke="#C9C5B5" stroke-width="1.5"/>
+        <text x="228" y="43" text-anchor="middle" fill="#A9A59B" font-size="10" font-family="Inter,sans-serif">F♯</text>
+        <!-- A♭ inactive -->
+        <circle cx="285" cy="38" r="18" fill="#F9F8F1" stroke="#C9C5B5" stroke-width="1.5"/>
+        <text x="285" y="43" text-anchor="middle" fill="#A9A59B" font-size="10" font-family="Inter,sans-serif">A♭</text>
+        <!-- B♭ active (in key) -->
+        <circle cx="342" cy="38" r="18" fill="#E6F3EE" stroke="#0B6E4F" stroke-width="1.5"/>
+        <text x="342" y="43" text-anchor="middle" fill="#0B6E4F" font-size="10" font-weight="600" font-family="Inter,sans-serif">B♭</text>
+      </svg>
+      <p style="font:400 11px/1.5 'Inter',sans-serif; color:#999; margin-top:10px;">
+        C major (F lydian) with C♯ + B♭ also active. Filled = in scale · tinted outline = chromatic in scale · ghost outline = excluded. Root gets the outer ring. Natural notes larger, chromatic smaller — no piano skeuomorphism.
+      </p>
+    </div>
+  </div>
+
+</div><!-- /.sys B -->
+
+<hr>
+
+<!-- ════════════════════════════════════════════
+     SYSTEM C — FIELD
+════════════════════════════════════════════ -->
+<div class="sys">
+  <p class="eyebrow">System C</p>
+  <p class="sys-name">Field — cool grey, precision first</p>
+  <p class="sys-desc">Cool blue-grey surfaces. Everything is a bit tighter — less radius, less padding — so more information fits and the curve dominates. Blue accent is clear and unsentimental. The direction control is a three-zone segment: you read what's active in one glance. Monospace values.</p>
+
+  <div class="plugin C">
+    <div class="topbar">
+      <button class="btn on">Play</button>
+      <button class="btn">Sync</button>
+      <div class="sp"></div>
+      <button class="btn on" style="font-size:10px;">CC</button>
+      <button class="btn" style="font-size:10px;">Aft</button>
+      <button class="btn" style="font-size:10px;">PB</button>
+      <button class="btn" style="font-size:10px;">Note</button>
+      <div class="sp"></div>
+      <button class="btn" style="font-size:13px; padding:0 10px;">?</button>
+    </div>
+
+    <div class="curve-area">
+      <svg viewBox="0 0 620 344" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="gC" width="62" height="68.8" patternUnits="userSpaceOnUse">
+            <path d="M62 0H0V68.8" fill="none" stroke="#C7CDD7" stroke-width=".7"/>
+          </pattern>
+          <linearGradient id="fillC" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#1A5CE8" stop-opacity=".11"/>
+            <stop offset="100%" stop-color="#1A5CE8" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <rect width="620" height="344" fill="#E2E6ED"/>
+        <rect width="620" height="344" fill="url(#gC)"/>
+        <line x1="0" y1="172" x2="620" y2="172" stroke="#C7CDD7" stroke-width="1" stroke-dasharray="4 7"/>
+        <path d="M0,214 C80,162 156,92 240,112 C306,128 366,204 444,190 C504,178 562,122 620,132 L620,344 L0,344Z" fill="url(#fillC)"/>
+        <path d="M0,214 C80,162 156,92 240,112 C306,128 366,204 444,190 C504,178 562,122 620,132" fill="none" stroke="#1A5CE8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="218" y1="0" x2="218" y2="344" stroke="#2A3347" stroke-width="1" opacity=".18"/>
+        <circle cx="218" cy="112" r="5" fill="#2A3347" opacity=".4"/>
+      </svg>
+    </div>
+
+    <div class="strip">
+
+      <div class="cblk" style="width:118px; flex-shrink:0;">
+        <span class="clbl">Rate</span>
+        <div class="trk" style="height:3px;">
+          <div class="fill" style="width:52%"></div>
+          <div class="thumb" style="left:52%; width:14px; height:14px;"></div>
+        </div>
+        <span class="hint">1.00×</span>
+      </div>
+
+      <!-- Direction — Field: segmented -->
+      <div class="cblk" style="flex:1;">
+        <span class="clbl">Direction</span>
+        <div class="dir-C" data-pos="2">
+          <div class="seg">◀ Rev</div>
+          <div class="seg">◆ P–P</div>
+          <div class="seg cur">Fwd ▶</div>
+        </div>
+      </div>
+
+      <div class="cblk" style="width:148px; flex-shrink:0;">
+        <span class="clbl">Range</span>
+        <div class="trk" style="height:3px;">
+          <div class="fill" style="left:20%; width:58%"></div>
+          <div class="thumb out" style="left:20%; width:14px; height:14px; box-shadow:none;"></div>
+          <div class="thumb out" style="left:78%; width:14px; height:14px; box-shadow:none;"></div>
+        </div>
+        <span class="hint">20 – 78</span>
+      </div>
+
+      <div class="cblk" style="width:148px; flex-shrink:0;">
+        <span class="clbl">Smooth</span>
+        <div class="trk" style="height:3px; margin-bottom:0;">
+          <div class="fill" style="width:32%"></div>
+          <div class="thumb" style="left:32%; width:14px; height:14px;"></div>
+        </div>
+        <div class="mrow">
+          <button class="mbtn on">CC</button>
+          <button class="mbtn">Aft</button>
+          <button class="mbtn">PB</button>
+          <button class="mbtn">Note</button>
+        </div>
+      </div>
+
+    </div>
+  </div><!-- /.plugin.C -->
+
+  <div class="drow">
+    <div class="dcard" style="flex:2;">
+      <div class="dlbl">Tokens</div>
+      <div class="tgrid">
+        <div class="tok"><div class="sw" style="background:#F7F9FB"></div>surface</div>
+        <div class="tok"><div class="sw" style="background:#EDF0F5"></div>bg</div>
+        <div class="tok"><div class="sw" style="background:#E2E6ED"></div>inset</div>
+        <div class="tok"><div class="sw" style="background:#1A5CE8"></div>accent</div>
+        <div class="tok"><div class="sw" style="background:#E5EDFF; border-color:#C7CDD7;"></div>acc-subtle</div>
+        <div class="tok"><div class="sw" style="background:#2A3347"></div>text</div>
+        <div class="tok"><div class="sw" style="background:#C7CDD7"></div>border</div>
+      </div>
+      <div style="margin-top:12px; font:400 11px/1.4 'DM Mono',monospace; color:#999;">
+        Inter + DM Mono values · 5px all · segmented direction · 5px panel radius
+      </div>
+    </div>
+
+    <div class="dcard" style="flex:3;">
+      <div class="dlbl">Scale lattice (2A) — same concept, Field colours</div>
+      <svg viewBox="0 0 400 102" xmlns="http://www.w3.org/2000/svg" style="width:100%; display:block; margin-top:4px;">
+        <path d="M29,70 L57,38 L86,70 L114,38 L143,70 L200,70 L228,38 L257,70 L285,38 L314,70 L342,38 L371,70"
+              stroke="#C7CDD7" stroke-width="1.2" fill="none" stroke-dasharray="3 6" opacity=".7"/>
+        <!-- C root -->
+        <circle cx="29" cy="70" r="24" fill="#1A5CE8"/>
+        <circle cx="29" cy="70" r="29" fill="none" stroke="#1A5CE8" stroke-width="2"/>
+        <text x="29" y="75" text-anchor="middle" fill="white" font-size="13" font-weight="700" font-family="Inter,sans-serif">C</text>
+        <!-- D -->
+        <circle cx="86" cy="70" r="24" fill="#1A5CE8"/>
+        <text x="86" y="75" text-anchor="middle" fill="white" font-size="13" font-weight="700" font-family="Inter,sans-serif">D</text>
+        <!-- E inactive -->
+        <circle cx="143" cy="70" r="24" fill="#ECEEF3" stroke="#C7CDD7" stroke-width="1.5"/>
+        <text x="143" y="75" text-anchor="middle" fill="#9BAABB" font-size="13" font-weight="500" font-family="Inter,sans-serif">E</text>
+        <!-- F -->
+        <circle cx="200" cy="70" r="24" fill="#1A5CE8"/>
+        <text x="200" y="75" text-anchor="middle" fill="white" font-size="13" font-weight="700" font-family="Inter,sans-serif">F</text>
+        <!-- G -->
+        <circle cx="257" cy="70" r="24" fill="#1A5CE8"/>
+        <text x="257" y="75" text-anchor="middle" fill="white" font-size="13" font-weight="700" font-family="Inter,sans-serif">G</text>
+        <!-- A -->
+        <circle cx="314" cy="70" r="24" fill="#1A5CE8"/>
+        <text x="314" y="75" text-anchor="middle" fill="white" font-size="13" font-weight="700" font-family="Inter,sans-serif">A</text>
+        <!-- B -->
+        <circle cx="371" cy="70" r="24" fill="#1A5CE8"/>
+        <text x="371" y="75" text-anchor="middle" fill="white" font-size="13" font-weight="700" font-family="Inter,sans-serif">B</text>
+        <!-- C# active -->
+        <circle cx="57" cy="38" r="18" fill="#E5EDFF" stroke="#1A5CE8" stroke-width="1.5"/>
+        <text x="57" y="43" text-anchor="middle" fill="#1A5CE8" font-size="10" font-weight="600" font-family="Inter,sans-serif">C♯</text>
+        <!-- E♭ inactive -->
+        <circle cx="114" cy="38" r="18" fill="#ECEEF3" stroke="#C7CDD7" stroke-width="1.5"/>
+        <text x="114" y="43" text-anchor="middle" fill="#9BAABB" font-size="10" font-family="Inter,sans-serif">E♭</text>
+        <!-- F# inactive -->
+        <circle cx="228" cy="38" r="18" fill="#ECEEF3" stroke="#C7CDD7" stroke-width="1.5"/>
+        <text x="228" y="43" text-anchor="middle" fill="#9BAABB" font-size="10" font-family="Inter,sans-serif">F♯</text>
+        <!-- A♭ inactive -->
+        <circle cx="285" cy="38" r="18" fill="#ECEEF3" stroke="#C7CDD7" stroke-width="1.5"/>
+        <text x="285" y="43" text-anchor="middle" fill="#9BAABB" font-size="10" font-family="Inter,sans-serif">A♭</text>
+        <!-- B♭ active -->
+        <circle cx="342" cy="38" r="18" fill="#E5EDFF" stroke="#1A5CE8" stroke-width="1.5"/>
+        <text x="342" y="43" text-anchor="middle" fill="#1A5CE8" font-size="10" font-weight="600" font-family="Inter,sans-serif">B♭</text>
+      </svg>
+      <p style="font:400 11px/1.5 'Inter',sans-serif; color:#999; margin-top:10px;">
+        Same scale, Field colours. The strong fill/ghost contrast works at a glance — no ambiguity about what's in and what's out. Root ring adds orientation without extra label.
+      </p>
+    </div>
+  </div>
+
+</div><!-- /.sys C -->
+
+<hr>
+
+<!-- ── Notes ── -->
+<div style="max-width:640px;">
+  <p class="eyebrow">Observations</p>
+  <div style="display:grid; gap:20px; margin-top:4px;">
+
+    <div>
+      <p style="font:700 13px/1 'Inter',sans-serif; margin-bottom:6px;">Direction switch — three different interaction models</p>
+      <p style="font:400 13px/1.6 'Inter',sans-serif; color:#666;">
+        <strong>Atlas (sliding thumb)</strong>: position encodes state spatially — you can read it without parsing text. Spring snap gives physical feedback. Slightly ambiguous between positions if dragged; good for live performance where you overshoot.<br><br>
+        <strong>Linen (dots on ledger)</strong>: three distinct circles with no spatial coupling — you tap a target, not a region. Less discoverable (doesn't look like a selector until you know), but very precise and never accidentally changed. Feels more like a score marking than a control.<br><br>
+        <strong>Field (segmented zone)</strong>: clearest at a glance, closest to what's already in the plugin. The active zone is filled, the others ghosted. Zero ambiguity. Risk: looks like every other segmented control.
+      </p>
+    </div>
+
+    <div>
+      <p style="font:700 13px/1 'Inter',sans-serif; margin-bottom:6px;">Scale lattice — from your 04 sketch</p>
+      <p style="font:400 13px/1.6 'Inter',sans-serif; color:#666;">
+        The core idea from 04_2A works: natural notes on the bottom row (larger circles), chromatic above (smaller, staggered). The key improvement is contrast — your original had two very similar dark fills for active vs inactive. Here: solid fill = in scale, ghost outline = excluded, tinted fill + coloured border = chromatic-but-active. Root gets an outer ring for orientation. No piano keyboard metaphor anywhere.
+      </p>
+    </div>
+
+    <div>
+      <p style="font:700 13px/1 'Inter',sans-serif; margin-bottom:6px;">On light mode and contrast</p>
+      <p style="font:400 13px/1.6 'Inter',sans-serif; color:#666;">
+        All three systems here are light. The background and surface colours are intentionally differentiated (not just one grey), so you can read panel hierarchy at a glance. The curve gets full contrast against the inset surface — it doesn't compete with the controls, which live on slightly raised surfaces. The accent colour does one job: it marks what's active.
+      </p>
+    </div>
+
+  </div>
+</div>
+
+
+<script>
+// ── Atlas sliding direction (all instances) ──
+document.querySelectorAll('.dir-A').forEach(function(container) {
+  var pct = [15, 50, 85];
+  var glyphs = ['◀', '◆', '▶'];
+  var track = container.querySelector('.trk-A');
+  var thumb = container.querySelector('.thmb-A');
+  var labels = container.querySelectorAll('.lbls-A span');
+  var cur = parseInt(container.dataset.pos, 10);
+
+  function go(i) {
+    cur = i;
+    thumb.style.left = pct[i] + '%';
+    thumb.textContent = glyphs[i];
+    labels.forEach(function(l, j) {
+      l.classList.toggle('cur', j === i);
+    });
+  }
+
+  // Place thumb without animation on load
+  thumb.style.transition = 'none';
+  go(cur);
+  requestAnimationFrame(function() {
+    thumb.style.transition = 'left 200ms cubic-bezier(.34,1.3,.64,1)';
+  });
+
+  track.addEventListener('click', function(e) {
+    var r = track.getBoundingClientRect();
+    var x = (e.clientX - r.left) / r.width;
+    go(x < 0.33 ? 0 : x < 0.67 ? 1 : 2);
+  });
+});
+
+// ── Linen dot direction ──
+document.querySelectorAll('.dir-B').forEach(function(container) {
+  var wraps = container.querySelectorAll('.dot-wrap');
+  wraps.forEach(function(wrap, i) {
+    wrap.querySelector('.dot').addEventListener('click', function() {
+      wraps.forEach(function(w, j) {
+        w.querySelector('.dot').classList.toggle('cur', j === i);
+        w.querySelector('.dot-lbl').classList.toggle('cur', j === i);
+      });
+    });
+  });
+});
+
+// ── Field segmented direction ──
+document.querySelectorAll('.dir-C').forEach(function(container) {
+  var segs = container.querySelectorAll('.seg');
+  segs.forEach(function(seg, i) {
+    seg.addEventListener('click', function() {
+      segs.forEach(function(s, j) { s.classList.toggle('cur', j === i); });
+    });
+  });
+});
+
+// ── Mode buttons (all systems) ──
+document.querySelectorAll('.mrow').forEach(function(row) {
+  row.querySelectorAll('.mbtn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      row.querySelectorAll('.mbtn').forEach(function(b) { b.classList.remove('on'); });
+      btn.classList.add('on');
+    });
+  });
+});
+</script>
+
+</body>
+</html>

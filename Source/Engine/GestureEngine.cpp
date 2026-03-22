@@ -13,6 +13,7 @@ GestureEngine::GestureEngine()
         _snapshots[i].store    (nullptr, std::memory_order_relaxed);
         _noteOffNeeded[i].store(false,   std::memory_order_relaxed);
         _scalesPacked[i].store (0xFFF,   std::memory_order_relaxed);
+        _laneEnabled[i].store  (true,    std::memory_order_relaxed);
     }
 }
 
@@ -86,6 +87,17 @@ void GestureEngine::resetLane (int lane)
     _runtimes[lane].smoothedValue   = 0.0f;
     if (lane == 0)
         _currentPhase.store (0.0f, std::memory_order_relaxed);
+}
+
+void GestureEngine::setLaneEnabled (int lane, bool enabled)
+{
+    if (lane < 0 || lane >= kMaxLanes) return;
+    // Detect enabled→disabled transition and queue a Note Off for any held note.
+    // It is safe to call this on every processBlock iteration since the exchange
+    // only triggers stopLane on the false edge.
+    const bool wasEnabled = _laneEnabled[lane].exchange (enabled, std::memory_order_acq_rel);
+    if (wasEnabled && ! enabled)
+        stopLane (lane);    // sets _noteOffNeeded; fires in the current processLane call
 }
 
 void GestureEngine::setScaleConfig (int lane, ScaleConfig config)
@@ -182,6 +194,7 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
 
     if (! snap || ! snap->valid) return;
     if (! _isPlaying.load (std::memory_order_acquire)) return;
+    if (! _laneEnabled[lane].load (std::memory_order_acquire)) return;   // muted
 
     const double effectiveDur = static_cast<double> (snap->durationSeconds)
                                 / static_cast<double> (std::max (speedRatio, 0.001f));

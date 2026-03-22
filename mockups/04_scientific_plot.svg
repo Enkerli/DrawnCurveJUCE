@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1024" viewBox="0 0 1440 1024">
+<style>
+    .bg { fill: #111315; }
+    .panel { fill: #191c20; stroke: #5f6b7a; stroke-width: 1.5; }
+    .panel2 { fill: #1f242a; stroke: #5f6b7a; stroke-width: 1.5; }
+    .grid { stroke: #2c333b; stroke-width: 1; }
+    .stroke { stroke: #5f6b7a; stroke-width: 1.5; fill: none; }
+    .curve { stroke: #75b7ff; stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .curve2 { stroke: #9fe3bf; stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .text { fill: #e9edf2; font-family: Inter, Arial, sans-serif; }
+    .muted { fill: #9aa7b5; font-family: Inter, Arial, sans-serif; }
+    .label { font-size: 14px; font-weight: 600; }
+    .small { font-size: 12px; }
+    .title { font-size: 28px; font-weight: 700; }
+    .subtitle { font-size: 16px; font-weight: 500; }
+    .button { fill: #1f242a; stroke: #5f6b7a; stroke-width: 1.2; }
+    .buttonAccent { fill: #1a2b3e; stroke: #75b7ff; stroke-width: 1.2; }
+    .thumb { fill: #75b7ff; }
+</style>
+
+    <rect class="bg" x="0" y="0" width="1440" height="1024"/>
+    <text class="text title" x="56" y="64">DrawnCurve / Scientific Plot</text>
+    <text class="muted subtitle" x="56" y="92">Precision-forward graphing view. Clear for review, debugging, and algorithmic discussion.</text>
+    
+<rect class="panel" x="56" y="124" width="1328" height="844" rx="22"/>
+
+<rect class="panel2" x="88" y="156" width="240" height="742" rx="18"/>
+<text class="muted small" x="112" y="186">LEFT SIDEBAR / compact, static controls</text>
+<text class="text label" x="112" y="246">Quantize</text>
+<rect class="buttonAccent" x="112" y="262" width="86" height="32" rx="8"/><text class="text small" x="133" y="283">On</text>
+<text class="text label" x="112" y="340">Smooth</text>
+<line class="stroke" x1="112" y1="360" x2="292" y2="360"/><circle class="thumb" cx="192" cy="360" r="10"/>
+<text class="text label" x="112" y="428">Range</text>
+<line class="stroke" x1="112" y1="448" x2="292" y2="448"/><circle class="thumb" cx="146" cy="448" r="9"/><circle class="thumb" cx="256" cy="448" r="9"/>
+<text class="text label" x="112" y="516">Grid</text>
+<text class="muted small" x="112" y="540">time × value</text>
+
+<rect class="panel2" x="356" y="156" width="996" height="742" rx="18"/>
+<text class="muted small" x="384" y="186">PLOT AREA / direct line drawing, optional point editing later</text>
+<text class="muted small" x="392" y="820">time →</text>
+<text class="muted small" x="374" y="242" transform="rotate(-90 374 242)">value ↑</text>
+<line class="grid" x1="420" y1="216" x2="420" y2="812"/><line class="grid" x1="510" y1="216" x2="510" y2="812"/><line class="grid" x1="600" y1="216" x2="600" y2="812"/><line class="grid" x1="690" y1="216" x2="690" y2="812"/><line class="grid" x1="780" y1="216" x2="780" y2="812"/><line class="grid" x1="870" y1="216" x2="870" y2="812"/><line class="grid" x1="960" y1="216" x2="960" y2="812"/><line class="grid" x1="1050" y1="216" x2="1050" y2="812"/><line class="grid" x1="1140" y1="216" x2="1140" y2="812"/><line class="grid" x1="1230" y1="216" x2="1230" y2="812"/><line class="grid" x1="420" y1="216" x2="1290" y2="216"/><line class="grid" x1="420" y1="290" x2="1290" y2="290"/><line class="grid" x1="420" y1="364" x2="1290" y2="364"/><line class="grid" x1="420" y1="438" x2="1290" y2="438"/><line class="grid" x1="420" y1="512" x2="1290" y2="512"/><line class="grid" x1="420" y1="586" x2="1290" y2="586"/><line class="grid" x1="420" y1="660" x2="1290" y2="660"/><line class="grid" x1="420" y1="734" x2="1290" y2="734"/><line class="grid" x1="420" y1="808" x2="1290" y2="808"/>
+<line x1="420" y1="812" x2="1290" y2="812" stroke="#e9edf2" stroke-width="1.5"/>
+<line x1="420" y1="812" x2="420" y2="216" stroke="#e9edf2" stroke-width="1.5"/>
+<path class="curve" d="M420,694 C504,652 558,484 646,468 C722,454 768,566 840,586 C926,610 978,530 1048,462 C1110,402 1188,346 1290,338"/>
+<circle class="thumb" cx="420" cy="694" r="5"/><circle class="thumb" cx="646" cy="468" r="5"/><circle class="thumb" cx="840" cy="586" r="5"/><circle class="thumb" cx="1048" cy="462" r="5"/><circle class="thumb" cx="1290" cy="338" r="5"/>
+
+<rect class="button" x="1052" y="196" width="264" height="70" rx="12"/>
+<text class="text label" x="1074" y="224">Inspection overlay</text>
+<text class="muted small" x="1074" y="248">sample count • smoothing • clipping</text>
+</svg>

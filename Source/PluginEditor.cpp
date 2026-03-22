@@ -94,15 +94,16 @@ namespace Layout
 // Helper: absolute pitch-class mask for lattice display
 // ---------------------------------------------------------------------------
 
-static uint16_t calcAbsLatticeMask (DrawnCurveProcessor& proc, int lane)
+static uint16_t calcAbsLatticeMask (DrawnCurveProcessor& proc, int /*lane*/)
 {
-    const int mode = static_cast<int> (proc.apvts.getRawParameterValue (laneParam (lane, "scaleMode"))->load());
-    const int root = static_cast<int> (proc.apvts.getRawParameterValue (laneParam (lane, "scaleRoot"))->load());
+    // Scale is now global — lane argument kept for call-site compatibility.
+    const int mode = static_cast<int> (proc.apvts.getRawParameterValue ("scaleMode")->load());
+    const int root = static_cast<int> (proc.apvts.getRawParameterValue ("scaleRoot")->load());
 
     if (mode == 7)
-        return static_cast<uint16_t> (proc.apvts.getRawParameterValue (laneParam (lane, "scaleMask"))->load());
+        return static_cast<uint16_t> (proc.apvts.getRawParameterValue ("scaleMask")->load());
 
-    const auto sc = proc.getScaleConfig (lane);
+    const auto sc = proc.getScaleConfig (0);   // global; lane irrelevant
     uint16_t abs  = 0;
     for (int i = 0; i < 12; ++i)
         if ((sc.mask >> i) & 1)
@@ -139,9 +140,9 @@ void HelpOverlay::paint (juce::Graphics& g)
         { "Play / Pause","Tap the active direction segment to toggle play/pause." },
         { "Clear",       "Erase ALL lane curves and stop playback." },
         { "Target",      "CC / Channel Pressure / Pitch Bend / Note — per lane." },
-        { "Teach",       "Tap Teach on a CC lane, then move a controller to capture its CC number." },
+        { "Teach",       "Tap Teach on a lane to solo its output. Other lanes mute so a receiving synth can MIDI-Learn this controller. On CC lanes, also captures the CC# from incoming MIDI." },
         { "Mute",        "Silence one lane without erasing its curve." },
-        { "Sync",        "Follow host transport. Speed becomes Beats when active." },
+        { "FREE / SYNC", "Toggle host-tempo sync. FREE = manual speed; SYNC = follows host BPM, speed becomes Beats." },
         { "Smooth",      "Output smoothing (0 = instant). Applied per focused lane." },
         { "Range",       "Output range min/max. Applied per focused lane." },
         { "Y- / Y+",     "Decrease or increase horizontal grid lines." },
@@ -452,6 +453,22 @@ void CurveDisplay::paint (juce::Graphics& g)
         }
     }
 
+    // ── Pause overlay ─────────────────────────────────────────────────────────
+    // Shown when a curve exists but playback is stopped.  Semi-transparent so
+    // the curve shape remains visible underneath.
+    if (proc.anyLaneHasCurve() && ! proc.isPlaying())
+    {
+        const auto laneCol = (_lightMode ? kLaneColourLight : kLaneColourDark)[_focusedLane];
+        // Tinted fill over the plot area
+        g.setColour (laneCol.withAlpha (0.10f));
+        g.fillRect (plot);
+
+        // Centred "PAUSED" label
+        g.setFont (juce::Font (18.0f, juce::Font::bold));
+        g.setColour (laneCol.withAlpha (0.45f));
+        g.drawText ("PAUSED", plot.toNearestInt(), juce::Justification::centred, false);
+    }
+
     // ── Border ────────────────────────────────────────────────────────────────
     g.setColour (T.border);
     g.drawRect (getLocalBounds().toFloat(), 1.0f);
@@ -555,6 +572,10 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 
     syncButton.setLookAndFeel (&_syncLF);
     addAndMakeVisible (syncButton);
+    {   // Set initial text from current param state
+        const bool isSyncing = proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
+        syncButton.setButtonText (isSyncing ? "SYNC" : "FREE");
+    }
     syncButton.onClick = [this]
     {
         const bool wasSyncing =
@@ -562,6 +583,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         if (auto* param = dynamic_cast<juce::AudioParameterBool*> (
                               proc.apvts.getParameter (ParamID::syncEnabled)))
             *param = ! wasSyncing;
+        syncButton.setButtonText (wasSyncing ? "FREE" : "SYNC");
         onSyncToggled (! wasSyncing);
     };
 
@@ -618,10 +640,22 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         const float cx = bounds.getCentreX(), cy = bounds.getCentreY();
         const float aw = bounds.getHeight() * 0.35f;
         const float tw = aw * 0.82f;
-        const bool playing = active && proc.isPlaying();
 
-        const juce::Colour glyphCol = active ? dirControl.activeLabel : dirControl.labelColour;
-        g.setColour (playing ? glyphCol.withAlpha (0.22f) : glyphCol);
+        // Semantic states
+        const bool enginePlaying = proc.isPlaying();
+        const bool hasCurve      = proc.anyLaneHasCurve();
+        // "paused" = this direction is selected, a curve exists, but we're not playing
+        const bool paused        = active && hasCurve && ! enginePlaying;
+        // "live"   = this direction is selected and actively playing
+        const bool live          = active && enginePlaying;
+
+        // Direction arrow opacity:
+        //   live  → full (shows which direction is running)
+        //   paused→ 30% (ghost; pause bars overlay it)
+        //   other  → normal active/inactive colour
+        const juce::Colour baseCol = active ? dirControl.activeLabel : dirControl.labelColour;
+        const float arrowAlpha = live ? 1.0f : (paused ? 0.28f : 1.0f);
+        g.setColour (baseCol.withAlpha (arrowAlpha));
 
         auto fillTri = [&] (bool pointRight) {
             juce::Path p;
@@ -634,14 +668,16 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         else if (index == 2) fillTri (true);
         else { fillTri (false); fillTri (true); }
 
-        if (playing)
+        // Pause bars: shown when paused (not when playing).
+        // This lets the user know playback is suspended; tap to resume.
+        if (paused)
         {
             const float ps = bounds.getHeight() * 0.52f;
             const float px = cx - ps * 0.5f, py = cy - ps * 0.5f;
             const float bw = ps * 0.24f, gap = ps * 0.20f;
-            g.setColour (dirControl.activeLabel);
-            g.fillRoundedRectangle (px,          py, bw, ps, 2.0f);
-            g.fillRoundedRectangle (px+bw+gap,   py, bw, ps, 2.0f);
+            g.setColour (dirControl.activeLabel.withAlpha (0.80f));
+            g.fillRoundedRectangle (px,        py, bw, ps, 2.0f);
+            g.fillRoundedRectangle (px+bw+gap, py, bw, ps, 2.0f);
         }
     });
     addAndMakeVisible (dirControl);
@@ -693,36 +729,100 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     bindShapingToLane (0);
 
     // ── Routing matrix rows ───────────────────────────────────────────────────
-    static const std::array<const char*, 4> kTargetLabels { "CC", "PB", "Note", "Aft" };
-    // Note: visual order is CC / PB / Note / Aft which maps to APVTS choices
-    //       CC=0, ChannelPressure=1, PitchBend=2, Note=3
-    // We display as CC / PB / Note / Aft and map: vis[0]=0, vis[1]=2, vis[2]=3, vis[3]=1
-    static const int kTargetVisToParam[4] = { 0, 2, 3, 1 };
-    static const int kTargetParamToVis[4] = { 0, 3, 1, 2 };
+    // Message-type button symbols (param values: CC=0, ChannelPressure=1, PitchBend=2, Note=3)
 
     for (int L = 0; L < kMaxLanes; ++L)
     {
-        // Target type segmented control
-        laneTargetCtrl[L].setSegments ({
-            { "cc",   "CC",   "Control Change"     },
-            { "pb",   "PB",   "Pitch Bend"         },
-            { "note", "Note", "Note On/Off"        },
-            { "aft",  "Aft",  "Channel Pressure"   }
-        });
+        // Message-type button — shows current mode as a symbol
         const int curType = static_cast<int> (
             proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load());
-        laneTargetCtrl[L].setSelectedIndex (kTargetParamToVis[curType], juce::dontSendNotification);
-        laneTargetCtrl[L].onChange = [this, L] (int vis)
+        // initial text set via updateLaneRow below; just pre-populate here
+        { static auto s = [] (int t) -> juce::String { switch(t){case 0:return "~";case 1:return "\xe2\x88\xbf";case 2:return "\xe2\x89\x88";case 3:return "\xe2\x99\xa9";}return "?"; };
+          laneTypeBtn[L].setButtonText (s (curType)); }
+        laneTypeBtn[L].setLookAndFeel (&_symbolLF);
+        laneTypeBtn[L].onClick = [this, L]
         {
-            const int paramVal = kTargetVisToParam[vis];
+            static const int kCycleNext[4] = { 2, 0, 3, 1 };
+            const int cur = static_cast<int> (
+                proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load());
+            const int next = kCycleNext[std::clamp (cur, 0, 3)];
             if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (
                               proc.apvts.getParameter (laneParam (L, "msgType"))))
-                *p = paramVal;
+                *p = next;
             updateLaneRow (L);
             if (L == _focusedLane)
                 updateScaleVisibility();
         };
-        addAndMakeVisible (laneTargetCtrl[L]);
+        laneTypeBtn[L].onStateChange = [this, L] {
+            // Right-click → popup menu
+            if (laneTypeBtn[L].getState() == juce::Button::ButtonState::buttonDown
+                && juce::ModifierKeys::currentModifiers.isRightButtonDown())
+            {
+                const int cur = static_cast<int> (
+                    proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load());
+                juce::PopupMenu m;
+                m.addItem (1, "~ CC (Control Change)",              true, cur == 0);
+                m.addItem (2, "\xe2\x89\x88 PB (Pitch Bend)",       true, cur == 2);
+                m.addItem (3, "\xe2\x99\xa9 Note",                   true, cur == 3);
+                m.addItem (4, "\xe2\x88\xbf Aft (Channel Pressure)", true, cur == 1);
+                m.addSeparator();
+                m.addItem (10, "Copy type to all lanes");
+                m.addItem (11, "Copy channel to all lanes");
+                m.addItem (12, "Copy all settings to all lanes");
+                m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&laneTypeBtn[L]),
+                    [this, L] (int result) {
+                        if (result == 0) return;
+                        if (result <= 4)
+                        {
+                            static const int kMenuToParam[5] = { 0, 0, 2, 3, 1 };
+                            const int newType = kMenuToParam[result];
+                            if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (
+                                              proc.apvts.getParameter (laneParam (L, "msgType"))))
+                                *p = newType;
+                            updateLaneRow (L);
+                            if (L == _focusedLane) updateScaleVisibility();
+                            return;
+                        }
+                        // Copy-to-all operations
+                        for (int T = 0; T < kMaxLanes; ++T)
+                        {
+                            if (T == L) continue;
+                            if (result == 10 || result == 12)   // type
+                            {
+                                const int srcType = static_cast<int> (
+                                    proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load());
+                                if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (
+                                                  proc.apvts.getParameter (laneParam (T, "msgType"))))
+                                    *p = srcType;
+                            }
+                            if (result == 11 || result == 12)   // channel
+                            {
+                                const int srcCh = static_cast<int> (
+                                    proc.apvts.getRawParameterValue (laneParam (L, "midiChannel"))->load());
+                                if (auto* p = dynamic_cast<juce::AudioParameterInt*> (
+                                                  proc.apvts.getParameter (laneParam (T, "midiChannel"))))
+                                    *p = srcCh;
+                            }
+                            if (result == 12)   // all settings: also CC# and velocity
+                            {
+                                const int srcCC = static_cast<int> (
+                                    proc.apvts.getRawParameterValue (laneParam (L, "ccNumber"))->load());
+                                const int srcVel = static_cast<int> (
+                                    proc.apvts.getRawParameterValue (laneParam (L, "noteVelocity"))->load());
+                                if (auto* p = dynamic_cast<juce::AudioParameterInt*> (
+                                                  proc.apvts.getParameter (laneParam (T, "ccNumber"))))
+                                    *p = srcCC;
+                                if (auto* p = dynamic_cast<juce::AudioParameterInt*> (
+                                                  proc.apvts.getParameter (laneParam (T, "noteVelocity"))))
+                                    *p = srcVel;
+                            }
+                        }
+                        updateAllLaneRows();
+                        updateScaleVisibility();
+                    });
+            }
+        };
+        addAndMakeVisible (laneTypeBtn[L]);
 
         // Detail label (CC# or velocity)
         laneDetailLabel[L].setFont (juce::Font (10.0f));
@@ -778,11 +878,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
                 proc.cancelTeach();   // cancel any previous lane
                 const int type = static_cast<int> (
                     proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load());
-                if (type == 0)        // CC only
-                {
-                    proc.beginTeach (L);
-                    applyTheme();
-                }
+                proc.beginTeach (L);   // all message types: isolates lane output
+                applyTheme();
             }
         };
 
@@ -805,10 +902,11 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         proc.apvts.addParameterListener (laneParam (L, "enabled"),      this);
         proc.apvts.addParameterListener (laneParam (L, "minOutput"),    this);
         proc.apvts.addParameterListener (laneParam (L, "maxOutput"),    this);
-        proc.apvts.addParameterListener (laneParam (L, "scaleMode"),    this);
-        proc.apvts.addParameterListener (laneParam (L, "scaleRoot"),    this);
-        proc.apvts.addParameterListener (laneParam (L, "scaleMask"),    this);
     }
+    // Global scale params (outside per-lane loop — shared by all Note-mode lanes)
+    proc.apvts.addParameterListener ("scaleMode", this);
+    proc.apvts.addParameterListener ("scaleRoot", this);
+    proc.apvts.addParameterListener ("scaleMask", this);
 
     // Mapping detail label
     mappingDetailLabel.setFont (juce::Font (10.0f));
@@ -831,13 +929,12 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         addAndMakeVisible (scalePresetBtns[i]);
         scalePresetBtns[i].onClick = [this, i]
         {
-            const int L = _focusedLane;
-            if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter (laneParam (L, "scaleMode"))))
+            if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
                 *p = i;
-            proc.updateEngineScale (L);
+            proc.updateAllLaneScales();
             updateScalePresetButtons();
-            scaleLattice.setMask (calcAbsLatticeMask (proc, L));
-            scaleLattice.setRoot (static_cast<int> (proc.apvts.getRawParameterValue (laneParam (L, "scaleRoot"))->load()));
+            scaleLattice.setMask (calcAbsLatticeMask (proc, 0));
+            scaleLattice.setRoot (static_cast<int> (proc.apvts.getRawParameterValue ("scaleRoot")->load()));
             updateMaskLabel();
             curveDisplay.repaint();
         };
@@ -847,29 +944,27 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 
     scaleLattice.onMaskChanged = [this] (uint16_t mask)
     {
-        const int L = _focusedLane;
-        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter (laneParam (L, "scaleMask"))))
+        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMask")))
             *p = static_cast<int> (mask);
-        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter (laneParam (L, "scaleMode"))))
+        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
             *p = 7;
-        proc.updateEngineScale (L);
+        proc.updateAllLaneScales();
         updateScalePresetButtons();
         updateMaskLabel();
         curveDisplay.repaint();
     };
 
     scaleLattice.setMask (calcAbsLatticeMask (proc, 0));
-    scaleLattice.setRoot (static_cast<int> (proc.apvts.getRawParameterValue (laneParam (0, "scaleRoot"))->load()));
+    scaleLattice.setRoot (static_cast<int> (proc.apvts.getRawParameterValue ("scaleRoot")->load()));
 
     // Scale action buttons
     auto applyMask = [this] (uint16_t mask)
     {
-        const int L = _focusedLane;
-        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter (laneParam (L, "scaleMask"))))
+        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMask")))
             *p = static_cast<int> (mask);
-        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter (laneParam (L, "scaleMode"))))
+        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
             *p = 7;
-        proc.updateEngineScale (L);
+        proc.updateAllLaneScales();
         updateScalePresetButtons();
         scaleLattice.setMask (mask);
         updateMaskLabel();
@@ -885,14 +980,14 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     addAndMakeVisible (scaleNoneBtn);
     scaleNoneBtn.onClick = [this, applyMask]
     {
-        const int root = static_cast<int> (proc.apvts.getRawParameterValue (laneParam (_focusedLane, "scaleRoot"))->load());
+        const int root = static_cast<int> (proc.apvts.getRawParameterValue ("scaleRoot")->load());
         applyMask (static_cast<uint16_t> (1u << root));
     };
 
     addAndMakeVisible (scaleInvBtn);
     scaleInvBtn.onClick = [this, applyMask]
     {
-        applyMask ((~calcAbsLatticeMask (proc, _focusedLane)) & 0x0FFF);
+        applyMask ((~calcAbsLatticeMask (proc, 0)) & 0x0FFF);
     };
 
     addAndMakeVisible (scaleRootBtn);
@@ -921,10 +1016,9 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 
     scaleLattice.onRootChanged = [this, resetRootBtn] (int root)
     {
-        const int L = _focusedLane;
-        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter (laneParam (L, "scaleRoot"))))
+        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleRoot")))
             *p = root;
-        proc.updateEngineScale (L);
+        proc.updateAllLaneScales();
         curveDisplay.repaint();
         resetRootBtn();
         updateMaskLabel();
@@ -937,13 +1031,12 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     addAndMakeVisible (maskLabel);
     maskLabel.onEditorHide = [this]
     {
-        const int L  = _focusedLane;
         const int val = juce::jlimit (0, 4095, maskLabel.getText().getIntValue());
-        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter (laneParam (L, "scaleMask"))))
+        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMask")))
             *p = val;
-        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter (laneParam (L, "scaleMode"))))
+        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
             *p = 7;
-        proc.updateEngineScale (L);
+        proc.updateAllLaneScales();
         updateScalePresetButtons();
         scaleLattice.setMask (static_cast<uint16_t> (val));
         updateMaskLabel();
@@ -967,6 +1060,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 DrawnCurveEditor::~DrawnCurveEditor()
 {
     // Reset all L&Fs before structs are destroyed.
+    for (auto& b : laneTypeBtn)   b.setLookAndFeel (nullptr);
     for (auto& b : laneTeachBtn)  b.setLookAndFeel (nullptr);
     for (auto& b : laneMuteBtn)   b.setLookAndFeel (nullptr);
     for (auto& b : scalePresetBtns) b.setLookAndFeel (nullptr);
@@ -982,10 +1076,12 @@ DrawnCurveEditor::~DrawnCurveEditor()
     for (int L = 0; L < kMaxLanes; ++L)
     {
         for (const auto& base : { "msgType", "ccNumber", "midiChannel", "noteVelocity",
-                                   "enabled", "minOutput", "maxOutput",
-                                   "scaleMode", "scaleRoot", "scaleMask" })
+                                   "enabled", "minOutput", "maxOutput" })
             proc.apvts.removeParameterListener (laneParam (L, base), this);
     }
+    // Global scale params
+    for (const auto& id : { "scaleMode", "scaleRoot", "scaleMask" })
+        proc.apvts.removeParameterListener (id, this);
 }
 
 //==============================================================================
@@ -1066,12 +1162,19 @@ void DrawnCurveEditor::updateLaneRow (int lane)
     else                 detailText = "-";
     laneDetailLabel[lane].setText (detailText, juce::dontSendNotification);
 
+    // Type button symbol
+    static auto sym = [] (int t) -> juce::String {
+        switch (t) { case 0: return "~"; case 1: return "\xe2\x88\xbf"; case 2: return "\xe2\x89\x88"; case 3: return "\xe2\x99\xa9"; } return "?";
+    };
+    laneTypeBtn[lane].setButtonText (sym (type));
+
     laneChannelLabel[lane].setText (juce::String (ch), juce::dontSendNotification);
 
-    // Teach button: only meaningful for CC lanes
-    laneTeachBtn[lane].setButtonText (proc.isTeachPending (lane) ? "..." : "Learn");
-    laneTeachBtn[lane].setEnabled (type == 0);
-    laneTeachBtn[lane].setAlpha (type == 0 ? 1.0f : 0.4f);
+    // Teach button: works for all message types (solos lane output so a receiving
+    // synth can MIDI-Learn; CC lanes also capture incoming CC#)
+    laneTeachBtn[lane].setButtonText (proc.isTeachPending (lane) ? "..." : "Teach");
+    laneTeachBtn[lane].setEnabled (true);
+    laneTeachBtn[lane].setAlpha (1.0f);
 
     // Mute button
     laneMuteBtn[lane].setButtonText (enabled ? "ON" : "mute");
@@ -1127,7 +1230,9 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
     if (paramID == ParamID::syncEnabled)
     {
         juce::MessageManager::callAsync ([this] {
-            onSyncToggled (proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f);
+            const bool isSyncing = proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
+            syncButton.setButtonText (isSyncing ? "SYNC" : "FREE");
+            onSyncToggled (isSyncing);
         });
         return;
     }
@@ -1159,21 +1264,20 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
             return;
         }
 
-        if (paramID == laneParam (L, "scaleMode")
-            || paramID == laneParam (L, "scaleRoot")
-            || paramID == laneParam (L, "scaleMask"))
-        {
-            if (L == _focusedLane)
-                juce::MessageManager::callAsync ([this, L] {
-                    updateScalePresetButtons();
-                    scaleLattice.setMask (calcAbsLatticeMask (proc, L));
-                    scaleLattice.setRoot (static_cast<int> (
-                        proc.apvts.getRawParameterValue (laneParam (L, "scaleRoot"))->load()));
-                    updateMaskLabel();
-                    curveDisplay.repaint();
-                });
-            return;
-        }
+    }
+
+    // Global scale params — update scale panel regardless of which lane is focused
+    if (paramID == "scaleMode" || paramID == "scaleRoot" || paramID == "scaleMask")
+    {
+        proc.updateAllLaneScales();
+        juce::MessageManager::callAsync ([this] {
+            updateScalePresetButtons();
+            scaleLattice.setMask (calcAbsLatticeMask (proc, 0));
+            scaleLattice.setRoot (static_cast<int> (
+                proc.apvts.getRawParameterValue ("scaleRoot")->load()));
+            updateMaskLabel();
+            curveDisplay.repaint();
+        });
     }
 }
 
@@ -1211,24 +1315,27 @@ void DrawnCurveEditor::onSyncToggled (bool isSync)
 
 void DrawnCurveEditor::updateScaleVisibility()
 {
-    const int L = _focusedLane;
-    const bool isNote = (static_cast<int> (
-        proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load()) == 3);
+    // Show the scale panel whenever ANY lane uses Note mode — scale is now
+    // global so it applies to all Note-mode lanes simultaneously.
+    bool anyNote = false;
+    for (int L = 0; L < kMaxLanes; ++L)
+        if (static_cast<int> (proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load()) == 3)
+            { anyNote = true; break; }
 
-    scaleLabel.setVisible (isNote);
-    for (auto& b : scalePresetBtns) b.setVisible (isNote);
-    scaleLattice   .setVisible (isNote);
-    scaleAllBtn    .setVisible (isNote);
-    scaleNoneBtn   .setVisible (isNote);
-    scaleInvBtn    .setVisible (isNote);
-    scaleRootBtn   .setVisible (isNote);
-    maskLabel      .setVisible (isNote);
+    scaleLabel.setVisible (anyNote);
+    for (auto& b : scalePresetBtns) b.setVisible (anyNote);
+    scaleLattice   .setVisible (anyNote);
+    scaleAllBtn    .setVisible (anyNote);
+    scaleNoneBtn   .setVisible (anyNote);
+    scaleInvBtn    .setVisible (anyNote);
+    scaleRootBtn   .setVisible (anyNote);
+    maskLabel      .setVisible (anyNote);
 
-    if (isNote)
+    if (anyNote)
     {
-        scaleLattice.setMask (calcAbsLatticeMask (proc, L));
+        scaleLattice.setMask (calcAbsLatticeMask (proc, 0));
         scaleLattice.setRoot (static_cast<int> (
-            proc.apvts.getRawParameterValue (laneParam (L, "scaleRoot"))->load()));
+            proc.apvts.getRawParameterValue ("scaleRoot")->load()));
         updateScalePresetButtons();
         updateMaskLabel();
     }
@@ -1238,8 +1345,7 @@ void DrawnCurveEditor::updateScaleVisibility()
 
 void DrawnCurveEditor::updateScalePresetButtons()
 {
-    const int L   = _focusedLane;
-    const int sel = static_cast<int> (proc.apvts.getRawParameterValue (laneParam (L, "scaleMode"))->load());
+    const int sel = static_cast<int> (proc.apvts.getRawParameterValue ("scaleMode")->load());
 
     const juce::Colour activeCol    = _lightMode ? juce::Colour (0xff0B6E4F) : juce::Colour (0xff2979ff);
     const juce::Colour inactiveBg   = _lightMode ? juce::Colour (0xffF0EFE7) : juce::Colour (0xff333355);
@@ -1360,12 +1466,8 @@ void DrawnCurveEditor::applyTheme()
         const auto laneCol = light ? kLaneColourLight[L] : kLaneColourDark[L];
         const float rowAlpha = enabled ? 1.0f : 0.45f;
 
-        laneTargetCtrl[L].bgColour     = light ? juce::Colour (0xffF0EFE7).withAlpha (rowAlpha) : btnBg.withAlpha (rowAlpha);
-        laneTargetCtrl[L].activeColour = laneCol;
-        laneTargetCtrl[L].labelColour  = dimText;
-        laneTargetCtrl[L].activeLabel  = juce::Colours::white;
-        laneTargetCtrl[L].borderColour = light ? juce::Colour (0x28000000) : juce::Colour (0x33ffffff);
-        laneTargetCtrl[L].repaint();
+        laneTypeBtn[L].setColour (juce::TextButton::buttonColourId,  laneCol.withAlpha (0.18f * rowAlpha));
+        laneTypeBtn[L].setColour (juce::TextButton::textColourOffId, laneCol);
 
         for (auto* lbl : { &laneDetailLabel[L], &laneChannelLabel[L] })
         {
@@ -1479,7 +1581,7 @@ void DrawnCurveEditor::paint (juce::Graphics& g)
                 g.setFont (juce::Font (9.0f));
                 int hx = rs_x + matDotW + matInnerGap;
                 const int hy = rs_top, hh = headerH;
-                g.drawFittedText ("Target", hx, hy, matTargetW, hh,
+                g.drawFittedText ("Type", hx, hy, matTargetW, hh,
                                   juce::Justification::centredLeft, 1);
                 hx += matTargetW + matInnerGap;
                 g.drawFittedText ("Det", hx, hy, matDetailW, hh,
@@ -1488,7 +1590,7 @@ void DrawnCurveEditor::paint (juce::Graphics& g)
                 g.drawFittedText ("Ch", hx, hy, matChanW, hh,
                                   juce::Justification::centredLeft, 1);
                 hx += matChanW + matInnerGap;
-                g.drawFittedText ("Learn", hx, hy, matTeachW, hh,
+                g.drawFittedText ("Teach", hx, hy, matTeachW, hh,
                                   juce::Justification::centredLeft, 1);
                 hx += matTeachW + matInnerGap;
                 g.drawFittedText ("On", hx, hy, matMuteW, hh,
@@ -1609,7 +1711,7 @@ void DrawnCurveEditor::resized()
             row.removeFromLeft (matDotW + matInnerGap);
 
             // Target type
-            laneTargetCtrl[L].setBounds (row.removeFromLeft (matTargetW));
+            laneTypeBtn[L].setBounds (row.removeFromLeft (matTargetW));
             row.removeFromLeft (matInnerGap);
 
             // Detail

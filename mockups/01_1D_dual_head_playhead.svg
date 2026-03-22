@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1024" viewBox="0 0 1440 1024">
+<style>
+.bg { fill: #0f1115; }
+.panel { fill: #171b22; stroke: #3b4657; stroke-width: 1.5; }
+.text { fill: #eef3fb; font-family: Inter, Arial, sans-serif; }
+.muted { fill: #97a6ba; font-family: Inter, Arial, sans-serif; }
+.title { font-size: 30px; font-weight: 700; }
+.label { font-size: 15px; font-weight: 600; }
+.small { font-size: 12px; }
+.stroke { stroke: #3b4657; stroke-width: 1.5; fill: none; }
+.line { stroke: #8fb8ff; stroke-width: 4; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.line2 { stroke: #b7ffd4; stroke-width: 4; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.button { fill: #1f2632; stroke: #3b4657; stroke-width: 1.2; }
+.buttonActive { fill: #22354d; stroke: #8fb8ff; stroke-width: 1.6; }
+.node { fill: #2a313d; stroke: #3b4657; stroke-width: 1.3; }
+.nodeActive { fill: #22354d; stroke: #8fb8ff; stroke-width: 2; }
+.ring { fill: none; stroke: #3b4657; stroke-width: 1.4; }
+</style>
+<rect class="bg" x="0" y="0" width="1440" height="1024"/>
+<text class="text title" x="56" y="68">DrawnCurve / Micro-design 1D</text>
+<text class="muted label" x="56" y="96">Playback direction concept</text>
+<rect class="panel" x="56" y="132" width="1328" height="836" rx="28"/>
+<text class="muted small" x="88" y="170">1D · DUAL-HEAD PLAYHEAD — mode as state of moving entities</text>
+<rect class="panel" x="88" y="210" width="1264" height="430" rx="24"/>
+<text class="muted small" x="116" y="248">main curve strip</text>
+<line class="stroke" x1="116" y1="278" x2="116" y2="590" opacity="0.35"/>
+<line class="stroke" x1="236" y1="278" x2="236" y2="590" opacity="0.35"/>
+<line class="stroke" x1="356" y1="278" x2="356" y2="590" opacity="0.35"/>
+<line class="stroke" x1="476" y1="278" x2="476" y2="590" opacity="0.35"/>
+<line class="stroke" x1="596" y1="278" x2="596" y2="590" opacity="0.35"/>
+<line class="stroke" x1="716" y1="278" x2="716" y2="590" opacity="0.35"/>
+<line class="stroke" x1="836" y1="278" x2="836" y2="590" opacity="0.35"/>
+<line class="stroke" x1="956" y1="278" x2="956" y2="590" opacity="0.35"/>
+<line class="stroke" x1="1076" y1="278" x2="1076" y2="590" opacity="0.35"/>
+<line class="stroke" x1="1196" y1="278" x2="1196" y2="590" opacity="0.35"/>
+<line class="stroke" x1="1316" y1="278" x2="1316" y2="590" opacity="0.35"/>
+<line class="stroke" x1="116" y1="312" x2="1324" y2="312" opacity="0.35"/>
+<line class="stroke" x1="116" y1="390" x2="1324" y2="390" opacity="0.35"/>
+<line class="stroke" x1="116" y1="468" x2="1324" y2="468" opacity="0.35"/>
+<line class="stroke" x1="116" y1="546" x2="1324" y2="546" opacity="0.35"/>
+<path class="line" d="M116,476 C192,450 266,340 350,352 C426,364 504,500 600,492 C690,484 770,320 878,330 C990,340 1060,452 1144,446 C1206,442 1272,384 1324,396"/>
+<rect class="panel" x="88" y="672" width="1264" height="264" rx="24"/>
+<text class="muted small" x="116" y="710">temporal topology strip</text>
+<line class="stroke" x1="170" y1="808" x2="1270" y2="808" stroke-width="3"/>
+<circle cx="170" cy="808" r="12" class="node"/>
+<circle cx="1270" cy="808" r="12" class="node"/>
+<circle cx="548" cy="808" r="18" class="nodeActive"/>
+<circle cx="878" cy="808" r="18" class="node"/>
+<path class="line" d="M524,782 L548,758 L572,782"/>
+<path class="line2" d="M854,834 L878,858 L902,834"/>
+<rect class="buttonActive" x="170" y="856" width="126" height="42" rx="14"/>
+<text class="text label" x="206" y="883">Forward</text>
+<rect class="button" x="314" y="856" width="126" height="42" rx="14"/>
+<text class="text label" x="353" y="883">Reverse</text>
+<rect class="button" x="458" y="856" width="138" height="42" rx="14"/>
+<text class="text label" x="492" y="883">Pingpong</text>
+<text class="muted small" x="640" y="881">two playheads make the mode legible without text labels near the curve</text>
+</svg>

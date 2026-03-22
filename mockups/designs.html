@@ -1,0 +1,1535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DrawnCurve — UI Design Proposals</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Orbitron:wght@400;600&family=JetBrains+Mono:wght@400;600&family=Inter:wght@300;400;500;700&family=Roboto+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   PAGE
+───────────────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, system-ui, sans-serif;
+  background: #111118;
+  color: #ccc;
+  padding: 48px 24px 80px;
+  min-width: 680px;
+}
+h1 {
+  text-align: center;
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.3px;
+  color: #fff;
+  margin-bottom: 6px;
+}
+.page-sub {
+  text-align: center;
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 60px;
+  line-height: 1.6;
+}
+.designs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(640px, 1fr));
+  gap: 56px 48px;
+  max-width: 1380px;
+  margin: 0 auto;
+  justify-items: center;
+}
+.design-entry { width: 640px; }
+.design-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+.design-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #e0e0e0;
+}
+.design-tag {
+  font-size: 11px;
+  color: #444;
+  font-style: italic;
+  text-align: right;
+  max-width: 340px;
+  line-height: 1.4;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   PLUGIN WINDOW — BASE LAYOUT
+   640 × 560 px, same as the actual plugin.
+───────────────────────────────────────────────────────────────────────────── */
+.pw {
+  width: 640px;
+  height: 560px;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.pw-inner {
+  padding: var(--pad, 8px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--row-gap, 5px);
+  height: 100%;
+}
+
+/* --- Row 1 ---------------------------------------------------------------- */
+.row-1 {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--r1h, 36px);
+  flex-shrink: 0;
+}
+.row-1 .spacer { flex: 1; }
+
+/* --- Row 2 ---------------------------------------------------------------- */
+.row-2 {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--r2h, 30px);
+  flex-shrink: 0;
+}
+.row-2 .spacer { flex: 1; }
+
+/* --- Generic button ------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0 9px;
+  background: var(--btn-bg);
+  color: var(--btn-text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
+  font-family: inherit;
+  font-size: var(--btn-fs, 11px);
+  font-weight: var(--btn-fw, 400);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  transition: background 0.12s;
+}
+.btn.active {
+  background: var(--active-bg);
+  color: var(--active-text);
+  border-color: var(--active-border, var(--active-bg));
+}
+.btn-play  { min-width: 60px; }
+.btn-clear { min-width: 48px; }
+.btn-sm    { padding: 0 7px; }
+
+/* --- Message type group --------------------------------------------------- */
+.msg-type {
+  display: flex;
+  gap: 3px;
+  height: 100%;
+}
+
+/* --- Direction 3-way switch ----------------------------------------------- */
+.dir-switch {
+  display: flex;
+  width: 168px;
+  height: 100%;
+  flex-shrink: 0;
+  background: var(--btn-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
+  overflow: hidden;
+}
+.dir-seg {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--btn-text);
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+  transition: background 0.1s;
+}
+.dir-seg:last-child { border-right: none; }
+.dir-seg.active {
+  background: var(--active-bg);
+  color: var(--active-text);
+}
+
+/* --- Grid buttons --------------------------------------------------------- */
+.grid-btns {
+  display: flex;
+  gap: 3px;
+  height: 100%;
+}
+
+/* --- Param rows ----------------------------------------------------------- */
+.param-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--row-gap, 5px);
+  flex-shrink: 0;
+}
+.param-row {
+  display: flex;
+  gap: 6px;
+  height: var(--param-h, 44px);
+}
+.param-slot {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: 1;
+  background: var(--slot-bg, var(--btn-bg));
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
+  padding: 4px 7px 5px;
+}
+.param-slot.wide   { flex: 2; }
+.param-slot label {
+  font-size: var(--label-fs, 10px);
+  color: var(--label-color);
+  font-family: inherit;
+  letter-spacing: 0.2px;
+  pointer-events: none;
+}
+
+/* Range input */
+.param-slot input[type="range"] {
+  width: 100%;
+  height: 16px;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+.param-slot input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px;
+  background: var(--track-color, var(--accent));
+  opacity: 0.3;
+  border-radius: 2px;
+}
+.param-slot input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--thumb-r, 50%);
+  background: var(--accent);
+  margin-top: -5.5px;
+}
+
+/* Two-value range mock */
+.range-mock {
+  position: relative;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  margin-top: 2px;
+}
+.range-track-bg {
+  width: 100%;
+  height: 3px;
+  background: var(--accent);
+  opacity: 0.15;
+  border-radius: 2px;
+  position: relative;
+}
+.range-fill {
+  position: absolute;
+  left: 18%;
+  width: 62%;
+  height: 100%;
+  background: var(--accent);
+  opacity: 0.7;
+  border-radius: 2px;
+}
+.range-thumb {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--thumb-r, 50%);
+  background: var(--accent);
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+.range-thumb.tl { left: 18%; }
+.range-thumb.tr { left: 80%; }
+
+/* --- Scale row ------------------------------------------------------------ */
+.scale-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 26px;
+  flex-shrink: 0;
+}
+.scale-lbl {
+  font-size: 9px;
+  color: var(--label-color);
+  width: 30px;
+  text-align: right;
+  flex-shrink: 0;
+  font-family: inherit;
+}
+.scale-btns {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+}
+.scale-btn {
+  flex: 1;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--btn-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 3px);
+  font-size: 8px;
+  color: var(--btn-text);
+  cursor: pointer;
+  font-family: inherit;
+}
+.scale-btn.active {
+  background: var(--active-bg);
+  color: var(--active-text);
+}
+
+/* --- Piano keyboard ------------------------------------------------------- */
+.piano-wrap {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 38px;
+  flex-shrink: 0;
+}
+.piano-keys {
+  flex: 1;
+  height: 100%;
+  position: relative;
+  display: flex;
+  gap: 2px;
+}
+.key-w {
+  flex: 1;
+  height: 100%;
+  background: var(--key-w-bg, #ddd);
+  border: 1px solid var(--border);
+  border-radius: 0 0 3px 3px;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 2px;
+  font-size: 7px;
+  color: var(--key-w-text, #555);
+  position: relative;
+}
+.key-w.on {
+  background: var(--accent);
+  color: var(--active-text);
+}
+.key-row-black {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 55%;
+  display: flex;
+  padding: 0 calc(100%/14);
+  gap: calc(100%/14 * 0.8);
+  pointer-events: none;
+}
+.key-b {
+  flex: 1;
+  background: var(--key-b-bg, #222);
+  border-radius: 0 0 2px 2px;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.key-b.on { background: var(--accent); }
+/* Gaps for E-F and B-C */
+.key-b-gap { flex: 0.5; }
+
+/* --- Curve display -------------------------------------------------------- */
+.curve-display {
+  flex: 1;
+  background: var(--curve-bg);
+  border-radius: var(--radius, 4px);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+}
+.curve-display svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.gline { stroke: var(--grid-line); stroke-width: 1; }
+.curve-path { stroke: var(--accent); stroke-width: 2.5; fill: none;
+              stroke-linecap: round; stroke-linejoin: round; }
+.playhead-line { stroke: var(--ph-line); stroke-width: 1; opacity: 0.55; }
+.playhead-dot  { fill: var(--accent); }
+/* Axis hint text */
+.axis-hint { fill: var(--grid-line); font-size: 10px; opacity: 0.7; }
+
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   THEMES — custom property blocks
+═════════════════════════════════════════════════════════════════════════════ */
+
+/* 1 ── Zero (utilitarian baseline) ──────────────────────────────────────── */
+.t-zero {
+  --pad: 6px; --row-gap: 4px; --radius: 2px;
+  --r1h: 34px; --r2h: 28px; --param-h: 42px;
+  font-family: system-ui, sans-serif;
+  background: #c4c4c4;
+  color: #222;
+  --btn-bg: #b0b0b0; --btn-text: #222; --border: #999;
+  --active-bg: #777;  --active-text: #fff; --active-border: #666;
+  --accent: #555; --label-color: #555;
+  --slot-bg: #b8b8b8;
+  --curve-bg: #aaa;
+  --grid-line: rgba(0,0,0,0.18);
+  --ph-line: #555;
+  --thumb-r: 2px; --btn-fs: 11px;
+}
+
+/* 2 ── Current Dark (the live theme, extended) ───────────────────────────── */
+.t-current {
+  --pad: 8px; --row-gap: 5px; --radius: 5px;
+  --r1h: 36px; --r2h: 30px; --param-h: 44px;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #12121f;
+  color: #fff;
+  --btn-bg: #333355; --btn-text: #e0e0ff; --border: rgba(255,255,255,0.12);
+  --active-bg: #2979ff; --active-text: #fff;
+  --accent: #00e5ff; --label-color: #8888aa;
+  --slot-bg: #1c1c2e;
+  --curve-bg: #0d0d1a;
+  --grid-line: rgba(255,255,255,0.07);
+  --ph-line: #fff;
+}
+.t-current .scale-btn.active { background: #2979ff; }
+
+/* 3 ── Void (curve-forward, monospace, near-black) ──────────────────────── */
+.t-void {
+  --pad: 8px; --row-gap: 4px; --radius: 1px;
+  --r1h: 28px; --r2h: 24px; --param-h: 36px;
+  font-family: 'JetBrains Mono', monospace;
+  background: #000;
+  color: #888;
+  --btn-bg: transparent; --btn-text: #555; --border: rgba(255,255,255,0.07);
+  --active-bg: #1a1a1a; --active-text: #ddd; --active-border: rgba(255,255,255,0.2);
+  --accent: #ddd; --label-color: #333;
+  --slot-bg: transparent;
+  --curve-bg: #030303;
+  --grid-line: rgba(255,255,255,0.035);
+  --ph-line: #666;
+  --btn-fs: 10px;
+}
+.t-void .dir-switch { background: transparent; }
+
+/* 4 ── Hardware (eurorack / modular panel) ───────────────────────────────── */
+.t-hardware {
+  --pad: 10px; --row-gap: 6px; --radius: 3px;
+  --r1h: 34px; --r2h: 28px; --param-h: 42px;
+  font-family: 'Roboto Mono', monospace;
+  background: #181818;
+  color: #bbb;
+  --btn-bg: #242424; --btn-text: #999; --border: rgba(255,102,0,0.25);
+  --active-bg: #ff6600; --active-text: #000;
+  --accent: #ff6600; --label-color: #ff6600;
+  --slot-bg: #111;
+  --curve-bg: #0d0d0d;
+  --grid-line: rgba(255,102,0,0.07);
+  --ph-line: #ff6600;
+  --btn-fs: 10px; --thumb-r: 2px;
+}
+.t-hardware .pw {
+  border: 2px solid #2c2c2c;
+  box-shadow: inset 0 0 40px rgba(0,0,0,0.6);
+}
+/* screws */
+.t-hardware::before, .t-hardware::after {
+  content: '⊕';
+  position: absolute;
+  font-size: 11px;
+  color: #333;
+  top: 6px;
+}
+.t-hardware::before { left: 7px; }
+.t-hardware::after  { right: 7px; }
+
+/* 5 ── Paper / Sketch (drawn metaphor, warm, hand-made feel) ─────────────── */
+.t-paper {
+  --pad: 10px; --row-gap: 6px; --radius: 14px;
+  --r1h: 36px; --r2h: 30px; --param-h: 44px;
+  font-family: 'Caveat', cursive;
+  background: #f5f0e8;
+  color: #2a1f0e;
+  --btn-bg: #e8dfc9; --btn-text: #2a1f0e; --border: rgba(42,31,14,0.18);
+  --active-bg: #2563eb; --active-text: #fff;
+  --accent: #2563eb; --label-color: #9a7b4f;
+  --slot-bg: #ede4d0;
+  --curve-bg: #faf5eb;
+  --grid-line: rgba(42,31,14,0.1);
+  --ph-line: #dc2626;
+  --btn-fs: 13px; --label-fs: 11px;
+}
+.t-paper .param-slot { border-style: dashed; }
+.t-paper .curve-display { border-style: dashed; border-width: 2px; }
+/* Slight drop shadow for paper feel */
+.t-paper .pw { box-shadow: 0 4px 24px rgba(0,0,0,0.15); }
+.t-paper .curve-path { stroke-dasharray: none; }
+
+/* 6 ── Clarity (Swiss/typographic, piano keyboard scale picker) ──────────── */
+.t-clarity {
+  --pad: 10px; --row-gap: 6px; --radius: 3px;
+  --r1h: 36px; --r2h: 30px; --param-h: 44px;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 400;
+  background: #f8f8f8;
+  color: #111;
+  --btn-bg: #fff; --btn-text: #111; --border: #ddd;
+  --active-bg: #111; --active-text: #fff;
+  --accent: #111; --label-color: #888;
+  --slot-bg: #fff;
+  --curve-bg: #fff;
+  --grid-line: rgba(0,0,0,0.07);
+  --ph-line: #ef4444;
+  --key-w-bg: #f0f0f0; --key-w-text: #777; --key-b-bg: #1a1a1a;
+  --btn-fs: 11px; --btn-fw: 500;
+}
+.t-clarity .btn { box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+.t-clarity .curve-display { box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.t-clarity .pw { box-shadow: 0 2px 16px rgba(0,0,0,0.08); }
+
+/* 7 ── Neon (cyberpunk / synthwave) ─────────────────────────────────────── */
+.t-neon {
+  --pad: 8px; --row-gap: 4px; --radius: 0px;
+  --r1h: 36px; --r2h: 30px; --param-h: 44px;
+  font-family: 'Orbitron', sans-serif;
+  background: #060010;
+  color: #c0c0ff;
+  --btn-bg: #110022; --btn-text: #6060cc; --border: rgba(150,0,255,0.3);
+  --active-bg: #cc00ff; --active-text: #fff;
+  --accent: #00f0ff; --label-color: #440088;
+  --slot-bg: #0a0018;
+  --curve-bg: #04000e;
+  --grid-line: rgba(0,240,255,0.05);
+  --ph-line: #cc00ff;
+  --btn-fs: 9px;
+}
+.t-neon .btn.active { box-shadow: 0 0 8px var(--active-bg), 0 0 24px rgba(204,0,255,0.25); }
+.t-neon .curve-display { border-color: rgba(0,240,255,0.15); }
+.t-neon .curve-path { filter: drop-shadow(0 0 3px #00f0ff); }
+.t-neon .playhead-dot { filter: drop-shadow(0 0 4px #cc00ff); }
+.t-neon .pw { border: 1px solid rgba(150,0,255,0.2); }
+
+/* 8 ── Studio (professional dark, brass accent) ─────────────────────────── */
+.t-studio {
+  --pad: 9px; --row-gap: 5px; --radius: 5px;
+  --r1h: 36px; --r2h: 30px; --param-h: 44px;
+  font-family: 'DM Sans', -apple-system, sans-serif;
+  background: #1c1c1c;
+  color: #d0d0d0;
+  --btn-bg: #2a2a2a; --btn-text: #bbb; --border: rgba(200,146,42,0.15);
+  --active-bg: #c8922a; --active-text: #111;
+  --accent: #c8922a; --label-color: #777;
+  --slot-bg: #222;
+  --curve-bg: #161616;
+  --grid-line: rgba(255,255,255,0.04);
+  --ph-line: #fff;
+}
+.t-studio .btn { background: linear-gradient(180deg,#303030 0%,#262626 100%); }
+.t-studio .btn.active { background: var(--active-bg); }
+.t-studio .curve-display { border-color: rgba(200,146,42,0.1); }
+
+/* 9 ── Chromatic (mode-color identity — showing PB/teal mode) ─────────────── */
+.t-chromatic {
+  --pad: 8px; --row-gap: 5px; --radius: 6px;
+  --r1h: 36px; --r2h: 30px; --param-h: 44px;
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #0c0c18;
+  color: #e0e0ff;
+  --btn-bg: #16162a; --btn-text: #8080cc; --border: rgba(100,100,255,0.15);
+  /* Active accent varies per active mode: this card shows PB=teal */
+  --active-bg: #0e9090; --active-text: #fff;
+  --accent: #2dd4bf; --label-color: #505080;
+  --slot-bg: #131327;
+  --curve-bg: #0a0a18;
+  --grid-line: rgba(45,212,191,0.06);
+  --ph-line: #fff;
+}
+/* Tab-style mode selector with individual accent colors */
+.t-chromatic .btn-cc.active  { background: #4f46e5; }
+.t-chromatic .btn-aft.active { background: #be185d; }
+.t-chromatic .btn-pb.active  { background: #0e9090; box-shadow: 0 0 10px rgba(14,144,144,0.3); }
+.t-chromatic .btn-note.active { background: #16a34a; }
+
+/* 10 ── Botanical (living-system, organic curves, deep green) ────────────── */
+.t-botanical {
+  --pad: 10px; --row-gap: 6px; --radius: 18px;
+  --r1h: 36px; --r2h: 30px; --param-h: 44px;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  background: #0b1e14;
+  color: #c8e0c0;
+  --btn-bg: #122218; --btn-text: #6aa870; --border: rgba(74,168,80,0.2);
+  --active-bg: #2e7d32; --active-text: #e8ffe8;
+  --accent: #4caf50; --label-color: #3a6640;
+  --slot-bg: #0f1e12;
+  --curve-bg: #081410;
+  --grid-line: rgba(76,175,80,0.07);
+  --ph-line: #a5d6a7;
+  --thumb-r: 3px;
+}
+.t-botanical .curve-path { stroke-width: 2; }
+.t-botanical .dir-switch  { border-radius: 30px; }
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   VOID THEME — compact layout (curve-first)
+───────────────────────────────────────────────────────────────────────────── */
+.t-void .pw-inner { padding: 6px 8px; gap: 3px; }
+.t-void .controls-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 0 2px;
+}
+.t-void .param-slot { padding: 3px 6px; }
+.t-void .param-row { height: 34px; }
+/* The curve sits on top in void layout and fills remaining space */
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   HARDWARE — panel-label style for param slots
+───────────────────────────────────────────────────────────────────────────── */
+.t-hardware .panel-divider {
+  height: 1px;
+  background: rgba(255,102,0,0.1);
+  margin: 2px 0;
+  flex-shrink: 0;
+}
+.t-hardware .param-slot label {
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  font-size: 9px;
+}
+.t-hardware .curve-display::after {
+  content: 'DRAWN CURVE v1.0 · ENKERLI';
+  position: absolute;
+  bottom: 5px;
+  right: 8px;
+  font-size: 8px;
+  color: rgba(255,102,0,0.25);
+  font-family: 'Roboto Mono', monospace;
+  letter-spacing: 1px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   NEON — border glow on active curve area
+───────────────────────────────────────────────────────────────────────────── */
+.t-neon .curve-display::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(0,240,255,0.08);
+  pointer-events: none;
+  z-index: 1;
+}
+
+</style>
+</head>
+<body>
+
+<h1>DrawnCurve — UI Design Proposals</h1>
+<p class="page-sub">
+  10 divergent directions. Same controls, same 640×560 envelope.<br>
+  Click the direction switch ◀ ◆ ▶ to see it respond.
+</p>
+
+<div class="designs-grid">
+
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     1. ZERO — utilitarian baseline
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="design-entry">
+  <div class="design-label">
+    <span class="design-name">1 — Zero</span>
+    <span class="design-tag">Utilitarian baseline. Shows what to move away from.</span>
+  </div>
+  <div class="pw t-zero" id="pw1">
+    <div class="pw-inner">
+      <div class="row-1">
+        <button class="btn btn-play">Play</button>
+        <button class="btn btn-clear">Clear</button>
+        <div class="spacer"></div>
+        <div class="msg-type">
+          <button class="btn active">CC</button>
+          <button class="btn">Aft</button>
+          <button class="btn">PB</button>
+          <button class="btn">Note</button>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn">Sync</button>
+        <button class="btn">?</button>
+        <button class="btn">Light</button>
+      </div>
+      <div class="row-2">
+        <div class="dir-switch" data-pw="pw1">
+          <div class="dir-seg">◀</div>
+          <div class="dir-seg">◆</div>
+          <div class="dir-seg active">▶</div>
+        </div>
+        <div class="spacer"></div>
+        <div class="grid-btns">
+          <button class="btn btn-sm">Y-</button>
+          <button class="btn btn-sm">Y+</button>
+          <button class="btn btn-sm">X-</button>
+          <button class="btn btn-sm">X+</button>
+        </div>
+      </div>
+      <div class="param-row">
+        <div class="param-slot"><label>CC#</label><input type="range" value="74"></div>
+        <div class="param-slot"><label>Channel</label><input type="range" value="6"></div>
+        <div class="param-slot"><label>Smooth</label><input type="range" value="28"></div>
+      </div>
+      <div class="param-row">
+        <div class="param-slot wide">
+          <label>Range</label>
+          <div class="range-mock">
+            <div class="range-track-bg"><div class="range-fill"></div></div>
+            <div class="range-thumb tl"></div><div class="range-thumb tr"></div>
+          </div>
+        </div>
+        <div class="param-slot"><label>Speed</label><input type="range" value="50"></div>
+      </div>
+      <div class="curve-display">
+        <svg viewBox="0 0 620 260" preserveAspectRatio="none">
+          <line x1="155" y1="0" x2="155" y2="260" class="gline"/>
+          <line x1="310" y1="0" x2="310" y2="260" class="gline"/>
+          <line x1="465" y1="0" x2="465" y2="260" class="gline"/>
+          <line x1="0" y1="65"  x2="620" y2="65"  class="gline"/>
+          <line x1="0" y1="130" x2="620" y2="130" class="gline"/>
+          <line x1="0" y1="195" x2="620" y2="195" class="gline"/>
+          <path d="M0 160 C40 160 60 40 120 80 S200 200 280 135 S375 55 445 100 S530 195 580 115 L620 110" class="curve-path"/>
+          <line x1="395" y1="0" x2="395" y2="260" class="playhead-line"/>
+          <circle cx="395" cy="105" r="5" class="playhead-dot"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     2. CURRENT DARK — existing theme extended, with Note mode scale rows
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="design-entry">
+  <div class="design-label">
+    <span class="design-name">2 — Current Dark +</span>
+    <span class="design-tag">The live theme extended. Note mode with scale picker shown.</span>
+  </div>
+  <div class="pw t-current" id="pw2">
+    <div class="pw-inner">
+      <div class="row-1">
+        <button class="btn btn-play active">Pause</button>
+        <button class="btn btn-clear">Clear</button>
+        <div class="spacer"></div>
+        <div class="msg-type">
+          <button class="btn">CC</button>
+          <button class="btn">Aft</button>
+          <button class="btn">PB</button>
+          <button class="btn active">Note</button>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn">Sync</button>
+        <button class="btn">?</button>
+        <button class="btn">Light</button>
+      </div>
+      <div class="row-2">
+        <div class="dir-switch" data-pw="pw2">
+          <div class="dir-seg">◀</div>
+          <div class="dir-seg">◆</div>
+          <div class="dir-seg active">▶</div>
+        </div>
+        <div class="spacer"></div>
+        <div class="grid-btns">
+          <button class="btn btn-sm">Y-</button>
+          <button class="btn btn-sm">Y+</button>
+          <button class="btn btn-sm">X-</button>
+          <button class="btn btn-sm">X+</button>
+        </div>
+      </div>
+      <!-- Scale row (Note mode) -->
+      <div class="scale-row">
+        <span class="scale-lbl">Scale</span>
+        <div class="scale-btns">
+          <div class="scale-btn">Chr</div>
+          <div class="scale-btn active">Maj</div>
+          <div class="scale-btn">Min</div>
+          <div class="scale-btn">Dor</div>
+          <div class="scale-btn">P+</div>
+          <div class="scale-btn">P−</div>
+          <div class="scale-btn">Blu</div>
+          <div class="scale-btn">Cst</div>
+        </div>
+        <span style="width:6px"></span>
+        <span class="scale-lbl">Key</span>
+        <div class="scale-btns" style="flex:0.7">
+          <div class="scale-btn active">C</div>
+          <div class="scale-btn">C#</div>
+          <div class="scale-btn">D</div>
+          <div class="scale-btn">D#</div>
+          <div class="scale-btn">E</div>
+          <div class="scale-btn">F</div>
+          <div class="scale-btn">F#</div>
+          <div class="scale-btn">G</div>
+          <div class="scale-btn">G#</div>
+          <div class="scale-btn">A</div>
+          <div class="scale-btn">A#</div>
+          <div class="scale-btn">B</div>
+        </div>
+      </div>
+      <div class="param-row">
+        <div class="param-slot"><label>Velocity</label><input type="range" value="90"></div>
+        <div class="param-slot"><label>Channel</label><input type="range" value="6"></div>
+        <div class="param-slot"><label>Smooth</label><input type="range" value="28"></div>
+      </div>
+      <div class="param-row">
+        <div class="param-slot wide">
+          <label>Range</label>
+          <div class="range-mock">
+            <div class="range-track-bg"><div class="range-fill"></div></div>
+            <div class="range-thumb tl"></div><div class="range-thumb tr"></div>
+          </div>
+        </div>
+        <div class="param-slot"><label>Speed</label><input type="range" value="50"></div>
+      </div>
+      <div class="curve-display">
+        <svg viewBox="0 0 620 200" preserveAspectRatio="none">
+          <!-- Scale bands (C major: C D E F G A B) -->
+          <rect x="0" y="0"   width="620" height="29" fill="rgba(41,121,255,0.06)"/>
+          <rect x="0" y="57"  width="620" height="29" fill="rgba(41,121,255,0.06)"/>
+          <rect x="0" y="114" width="620" height="29" fill="rgba(41,121,255,0.06)"/>
+          <rect x="0" y="171" width="620" height="29" fill="rgba(41,121,255,0.06)"/>
+          <line x1="155" y1="0" x2="155" y2="200" class="gline"/>
+          <line x1="310" y1="0" x2="310" y2="200" class="gline"/>
+          <line x1="465" y1="0" x2="465" y2="200" class="gline"/>
+          <!-- Note labels on Y axis -->
+          <text x="4" y="18"  class="axis-hint" style="font-size:8px;font-family:-apple-system">G5</text>
+          <text x="4" y="47"  class="axis-hint" style="font-size:8px;font-family:-apple-system">E5</text>
+          <text x="4" y="76"  class="axis-hint" style="font-size:8px;font-family:-apple-system">C5</text>
+          <path d="M0 160 C40 160 60 30 120 65 S200 180 280 120 S375 40 445 80 S530 175 580 100 L620 95" class="curve-path"/>
+          <line x1="395" y1="0" x2="395" y2="200" class="playhead-line"/>
+          <circle cx="395" cy="82" r="5" class="playhead-dot"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     3. VOID — curve dominates, controls recede into darkness
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="design-entry">
+  <div class="design-label">
+    <span class="design-name">3 — Void</span>
+    <span class="design-tag">Curve is everything. Controls vanish until needed. Monospace ghost UI.</span>
+  </div>
+  <div class="pw t-void" id="pw3">
+    <div class="pw-inner">
+      <div class="curve-display" style="flex:1; margin-bottom:2px;">
+        <svg viewBox="0 0 620 340" preserveAspectRatio="none">
+          <line x1="155" y1="0" x2="155" y2="340" class="gline"/>
+          <line x1="310" y1="0" x2="310" y2="340" class="gline"/>
+          <line x1="465" y1="0" x2="465" y2="340" class="gline"/>
+          <line x1="0" y1="85"  x2="620" y2="85"  class="gline"/>
+          <line x1="0" y1="170" x2="620" y2="170" class="gline"/>
+          <line x1="0" y1="255" x2="620" y2="255" class="gline"/>
+          <path d="M0 210 C40 210 55 50 120 95 S200 260 280 185 S375 75 445 120 S530 245 580 155 L620 148" class="curve-path" style="stroke-width:1.5;"/>
+          <line x1="395" y1="0" x2="395" y2="340" class="playhead-line"/>
+          <circle cx="395" cy="128" r="4" class="playhead-dot"/>
+          <!-- Minimal text overlays -->
+          <text x="6" y="14" class="axis-hint" style="font-size:9px;font-family:'JetBrains Mono',monospace">127</text>
+          <text x="6" y="338" class="axis-hint" style="font-size:9px;font-family:'JetBrains Mono',monospace">0</text>
+          <text x="560" y="338" class="axis-hint" style="font-size:9px;font-family:'JetBrains Mono',monospace">4.0s</text>
+        </svg>
+      </div>
+      <!-- compact control strip -->
+      <div style="display:flex; gap:4px; height:26px; flex-shrink:0;">
+        <button class="btn btn-play">▶</button>
+        <button class="btn btn-clear">✕</button>
+        <div class="spacer"></div>
+        <div class="dir-switch" data-pw="pw3" style="width:96px;">
+          <div class="dir-seg">◀</div>
+          <div class="dir-seg">◆</div>
+          <div class="dir-seg active">▶</div>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn active" style="min-width:32px;">CC</button>
+        <button class="btn" style="min-width:32px;">Aft</button>
+        <button class="btn" style="min-width:28px;">PB</button>
+        <button class="btn" style="min-width:38px;">Note</button>
+        <div class="spacer"></div>
+        <button class="btn">Sync</button>
+        <button class="btn btn-sm">?</button>
+      </div>
+      <div style="display:flex; gap:4px; height:30px; flex-shrink:0;">
+        <div class="param-slot" style="flex:1; flex-direction:row; align-items:center; gap:6px; height:100%;">
+          <label style="width:26px; flex-shrink:0;">CC#</label>
+          <input type="range" value="74" style="flex:1;">
+        </div>
+        <div class="param-slot" style="flex:1; flex-direction:row; align-items:center; gap:6px; height:100%;">
+          <label style="width:28px; flex-shrink:0;">Ch</label>
+          <input type="range" value="6" style="flex:1;">
+        </div>
+        <div class="param-slot" style="flex:1; flex-direction:row; align-items:center; gap:6px; height:100%;">
+          <label style="width:32px; flex-shrink:0;">Smooth</label>
+          <input type="range" value="28" style="flex:1;">
+        </div>
+        <div class="param-slot" style="flex:1; flex-direction:row; align-items:center; gap:6px; height:100%;">
+          <label style="width:30px; flex-shrink:0;">Speed</label>
+          <input type="range" value="50" style="flex:1;">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     4. HARDWARE — eurorack / modular panel
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="design-entry">
+  <div class="design-label">
+    <span class="design-name">4 — Hardware</span>
+    <span class="design-tag">Eurorack panel aesthetic. Dense, technical, tactile. LED orange.</span>
+  </div>
+  <div class="pw t-hardware" id="pw4">
+    <div class="pw-inner">
+      <div class="row-1">
+        <button class="btn btn-play">PLAY</button>
+        <button class="btn btn-clear">CLR</button>
+        <div class="spacer"></div>
+        <div class="msg-type">
+          <button class="btn active">CC</button>
+          <button class="btn">AFT</button>
+          <button class="btn">PB</button>
+          <button class="btn">NOTE</button>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn">SYNC</button>
+        <button class="btn btn-sm">?</button>
+      </div>
+      <div class="panel-divider"></div>
+      <div class="row-2">
+        <div class="dir-switch" data-pw="pw4">
+          <div class="dir-seg">◀</div>
+          <div class="dir-seg">◆</div>
+          <div class="dir-seg active">▶</div>
+        </div>
+        <div class="spacer"></div>
+        <div class="grid-btns">
+          <button class="btn btn-sm">Y−</button>
+          <button class="btn btn-sm">Y+</button>
+          <button class="btn btn-sm">X−</button>
+          <button class="btn btn-sm">X+</button>
+        </div>
+      </div>
+      <div class="param-row">
+        <div class="param-slot"><label>CC NUM</label><input type="range" value="74"></div>
+        <div class="param-slot"><label>CHANNEL</label><input type="range" value="6"></div>
+        <div class="param-slot"><label>SMOOTH</label><input type="range" value="28"></div>
+      </div>
+      <div class="param-row">
+        <div class="param-slot wide">
+          <label>OUTPUT RANGE</label>
+          <div class="range-mock">
+            <div class="range-track-bg"><div class="range-fill"></div></div>
+            <div class="range-thumb tl"></div><div class="range-thumb tr"></div>
+          </div>
+        </div>
+        <div class="param-slot"><label>RATE</label><input type="range" value="50"></div>
+      </div>
+      <div class="curve-display">
+        <svg viewBox="0 0 620 210" preserveAspectRatio="none">
+          <line x1="155" y1="0" x2="155" y2="210" class="gline"/>
+          <line x1="310" y1="0" x2="310" y2="210" class="gline"/>
+          <line x1="465" y1="0" x2="465" y2="210" class="gline"/>
+          <line x1="0" y1="52"  x2="620" y2="52"  class="gline"/>
+          <line x1="0" y1="105" x2="620" y2="105" class="gline"/>
+          <line x1="0" y1="157" x2="620" y2="157" class="gline"/>
+          <path d="M0 165 C40 165 60 35 120 75 S200 185 280 130 S375 50 445 95 S530 188 580 108 L620 100" class="curve-path"/>
+          <line x1="395" y1="0" x2="395" y2="210" class="playhead-line"/>
+          <circle cx="395" cy="99" r="4" class="playhead-dot"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     5. PAPER — drawn metaphor applied to the UI itself
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="design-entry">
+  <div class="design-label">
+    <span class="design-name">5 — Paper</span>
+    <span class="design-tag">Warm, hand-made. The "drawn" metaphor extends to the whole surface.</span>
+  </div>
+  <div class="pw t-paper" id="pw5">
+    <div class="pw-inner">
+      <div class="row-1">
+        <button class="btn btn-play">Play</button>
+        <button class="btn btn-clear">Clear</button>
+        <div class="spacer"></div>
+        <div class="msg-type">
+          <button class="btn active">CC</button>
+          <button class="btn">Aft</button>
+          <button class="btn">PB</button>
+          <button class="btn">Note</button>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn">Sync</button>
+        <button class="btn btn-sm">?</button>
+        <button class="btn">Light</button>
+      </div>
+      <div class="row-2">
+        <div class="dir-switch" data-pw="pw5">
+          <div class="dir-seg">◀</div>
+          <div class="dir-seg">◆</div>
+          <div class="dir-seg active">▶</div>
+        </div>
+        <div class="spacer"></div>
+        <div class="grid-btns">
+          <button class="btn btn-sm">Y−</button>
+          <button class="btn btn-sm">Y+</button>
+          <button class="btn btn-sm">X−</button>
+          <button class="btn btn-sm">X+</button>
+        </div>
+      </div>
+      <div class="param-row">
+        <div class="param-slot"><label>CC#</label><input type="range" value="74"></div>
+        <div class="param-slot"><label>Channel</label><input type="range" value="6"></div>
+        <div class="param-slot"><label>Smooth</label><input type="range" value="28"></div>
+      </div>
+      <div class="param-row">
+        <div class="param-slot wide">
+          <label>Range</label>
+          <div class="range-mock">
+            <div class="range-track-bg"><div class="range-fill"></div></div>
+            <div class="range-thumb tl"></div><div class="range-thumb tr"></div>
+          </div>
+        </div>
+        <div class="param-slot"><label>Speed</label><input type="range" value="50"></div>
+      </div>
+      <div class="curve-display">
+        <svg viewBox="0 0 620 230" preserveAspectRatio="none">
+          <line x1="155" y1="0" x2="155" y2="230" class="gline" stroke-dasharray="4,4"/>
+          <line x1="310" y1="0" x2="310" y2="230" class="gline" stroke-dasharray="4,4"/>
+          <line x1="465" y1="0" x2="465" y2="230" class="gline" stroke-dasharray="4,4"/>
+          <line x1="0" y1="57"  x2="620" y2="57"  class="gline" stroke-dasharray="4,4"/>
+          <line x1="0" y1="115" x2="620" y2="115" class="gline" stroke-dasharray="4,4"/>
+          <line x1="0" y1="172" x2="620" y2="172" class="gline" stroke-dasharray="4,4"/>
+          <path d="M0 180 C40 180 60 40 125 80 S205 205 285 145 S378 55 450 100 S533 200 582 118 L620 110"
+                class="curve-path" style="stroke-width:2.5; stroke-linecap:round;"/>
+          <!-- hand-drawn playhead: slightly wobbly -->
+          <line x1="398" y1="0" x2="400" y2="230" class="playhead-line" style="stroke:#dc2626;"/>
+          <circle cx="399" cy="104" r="5" style="fill:#dc2626;"/>
+          <!-- hint text -->
+          <text x="260" y="115" class="axis-hint" style="font-family:'Caveat',cursive; font-size:13px; text-anchor:middle; fill:rgba(42,31,14,0.25);">draw a curve here</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     6. CLARITY — Swiss typographic order, piano keyboard scale picker
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="design-entry">
+  <div class="design-label">
+    <span class="design-name">6 — Clarity</span>
+    <span class="design-tag">Swiss grid, high contrast, piano keyboard for Note mode. Precise.</span>
+  </div>
+  <div class="pw t-clarity" id="pw6">
+    <div class="pw-inner">
+      <div class="row-1">
+        <button class="btn btn-play" style="font-weight:600;">Play</button>
+        <button class="btn btn-clear">Clear</button>
+        <div class="spacer"></div>
+        <div class="msg-type">
+          <button class="btn">CC</button>
+          <button class="btn">Aft</button>
+          <button class="btn">PB</button>
+          <button class="btn active">Note</button>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn">Sync</button>
+        <button class="btn btn-sm">?</button>
+        <button class="btn">Dark</button>
+      </div>
+      <div class="row-2">
+        <div class="dir-switch" data-pw="pw6">
+          <div class="dir-seg">◀</div>
+          <div class="dir-seg">◆</div>
+          <div class="dir-seg active">▶</div>
+        </div>
+        <div class="spacer"></div>
+        <div class="grid-btns">
+          <button class="btn btn-sm">Y−</button>
+          <button class="btn btn-sm">Y+</button>
+          <button class="btn btn-sm">X−</button>
+          <button class="btn btn-sm">X+</button>
+        </div>
+      </div>
+      <!-- Scale presets -->
+      <div class="scale-row">
+        <span class="scale-lbl">Scale</span>
+        <div class="scale-btns">
+          <div class="scale-btn">Chr</div>
+          <div class="scale-btn active">Major</div>
+          <div class="scale-btn">Minor</div>
+          <div class="scale-btn">Dor</div>
+          <div class="scale-btn">Penta+</div>
+          <div class="scale-btn">Penta−</div>
+          <div class="scale-btn">Blues</div>
+          <div class="scale-btn">Custom</div>
+        </div>
+      </div>
+      <!-- Piano keyboard (root note) -->
+      <div class="piano-wrap">
+        <span class="scale-lbl">Key</span>
+        <div class="piano-keys" style="position:relative;">
+          <!-- White keys -->
+          <div class="key-w on"  data-note="C">C</div>
+          <div class="key-w"     data-note="D">D</div>
+          <div class="key-w"     data-note="E">E</div>
+          <div class="key-w"     data-note="F">F</div>
+          <div class="key-w"     data-note="G">G</div>
+          <div class="key-w"     data-note="A">A</div>
+          <div class="key-w"     data-note="B">B</div>
+          <!-- Black keys overlay -->
+          <div style="position:absolute;top:0;left:0;right:0;height:55%;display:flex;pointer-events:none;">
+            <div style="flex:1;"></div><!-- C -->
+            <div class="key-b" style="flex:0.7;background:#222;border-radius:0 0 2px 2px;flex-shrink:0;width:calc(100%/12);"></div><!-- C# -->
+            <div style="flex:0.3;"></div>
+            <div style="flex:1;"></div><!-- D -->
+            <div class="key-b" style="flex:0.7;background:#222;border-radius:0 0 2px 2px;flex-shrink:0;width:calc(100%/12);"></div><!-- D# -->
+            <div style="flex:0.3;"></div>
+            <div style="flex:1.5;"></div><!-- E+gap -->
+            <div style="flex:1;"></div><!-- F -->
+            <div class="key-b" style="flex:0.7;background:#222;border-radius:0 0 2px 2px;flex-shrink:0;width:calc(100%/12);"></div><!-- F# -->
+            <div style="flex:0.3;"></div>
+            <div style="flex:1;"></div><!-- G -->
+            <div class="key-b" style="flex:0.7;background:#222;border-radius:0 0 2px 2px;flex-shrink:0;width:calc(100%/12);"></div><!-- G# -->
+            <div style="flex:0.3;"></div>
+            <div style="flex:1;"></div><!-- A -->
+            <div class="key-b" style="flex:0.7;background:#222;border-radius:0 0 2px 2px;flex-shrink:0;width:calc(100%/12);"></div><!-- A# -->
+            <div style="flex:0.3;"></div>
+            <div style="flex:1.5;"></div><!-- B+end -->
+          </div>
+        </div>
+      </div>
+      <div class="param-row">
+        <div class="param-slot"><label>Velocity</label><input type="range" value="90"></div>
+        <div class="param-slot"><label>Channel</label><input type="range" value="6"></div>
+        <div class="param-slot"><label>Smooth</label><input type="range" value="28"></div>
+      </div>
+      <div class="param-row">
+        <div class="param-slot wide">
+          <label>Range</label>
+          <div class="range-mock">
+            <div class="range-track-bg"><div class="range-fill"></div></div>
+            <div class="range-thumb tl"></div><div class="range-thumb tr"></div>
+          </div>
+        </div>
+        <div class="param-slot"><label>Speed</label><input type="range" value="50"></div>
+      </div>
+      <div class="curve-display">
+        <svg viewBox="0 0 620 160" preserveAspectRatio="none">
+          <line x1="155" y1="0" x2="155" y2="160" class="gline"/>
+          <line x1="310" y1="0" x2="310" y2="160" class="gline"/>
+          <line x1="465" y1="0" x2="465" y2="160" class="gline"/>
+          <line x1="0" y1="40"  x2="620" y2="40"  class="gline"/>
+          <line x1="0" y1="80"  x2="620" y2="80"  class="gline"/>
+          <line x1="0" y1="120" x2="620" y2="120" class="gline"/>
+          <path d="M0 120 C40 120 55 25 120 55 S200 140 280 95 S375 30 445 70 S530 148 580 82 L620 78" class="curve-path"/>
+          <line x1="395" y1="0" x2="395" y2="160" class="playhead-line" style="stroke:#ef4444;"/>
+          <circle cx="395" cy="70" r="5" style="fill:#ef4444;"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     7. NEON — cyberpunk / synthwave
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="design-entry">
+  <div class="design-label">
+    <span class="design-name">7 — Neon</span>
+    <span class="design-tag">Cyberpunk. No curves, only edges. Glow. Maximalist dark.</span>
+  </div>
+  <div class="pw t-neon" id="pw7">
+    <div class="pw-inner">
+      <div class="row-1">
+        <button class="btn btn-play">PLAY</button>
+        <button class="btn btn-clear">CLR</button>
+        <div class="spacer"></div>
+        <div class="msg-type">
+          <button class="btn active" style="background:#4400aa;color:#cc00ff;box-shadow:0 0 6px rgba(204,0,255,0.3);">CC</button>
+          <button class="btn">AFT</button>
+          <button class="btn">PB</button>
+          <button class="btn">NOTE</button>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn">SYNC</button>
+        <button class="btn btn-sm" style="border-color:rgba(0,240,255,0.4);">?</button>
+        <button class="btn">LITE</button>
+      </div>
+      <div class="row-2">
+        <div class="dir-switch" data-pw="pw7">
+          <div class="dir-seg">◀</div>
+          <div class="dir-seg">◆</div>
+          <div class="dir-seg active">▶</div>
+        </div>
+        <div class="spacer"></div>
+        <div class="grid-btns">
+          <button class="btn btn-sm">Y−</button>
+          <button class="btn btn-sm">Y+</button>
+          <button class="btn btn-sm">X−</button>
+          <button class="btn btn-sm">X+</button>
+        </div>
+      </div>
+      <div class="param-row">
+        <div class="param-slot"><label>CC#</label><input type="range" value="74"></div>
+        <div class="param-slot"><label>CH</label><input type="range" value="6"></div>
+        <div class="param-slot"><label>SMOOTH</label><input type="range" value="28"></div>
+      </div>
+      <div class="param-row">
+        <div class="param-slot wide">
+          <label>RANGE</label>
+          <div class="range-mock">
+            <div class="range-track-bg"><div class="range-fill"></div></div>
+            <div class="range-thumb tl"></div><div class="range-thumb tr"></div>
+          </div>
+        </div>
+        <div class="param-slot"><label>SPEED</label><input type="range" value="50"></div>
+      </div>
+      <div class="curve-display">
+        <svg viewBox="0 0 620 240" preserveAspectRatio="none">
+          <line x1="155" y1="0" x2="155" y2="240" class="gline"/>
+          <line x1="310" y1="0" x2="310" y2="240" class="gline"/>
+          <line x1="465" y1="0" x2="465" y2="240" class="gline"/>
+          <line x1="0" y1="60"  x2="620" y2="60"  class="gline"/>
+          <line x1="0" y1="120" x2="620" y2="120" class="gline"/>
+          <line x1="0" y1="180" x2="620" y2="180" class="gline"/>
+          <path d="M0 185 C40 185 58 42 120 80 S202 200 282 140 S377 54 447 98 S532 198 582 118 L620 110"
+                class="curve-path" style="filter:drop-shadow(0 0 4px #00f0ff); stroke-width:2;"/>
+          <line x1="395" y1="0" x2="395" y2="240" class="playhead-line" style="stroke:#cc00ff;opacity:0.7;"/>
+          <circle cx="395" cy="102" r="5" style="fill:#cc00ff; filter:drop-shadow(0 0 5px #cc00ff);"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     8. STUDIO — professional dark, brass/gold accent
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="design-entry">
+  <div class="design-label">
+    <span class="design-name">8 — Studio</span>
+    <span class="design-tag">Professional plugin. Subtle gradients, brass accent. Serum / Falcon register.</span>
+  </div>
+  <div class="pw t-studio" id="pw8">
+    <div class="pw-inner">
+      <div class="row-1">
+        <button class="btn btn-play active">Pause</button>
+        <button class="btn btn-clear">Clear</button>
+        <div class="spacer"></div>
+        <div class="msg-type">
+          <button class="btn active">CC</button>
+          <button class="btn">Aft</button>
+          <button class="btn">PB</button>
+          <button class="btn">Note</button>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn">Sync</button>
+        <button class="btn btn-sm">?</button>
+        <button class="btn">Light</button>
+      </div>
+      <div class="row-2">
+        <div class="dir-switch" data-pw="pw8">
+          <div class="dir-seg">◀</div>
+          <div class="dir-seg">◆</div>
+          <div class="dir-seg active">▶</div>
+        </div>
+        <div class="spacer"></div>
+        <div class="grid-btns">
+          <button class="btn btn-sm">Y−</button>
+          <button class="btn btn-sm">Y+</button>
+          <button class="btn btn-sm">X−</button>
+          <button class="btn btn-sm">X+</button>
+        </div>
+      </div>
+      <div class="param-row">
+        <div class="param-slot"><label>CC#</label><input type="range" value="74"></div>
+        <div class="param-slot"><label>Channel</label><input type="range" value="6"></div>
+        <div class="param-slot"><label>Smooth</label><input type="range" value="28"></div>
+      </div>
+      <div class="param-row">
+        <div class="param-slot wide">
+          <label>Range</label>
+          <div class="range-mock">
+            <div class="range-track-bg"><div class="range-fill"></div></div>
+            <div class="range-thumb tl"></div><div class="range-thumb tr"></div>
+          </div>
+        </div>
+        <div class="param-slot"><label>Speed</label><input type="range" value="50"></div>
+      </div>
+      <div class="curve-display">
+        <svg viewBox="0 0 620 230" preserveAspectRatio="none">
+          <!-- Subtle gradient fill under curve -->
+          <defs>
+            <linearGradient id="curveGrad8" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#c8922a" stop-opacity="0.2"/>
+              <stop offset="100%" stop-color="#c8922a" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <line x1="155" y1="0" x2="155" y2="230" class="gline"/>
+          <line x1="310" y1="0" x2="310" y2="230" class="gline"/>
+          <line x1="465" y1="0" x2="465" y2="230" class="gline"/>
+          <line x1="0" y1="57"  x2="620" y2="57"  class="gline"/>
+          <line x1="0" y1="115" x2="620" y2="115" class="gline"/>
+          <line x1="0" y1="172" x2="620" y2="172" class="gline"/>
+          <!-- Fill under curve -->
+          <path d="M0 165 C40 165 60 38 120 75 S200 188 280 132 S375 52 445 95 S530 190 580 112 L620 105 L620 230 L0 230 Z"
+                fill="url(#curveGrad8)"/>
+          <path d="M0 165 C40 165 60 38 120 75 S200 188 280 132 S375 52 445 95 S530 190 580 112 L620 105"
+                class="curve-path"/>
+          <line x1="395" y1="0" x2="395" y2="230" class="playhead-line"/>
+          <circle cx="395" cy="100" r="5" class="playhead-dot"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     9. CHROMATIC — mode has its own colour identity (showing PB = teal)
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="design-entry">
+  <div class="design-label">
+    <span class="design-name">9 — Chromatic</span>
+    <span class="design-tag">Each mode gets its own colour identity. Concept: PB mode shown (teal).</span>
+  </div>
+  <div class="pw t-chromatic" id="pw9">
+    <div class="pw-inner">
+      <div class="row-1">
+        <button class="btn btn-play">Play</button>
+        <button class="btn btn-clear">Clear</button>
+        <div class="spacer"></div>
+        <div class="msg-type">
+          <button class="btn btn-cc"  style="border-radius:6px;">CC</button>
+          <button class="btn btn-aft" style="border-radius:6px;">Aft</button>
+          <button class="btn btn-pb active btn-pb" style="border-radius:6px; background:#0e9090; color:#fff; box-shadow:0 0 8px rgba(14,144,144,0.4);">PB</button>
+          <button class="btn btn-note" style="border-radius:6px;">Note</button>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn">Sync</button>
+        <button class="btn btn-sm" style="border-color:rgba(45,212,191,0.3);">?</button>
+        <button class="btn">Light</button>
+      </div>
+      <div class="row-2">
+        <div class="dir-switch" data-pw="pw9">
+          <div class="dir-seg">◀</div>
+          <div class="dir-seg active">◆</div>
+          <div class="dir-seg">▶</div>
+        </div>
+        <div class="spacer"></div>
+        <div class="grid-btns">
+          <button class="btn btn-sm">Y−</button>
+          <button class="btn btn-sm">Y+</button>
+          <button class="btn btn-sm">X−</button>
+          <button class="btn btn-sm">X+</button>
+        </div>
+      </div>
+      <div class="param-row">
+        <div class="param-slot" style="border-color:rgba(45,212,191,0.2);">
+          <label>Pitch Range</label><input type="range" value="74">
+        </div>
+        <div class="param-slot"><label>Channel</label><input type="range" value="6"></div>
+        <div class="param-slot"><label>Smooth</label><input type="range" value="28"></div>
+      </div>
+      <div class="param-row">
+        <div class="param-slot wide" style="border-color:rgba(45,212,191,0.2);">
+          <label>Range</label>
+          <div class="range-mock">
+            <div class="range-track-bg"><div class="range-fill"></div></div>
+            <div class="range-thumb tl"></div><div class="range-thumb tr"></div>
+          </div>
+        </div>
+        <div class="param-slot"><label>Speed</label><input type="range" value="50"></div>
+      </div>
+      <div class="curve-display">
+        <svg viewBox="0 0 620 230" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="curveGrad9" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#2dd4bf" stop-opacity="0.15"/>
+              <stop offset="100%" stop-color="#2dd4bf" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <line x1="155" y1="0" x2="155" y2="230" class="gline"/>
+          <line x1="310" y1="0" x2="310" y2="230" class="gline"/>
+          <line x1="465" y1="0" x2="465" y2="230" class="gline"/>
+          <line x1="0" y1="57"  x2="620" y2="57"  class="gline"/>
+          <line x1="0" y1="115" x2="620" y2="115" class="gline"/>
+          <line x1="0" y1="172" x2="620" y2="172" class="gline"/>
+          <path d="M0 165 C40 165 60 38 120 75 S200 188 280 132 S375 52 445 95 S530 190 580 112 L620 105 L620 230 L0 230 Z"
+                fill="url(#curveGrad9)"/>
+          <path d="M0 165 C40 165 60 38 120 75 S200 188 280 132 S375 52 445 95 S530 190 580 112 L620 105"
+                class="curve-path"/>
+          <!-- Ping-pong playhead (active) -->
+          <line x1="285" y1="0" x2="285" y2="230" class="playhead-line" style="stroke:#2dd4bf;"/>
+          <circle cx="285" cy="134" r="5" style="fill:#2dd4bf;"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     10. BOTANICAL — organic shapes, living-system green
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="design-entry">
+  <div class="design-label">
+    <span class="design-name">10 — Botanical</span>
+    <span class="design-tag">Deep forest, full-radius pill shapes, organic curves. Living-system metaphor.</span>
+  </div>
+  <div class="pw t-botanical" id="pw10">
+    <div class="pw-inner">
+      <div class="row-1">
+        <button class="btn btn-play active" style="border-radius:30px; min-width:68px;">▶ Play</button>
+        <button class="btn btn-clear" style="border-radius:30px;">Clear</button>
+        <div class="spacer"></div>
+        <div class="msg-type">
+          <button class="btn active" style="border-radius:30px; background:#2e7d32; color:#e8ffe8;">CC</button>
+          <button class="btn" style="border-radius:30px;">Aft</button>
+          <button class="btn" style="border-radius:30px;">PB</button>
+          <button class="btn" style="border-radius:30px;">Note</button>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn" style="border-radius:30px;">Sync</button>
+        <button class="btn btn-sm" style="border-radius:30px; width:30px; height:100%; padding:0;">?</button>
+        <button class="btn" style="border-radius:30px;">Light</button>
+      </div>
+      <div class="row-2">
+        <div class="dir-switch" data-pw="pw10">
+          <div class="dir-seg">◀</div>
+          <div class="dir-seg">◆</div>
+          <div class="dir-seg active">▶</div>
+        </div>
+        <div class="spacer"></div>
+        <div class="grid-btns">
+          <button class="btn btn-sm" style="border-radius:30px;">Y−</button>
+          <button class="btn btn-sm" style="border-radius:30px;">Y+</button>
+          <button class="btn btn-sm" style="border-radius:30px;">X−</button>
+          <button class="btn btn-sm" style="border-radius:30px;">X+</button>
+        </div>
+      </div>
+      <div class="param-row">
+        <div class="param-slot" style="border-radius:20px;"><label>CC#</label><input type="range" value="74"></div>
+        <div class="param-slot" style="border-radius:20px;"><label>Channel</label><input type="range" value="6"></div>
+        <div class="param-slot" style="border-radius:20px;"><label>Smooth</label><input type="range" value="28"></div>
+      </div>
+      <div class="param-row">
+        <div class="param-slot wide" style="border-radius:20px;">
+          <label>Range</label>
+          <div class="range-mock">
+            <div class="range-track-bg"><div class="range-fill"></div></div>
+            <div class="range-thumb tl"></div><div class="range-thumb tr"></div>
+          </div>
+        </div>
+        <div class="param-slot" style="border-radius:20px;"><label>Speed</label><input type="range" value="50"></div>
+      </div>
+      <div class="curve-display" style="border-radius:24px;">
+        <svg viewBox="0 0 620 230" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="curveGrad10" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#4caf50" stop-opacity="0.12"/>
+              <stop offset="100%" stop-color="#4caf50" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <line x1="155" y1="0" x2="155" y2="230" class="gline"/>
+          <line x1="310" y1="0" x2="310" y2="230" class="gline"/>
+          <line x1="465" y1="0" x2="465" y2="230" class="gline"/>
+          <line x1="0" y1="57"  x2="620" y2="57"  class="gline"/>
+          <line x1="0" y1="115" x2="620" y2="115" class="gline"/>
+          <line x1="0" y1="172" x2="620" y2="172" class="gline"/>
+          <path d="M0 165 C40 165 58 40 120 78 S202 190 280 134 S376 52 446 95 S530 188 580 112 L620 106 L620 230 L0 230 Z"
+                fill="url(#curveGrad10)"/>
+          <path d="M0 165 C40 165 58 40 120 78 S202 190 280 134 S376 52 446 95 S530 188 580 112 L620 106"
+                class="curve-path" style="stroke-width:2.5;"/>
+          <line x1="395" y1="0" x2="395" y2="230" class="playhead-line" style="stroke:#a5d6a7;"/>
+          <circle cx="395" cy="100" r="5" style="fill:#4caf50;"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+</div><!-- .designs-grid -->
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+     Notes section
+──────────────────────────────────────────────────────────────────────────── -->
+<div style="max-width:1000px; margin:60px auto 0; padding:0 24px; color:#555; font-size:12px; line-height:1.8;">
+  <p style="margin-bottom:8px;"><strong style="color:#888;">Reading these:</strong>
+    Tap the direction switch to see it respond. Sliders are functional.
+    These are layout mockups — colours, typography, and control shapes are the point,
+    not pixel-perfect fidelity to the actual plugin.</p>
+  <p style="margin-bottom:8px;"><strong style="color:#888;">What's not mocked:</strong>
+    Collapsible sections, hover/focus states, long-press tooltips, the help overlay,
+    multi-stroke interaction, multilane colour coding, incoming MIDI ghost display.
+    Those are second-pass conversations once a direction is chosen.</p>
+  <p><strong style="color:#888;">Planned elements not shown:</strong>
+    Piano-key root/mask picker (shown only in #6), collapsed scale row,
+    future Random direction segment, multilane lane-colour swatches.</p>
+</div>
+
+<script>
+// Direction switch interactivity
+document.querySelectorAll('.dir-switch').forEach(sw => {
+  sw.querySelectorAll('.dir-seg').forEach((seg, i) => {
+    seg.addEventListener('click', () => {
+      sw.querySelectorAll('.dir-seg').forEach(s => s.classList.remove('active'));
+      seg.classList.add('active');
+    });
+  });
+});
+</script>
+
+</body>
+</html>

@@ -12,7 +12,7 @@
  *
  * Threading
  * ─────────
- * UI thread  : setSnapshot / clearSnapshot / setPlaying / setScaleConfig
+ * UI thread  : setSnapshot / clearSnapshot / setPlaying / setScaleConfig / setLaneEnabled
  * Audio thread: processBlock (or fallback HiRes timer — never both at once)
  * All cross-thread state uses std::atomic with explicit ordering.
  *
@@ -82,6 +82,11 @@ public:
     /// Update scale quantization config for one lane atomically.
     void setScaleConfig (int lane, ScaleConfig config);
 
+    /// Mute/unmute a lane.  When transitioning from enabled→disabled, queues a
+    /// Note Off for any held note so playback on that lane silences cleanly.
+    /// Safe to call from the render thread (processBlock) on every block.
+    void setLaneEnabled (int lane, bool enabled);
+
     // ── Query API (UI or render thread) ──────────────────────────────────────
     bool  getPlaying()      const;
     /// Phase of lane 0 (or the first valid lane) — for UI playhead display.
@@ -104,6 +109,7 @@ private:
     std::array<std::atomic<const LaneSnapshot*>, kMaxLanes> _snapshots;
     std::array<std::atomic<bool>,                kMaxLanes> _noteOffNeeded;
     std::array<std::atomic<uint32_t>,            kMaxLanes> _scalesPacked;
+    std::array<std::atomic<bool>,                kMaxLanes> _laneEnabled;   ///< false = muted
 
     std::atomic<bool>  _isPlaying    { false };
     std::atomic<float> _currentPhase { 0.0f  };

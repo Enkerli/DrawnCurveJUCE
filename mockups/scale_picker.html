@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DrawnCurve — Scale Picker</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,600;14..32,700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #D8D5CE;
+  padding: 40px 32px 80px;
+}
+h1 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.intro { font-size: 12px; color: #888; margin-bottom: 40px; }
+
+/* Card that holds one picker variant */
+.card {
+  width: 620px;
+  background: #F5F2ED;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 28px;
+  box-shadow: 0 2px 16px rgba(0,0,0,.1);
+}
+.card-title { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #999; margin-bottom: 6px; }
+.card-desc  { font-size: 12px; color: #888; margin-bottom: 20px; }
+
+/* ── Instruction badge ── */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 10px; font-weight: 600; color: #888;
+  margin-bottom: 16px;
+}
+.badge span {
+  background: #E8E4DC;
+  border-radius: 4px; padding: 2px 6px;
+}
+
+/* ── Preset buttons ── */
+.presets { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.preset {
+  height: 26px; padding: 0 12px;
+  border: 1px solid #C9C5B5;
+  border-radius: 5px;
+  background: #FDFCFA;
+  color: #706D64;
+  font: 600 11px/1 'Inter', sans-serif;
+  cursor: pointer; transition: all 80ms;
+}
+.preset:hover { border-color: #0B6E4F; color: #0B6E4F; }
+.preset.on { background: #0B6E4F; color: #fff; border-color: #0B6E4F; }
+
+/* ── Lattice (2A: neutral 5+7) ──
+   Bottom row: 7 natural notes (larger circles)
+   Top row:    5 chromatic notes (smaller, staggered)
+   No piano metaphor.
+── */
+.lattice-wrap {
+  position: relative;
+  height: 104px; /* enough for 2 rows */
+}
+.lattice-wrap svg { width: 100%; height: 100%; overflow: visible; }
+
+/* ── Circle states (applied via JS class on <g>) ──
+   .node-natural: default natural note   (inactive)
+   .node-chroma:  default chromatic note (inactive)
+   .active:       note is in the scale
+   .root:         this note is the tonic
+── */
+
+/* Root note display */
+.root-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.root-label { font: 600 11px/1 'Inter', sans-serif; color: #888; letter-spacing: .06em; text-transform: uppercase; }
+.root-val { font: 700 13px/1 'Inter', sans-serif; color: #0B6E4F; }
+
+/* Scale bitmask readout */
+.bitmask-row {
+  margin-top: 10px;
+  font: 400 11px/1 'DM Mono', 'Courier New', monospace;
+  color: #B0A89C; letter-spacing: .04em;
+}
+
+/* ── Variant B: pill row ──
+   All 12 notes in a single horizontal row, pill-shaped
+── */
+.pill-row { display: flex; gap: 5px; flex-wrap: wrap; }
+.pill {
+  height: 36px; min-width: 36px; padding: 0 8px;
+  border-radius: 18px;
+  border: 1.5px solid #C9C5B5;
+  background: #FDFCFA;
+  color: #A9A59B;
+  font: 600 11px/1 'Inter', sans-serif;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all 100ms; user-select: none;
+  position: relative;
+}
+.pill.is-chroma { height: 30px; border-radius: 15px; font-size: 10px; align-self: center; }
+.pill.active { background: #0B6E4F; color: #fff; border-color: #0B6E4F; }
+.pill.root-dot::after {
+  content: ''; position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%);
+  width: 4px; height: 4px; border-radius: 50%; background: #E6F3EE;
+}
+.pill.active.root-dot::after { background: rgba(255,255,255,.6); }
+</style>
+</head>
+<body>
+
+<h1>Scale Picker — control explorations</h1>
+<p class="intro">Tap to include/exclude a note. Long-press (hold ~400 ms) to set as root/tonic.</p>
+
+<!-- ════════════════════════
+     VARIANT A — 2A Neutral Lattice
+     Natural notes bottom row, chromatic top row
+     No piano metaphor — just position
+════════════════════════ -->
+<div class="card" id="card-lattice">
+  <div class="card-title">A — Neutral 5+7 Lattice</div>
+  <div class="card-desc">Natural notes (bottom row) and chromatic notes (top row), all the same size. Staggered by interval — no piano key shape, just position. Chromatic active: tinted. Natural active: solid. Tap = toggle. Hold = set root.</div>
+
+  <div class="badge">
+    <span>tap</span> include / exclude &nbsp;
+    <span>hold</span> set as root
+  </div>
+
+  <div class="presets" id="presets-lattice">
+    <button class="preset" data-mask="2741" data-root="0">Major</button>
+    <button class="preset" data-mask="1453" data-root="0">Minor</button>
+    <button class="preset" data-mask="2773" data-root="0">Dorian</button>
+    <button class="preset" data-mask="2906" data-root="0">Mixolydian</button>
+    <button class="preset" data-mask="1387" data-root="0">Phrygian</button>
+    <button class="preset" data-mask="2457" data-root="0">Whole-tone</button>
+    <button class="preset" data-mask="2730" data-root="0">Diminished</button>
+    <button class="preset" data-mask="4095" data-root="0">Chromatic</button>
+  </div>
+
+  <!-- SVG lattice — all circles r=20 (equal size)
+       viewBox: 600 wide  Bottom row y=76, top row y=32
+       Natural spacing: 92px  C starts at x=24 so left edge (24-20=4) clears the border
+       Chromatics at midpoints between their adjacent naturals
+       Positions: C=24 D=116 E=208 F=300 G=392 A=484 B=576
+       C#=70 Eb=162 F#=346 Ab=438 Bb=530
+  -->
+  <div class="lattice-wrap" style="height:108px;">
+    <svg id="svg-lattice" viewBox="0 0 600 108" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <style>
+          /* All nodes share the same circle size and visual rules */
+          .lnode circle.bg   { fill: #F9F8F1; stroke: #C9C5B5; stroke-width: 1.5; }
+          .lnode text        { fill: #A9A59B; font: 600 12px/1 Inter, sans-serif; }
+          .lnode circle.ring { display: none; fill: none; stroke: #0B6E4F; stroke-width: 2.5; }
+
+          /* Active: solid fill */
+          .lnode.active circle.bg { fill: #0B6E4F; stroke: #0B6E4F; }
+          .lnode.active text      { fill: #fff; }
+
+          /* Chromatic active: tinted (visually distinct from natural active, same size) */
+          .lnode.chroma.active circle.bg { fill: #E6F3EE; stroke: #0B6E4F; }
+          .lnode.chroma.active text      { fill: #0B6E4F; }
+
+          /* Root: outer ring */
+          .lnode.root circle.ring { display: block; }
+        </style>
+      </defs>
+
+      <!-- Connector zigzag (behind nodes) -->
+      <path d="M24,76 L70,32 L116,76 L162,32 L208,76 L300,76 L346,32 L392,76 L438,32 L484,76 L530,32 L576,76"
+            stroke="#C9C5B5" stroke-width="1.2" fill="none" stroke-dasharray="3 7" opacity=".55"/>
+
+      <!-- BOTTOM ROW: natural notes — C D E F G A B -->
+      <g class="lnode" data-pc="0" style="cursor:pointer" transform="translate(24,76)">
+        <circle class="ring" r="26"/><circle class="bg" r="20"/>
+        <text text-anchor="middle" dy="4">C</text>
+      </g>
+      <g class="lnode" data-pc="2" style="cursor:pointer" transform="translate(116,76)">
+        <circle class="ring" r="26"/><circle class="bg" r="20"/>
+        <text text-anchor="middle" dy="4">D</text>
+      </g>
+      <g class="lnode" data-pc="4" style="cursor:pointer" transform="translate(208,76)">
+        <circle class="ring" r="26"/><circle class="bg" r="20"/>
+        <text text-anchor="middle" dy="4">E</text>
+      </g>
+      <g class="lnode" data-pc="5" style="cursor:pointer" transform="translate(300,76)">
+        <circle class="ring" r="26"/><circle class="bg" r="20"/>
+        <text text-anchor="middle" dy="4">F</text>
+      </g>
+      <g class="lnode" data-pc="7" style="cursor:pointer" transform="translate(392,76)">
+        <circle class="ring" r="26"/><circle class="bg" r="20"/>
+        <text text-anchor="middle" dy="4">G</text>
+      </g>
+      <g class="lnode" data-pc="9" style="cursor:pointer" transform="translate(484,76)">
+        <circle class="ring" r="26"/><circle class="bg" r="20"/>
+        <text text-anchor="middle" dy="4">A</text>
+      </g>
+      <g class="lnode" data-pc="11" style="cursor:pointer" transform="translate(576,76)">
+        <circle class="ring" r="26"/><circle class="bg" r="20"/>
+        <text text-anchor="middle" dy="4">B</text>
+      </g>
+
+      <!-- TOP ROW: chromatic notes — C# Eb (gap E-F) F# Ab Bb -->
+      <g class="lnode chroma" data-pc="1" style="cursor:pointer" transform="translate(70,32)">
+        <circle class="ring" r="26"/><circle class="bg" r="20"/>
+        <text text-anchor="middle" dy="4">C♯</text>
+      </g>
+      <g class="lnode chroma" data-pc="3" style="cursor:pointer" transform="translate(162,32)">
+        <circle class="ring" r="26"/><circle class="bg" r="20"/>
+        <text text-anchor="middle" dy="4">E♭</text>
+      </g>
+      <g class="lnode chroma" data-pc="6" style="cursor:pointer" transform="translate(346,32)">
+        <circle class="ring" r="26"/><circle class="bg" r="20"/>
+        <text text-anchor="middle" dy="4">F♯</text>
+      </g>
+      <g class="lnode chroma" data-pc="8" style="cursor:pointer" transform="translate(438,32)">
+        <circle class="ring" r="26"/><circle class="bg" r="20"/>
+        <text text-anchor="middle" dy="4">A♭</text>
+      </g>
+      <g class="lnode chroma" data-pc="10" style="cursor:pointer" transform="translate(530,32)">
+        <circle class="ring" r="26"/><circle class="bg" r="20"/>
+        <text text-anchor="middle" dy="4">B♭</text>
+      </g>
+    </svg>
+  </div>
+
+  <div class="root-row">
+    <span class="root-label">Root</span>
+    <span class="root-val" id="root-display-lattice">C</span>
+    <span style="font-size:11px; color:#B0A89C; margin-left:8px;" id="scale-name-lattice">— tap a preset</span>
+  </div>
+  <div class="bitmask-row" id="bitmask-lattice">mask: 0b000000000000</div>
+</div>
+
+
+<!-- ════════════════════════
+     VARIANT B — Pill row (all 12, single line)
+     Chromatic notes slightly smaller
+════════════════════════ -->
+<div class="card" id="card-pills">
+  <div class="card-title">B — Single Row, Pill Shape</div>
+  <div class="card-desc">All 12 pitch classes in one row. Chromatic notes are narrower pills. Simpler, more compact — but loses the spatial interval information of the lattice.</div>
+
+  <div class="badge">
+    <span>tap</span> include / exclude &nbsp;
+    <span>hold</span> set as root
+  </div>
+
+  <div class="presets" id="presets-pills">
+    <button class="preset" data-mask="2741" data-root="0">Major</button>
+    <button class="preset" data-mask="1453" data-root="0">Minor</button>
+    <button class="preset" data-mask="2773" data-root="0">Dorian</button>
+    <button class="preset" data-mask="2906" data-root="0">Mixolydian</button>
+    <button class="preset" data-mask="4095" data-root="0">Chromatic</button>
+  </div>
+
+  <div class="pill-row" id="pill-row">
+    <!-- generated by JS -->
+  </div>
+
+  <div class="root-row">
+    <span class="root-label">Root</span>
+    <span class="root-val" id="root-display-pills">C</span>
+    <span style="font-size:11px; color:#B0A89C; margin-left:8px;" id="scale-name-pills">— tap a preset</span>
+  </div>
+  <div class="bitmask-row" id="bitmask-pills">mask: 0b000000000000</div>
+</div>
+
+
+<script>
+// ── Shared state ──────────────────────────────────────
+var PC_NAMES = ['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
+var CHROMA   = [false, true, false, true, false, false, true, false, true, false, true, false];
+
+var PRESETS = {
+  2741: 'Major',
+  1453: 'Minor (Nat.)',
+  2773: 'Dorian',
+  2906: 'Mixolydian',
+  1387: 'Phrygian',
+  2457: 'Whole-tone',
+  2730: 'Diminished',
+  4095: 'Chromatic',
+};
+
+// State for each widget
+var stateL = { mask: 0, root: 0 }; // lattice
+var stateP = { mask: 0, root: 0 }; // pills
+
+function maskBit(pc)    { return 1 << pc; }
+function hasPc(mask,pc) { return !!(mask & maskBit(pc)); }
+function togglePc(mask,pc) { return mask ^ maskBit(pc); }
+function maskStr(mask) {
+  var s = mask.toString(2).padStart(12,'0');
+  return 'mask: 0b' + s + '  (' + mask + ')';
+}
+function presetName(mask) { return PRESETS[mask] || ''; }
+
+// ── VARIANT A — Lattice ───────────────────────────────
+var nodes = document.querySelectorAll('#svg-lattice .lnode');
+
+function renderLattice() {
+  nodes.forEach(function(node) {
+    var pc = parseInt(node.dataset.pc, 10);
+    node.classList.toggle('active', hasPc(stateL.mask, pc));
+    node.classList.toggle('root',   stateL.root === pc);
+  });
+  document.getElementById('root-display-lattice').textContent = PC_NAMES[stateL.root];
+  document.getElementById('bitmask-lattice').textContent = maskStr(stateL.mask);
+  document.getElementById('scale-name-lattice').textContent = presetName(stateL.mask) || '';
+  // highlight matching preset
+  document.querySelectorAll('#presets-lattice .preset').forEach(function(b) {
+    b.classList.toggle('on', parseInt(b.dataset.mask,10) === stateL.mask);
+  });
+}
+
+var holdTimer = null;
+nodes.forEach(function(node) {
+  var pc = parseInt(node.dataset.pc, 10);
+
+  node.addEventListener('pointerdown', function(e) {
+    e.preventDefault();
+    holdTimer = setTimeout(function() {
+      holdTimer = null;
+      stateL.root = pc;
+      // also include it
+      if (!hasPc(stateL.mask, pc)) stateL.mask = togglePc(stateL.mask, pc);
+      renderLattice();
+    }, 400);
+  });
+
+  node.addEventListener('pointerup', function() {
+    if (holdTimer !== null) {
+      clearTimeout(holdTimer);
+      holdTimer = null;
+      stateL.mask = togglePc(stateL.mask, pc);
+      renderLattice();
+    }
+  });
+
+  node.addEventListener('pointerleave', function() {
+    if (holdTimer !== null) { clearTimeout(holdTimer); holdTimer = null; }
+  });
+});
+
+document.querySelectorAll('#presets-lattice .preset').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    stateL.mask = parseInt(btn.dataset.mask, 10);
+    stateL.root = parseInt(btn.dataset.root, 10);
+    renderLattice();
+  });
+});
+
+// Init lattice with Major
+stateL.mask = 2741; stateL.root = 0;
+renderLattice();
+
+
+// ── VARIANT B — Pills ─────────────────────────────────
+var pillRow = document.getElementById('pill-row');
+var pills = [];
+
+[0,1,2,3,4,5,6,7,8,9,10,11].forEach(function(pc) {
+  var el = document.createElement('div');
+  el.className = 'pill' + (CHROMA[pc] ? ' is-chroma' : '');
+  el.textContent = PC_NAMES[pc];
+  el.dataset.pc = pc;
+  pillRow.appendChild(el);
+  pills.push(el);
+
+  var ht = null;
+  el.addEventListener('pointerdown', function(e) {
+    e.preventDefault();
+    ht = setTimeout(function() {
+      ht = null;
+      stateP.root = pc;
+      if (!hasPc(stateP.mask, pc)) stateP.mask = togglePc(stateP.mask, pc);
+      renderPills();
+    }, 400);
+  });
+  el.addEventListener('pointerup', function() {
+    if (ht !== null) {
+      clearTimeout(ht); ht = null;
+      stateP.mask = togglePc(stateP.mask, pc);
+      renderPills();
+    }
+  });
+  el.addEventListener('pointerleave', function() {
+    if (ht !== null) { clearTimeout(ht); ht = null; }
+  });
+});
+
+function renderPills() {
+  pills.forEach(function(el) {
+    var pc = parseInt(el.dataset.pc, 10);
+    el.classList.toggle('active', hasPc(stateP.mask, pc));
+    el.classList.toggle('root-dot', stateP.root === pc);
+  });
+  document.getElementById('root-display-pills').textContent = PC_NAMES[stateP.root];
+  document.getElementById('bitmask-pills').textContent = maskStr(stateP.mask);
+  document.getElementById('scale-name-pills').textContent = presetName(stateP.mask) || '';
+  document.querySelectorAll('#presets-pills .preset').forEach(function(b) {
+    b.classList.toggle('on', parseInt(b.dataset.mask,10) === stateP.mask);
+  });
+}
+
+document.querySelectorAll('#presets-pills .preset').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    stateP.mask = parseInt(btn.dataset.mask, 10);
+    stateP.root = parseInt(btn.dataset.root, 10);
+    renderPills();
+  });
+});
+
+stateP.mask = 2741; stateP.root = 0;
+renderPills();
+</script>
+</body>
+</html>

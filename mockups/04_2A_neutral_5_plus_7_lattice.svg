@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1024" viewBox="0 0 1440 1024">
+<style>
+.bg { fill: #0f1115; }
+.panel { fill: #171b22; stroke: #3b4657; stroke-width: 1.5; }
+.text { fill: #eef3fb; font-family: Inter, Arial, sans-serif; }
+.muted { fill: #97a6ba; font-family: Inter, Arial, sans-serif; }
+.title { font-size: 30px; font-weight: 700; }
+.label { font-size: 15px; font-weight: 600; }
+.small { font-size: 12px; }
+.stroke { stroke: #3b4657; stroke-width: 1.5; fill: none; }
+.line { stroke: #8fb8ff; stroke-width: 4; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.line2 { stroke: #b7ffd4; stroke-width: 4; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.button { fill: #1f2632; stroke: #3b4657; stroke-width: 1.2; }
+.buttonActive { fill: #22354d; stroke: #8fb8ff; stroke-width: 1.6; }
+.node { fill: #2a313d; stroke: #3b4657; stroke-width: 1.3; }
+.nodeActive { fill: #22354d; stroke: #8fb8ff; stroke-width: 2; }
+.ring { fill: none; stroke: #3b4657; stroke-width: 1.4; }
+</style>
+<rect class="bg" x="0" y="0" width="1440" height="1024"/>
+<text class="text title" x="56" y="68">DrawnCurve / Micro-design 2A</text>
+<text class="muted label" x="56" y="96">Scale quantizer concept</text>
+<rect class="panel" x="56" y="132" width="1328" height="836" rx="28"/>
+<text class="muted small" x="88" y="170">2A · NEUTRAL 5+7 LATTICE — familiar 12-pitch layout without piano skeuomorphism</text>
+<rect class="panel" x="88" y="230" width="1264" height="652" rx="24"/>
+<text class="muted small" x="116" y="270">exact alignment: B1, T1, B2, T2, B3, B4, T3, B5, T4, B6, T5, B7</text>
+<line class="stroke" x1="150" y1="620" x2="1130" y2="620" opacity="0.35"/>
+<line class="stroke" x1="210" y1="470" x2="1070" y2="470" opacity="0.18"/>
+<path d="M 220 620 L 290.0 470 L 360 620 L 430.0 470 L 500 620 L 640 620 L 710.0 470 L 780 620 L 850.0 470 L 920 620 L 990.0 470 L 1060 620" stroke="#3b4657" stroke-width="1.2" fill="none" opacity="0.35" stroke-dasharray="4 8"/>
+<circle cx="290.0" cy="470" r="36" class="node"/>
+<text class="text label" x="272.0" y="476">C♯</text>
+<circle cx="430.0" cy="470" r="36" class="nodeActive"/>
+<text class="text label" x="412.0" y="476">E♭</text>
+<circle cx="710.0" cy="470" r="36" class="node"/>
+<text class="text label" x="692.0" y="476">F♯</text>
+<circle cx="850.0" cy="470" r="36" class="node"/>
+<text class="text label" x="832.0" y="476">A♭</text>
+<circle cx="990.0" cy="470" r="36" class="node"/>
+<text class="text label" x="972.0" y="476">B♭</text>
+<circle cx="220" cy="620" r="42" class="nodeActive"/>
+<circle cx="220" cy="620" r="54" fill="none" stroke="#b7ffd4" stroke-width="2.5"/>
+<text class="text label" x="210" y="626">C</text>
+<circle cx="360" cy="620" r="42" class="nodeActive"/>
+<text class="text label" x="350" y="626">D</text>
+<circle cx="500" cy="620" r="42" class="node"/>
+<text class="text label" x="490" y="626">E</text>
+<circle cx="640" cy="620" r="42" class="nodeActive"/>
+<text class="text label" x="630" y="626">F</text>
+<circle cx="780" cy="620" r="42" class="nodeActive"/>
+<text class="text label" x="770" y="626">G</text>
+<circle cx="920" cy="620" r="42" class="nodeActive"/>
+<text class="text label" x="910" y="626">A</text>
+<circle cx="1060" cy="620" r="42" class="nodeActive"/>
+<text class="text label" x="1050" y="626">B</text>
+<rect class="button" x="1040" y="412" width="232" height="56" rx="16"/>
+<text class="text label" x="1072" y="446">tap = include/exclude</text>
+<rect class="button" x="1040" y="488" width="232" height="56" rx="16"/>
+<text class="text label" x="1072" y="522">long-press = tonic</text>
+<rect class="button" x="1040" y="564" width="232" height="56" rx="16"/>
+<text class="text label" x="1072" y="598">row-neutral, not keys</text>
+</svg>

@@ -1,0 +1,190 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2920" height="2088" viewBox="0 0 2920 2088">
+<style>
+    .bg { fill: #111315; }
+    .panel { fill: #191c20; stroke: #5f6b7a; stroke-width: 1.5; }
+    .panel2 { fill: #1f242a; stroke: #5f6b7a; stroke-width: 1.5; }
+    .grid { stroke: #2c333b; stroke-width: 1; }
+    .stroke { stroke: #5f6b7a; stroke-width: 1.5; fill: none; }
+    .curve { stroke: #75b7ff; stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .curve2 { stroke: #9fe3bf; stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .text { fill: #e9edf2; font-family: Inter, Arial, sans-serif; }
+    .muted { fill: #9aa7b5; font-family: Inter, Arial, sans-serif; }
+    .label { font-size: 14px; font-weight: 600; }
+    .small { font-size: 12px; }
+    .title { font-size: 28px; font-weight: 700; }
+    .subtitle { font-size: 16px; font-weight: 500; }
+    .button { fill: #1f242a; stroke: #5f6b7a; stroke-width: 1.2; }
+    .buttonAccent { fill: #1a2b3e; stroke: #75b7ff; stroke-width: 1.2; }
+    .thumb { fill: #75b7ff; }
+</style>
+<rect class="bg" x="0" y="0" width="2920" height="2088"/>
+<g transform="translate(0,0)">
+
+
+    <rect class="bg" x="0" y="0" width="1440" height="1024"/>
+    <text class="text title" x="56" y="64">DrawnCurve / Utility Panel</text>
+    <text class="muted subtitle" x="56" y="92">Baseline desktop-like layout. Safe, reviewable, implementation-friendly.</text>
+    
+<rect class="panel" x="56" y="124" width="1328" height="844" rx="22"/>
+<rect class="panel2" x="84" y="156" width="1272" height="86" rx="18"/>
+<rect class="buttonAccent" x="108" y="180" width="112" height="38" rx="10"/>
+<text class="text label" x="144" y="204">Draw</text>
+<rect class="button" x="232" y="180" width="112" height="38" rx="10"/>
+<text class="text label" x="270" y="204">Erase</text>
+<rect class="button" x="356" y="180" width="112" height="38" rx="10"/>
+<text class="text label" x="397" y="204">Snap</text>
+<rect class="button" x="1220" y="180" width="96" height="38" rx="10"/>
+<text class="text label" x="1256" y="204">?</text>
+
+<rect class="panel2" x="84" y="266" width="1272" height="472" rx="18"/>
+<text class="muted small" x="108" y="296">CURVE DISPLAY / direct-touch drawing area</text>
+<line class="grid" x1="108" y1="320" x2="108" y2="704"/><line class="grid" x1="232" y1="320" x2="232" y2="704"/><line class="grid" x1="356" y1="320" x2="356" y2="704"/><line class="grid" x1="480" y1="320" x2="480" y2="704"/><line class="grid" x1="604" y1="320" x2="604" y2="704"/><line class="grid" x1="728" y1="320" x2="728" y2="704"/><line class="grid" x1="852" y1="320" x2="852" y2="704"/><line class="grid" x1="976" y1="320" x2="976" y2="704"/><line class="grid" x1="1100" y1="320" x2="1100" y2="704"/><line class="grid" x1="1224" y1="320" x2="1224" y2="704"/><line class="grid" x1="108" y1="320" x2="1332" y2="320"/><line class="grid" x1="108" y1="384" x2="1332" y2="384"/><line class="grid" x1="108" y1="448" x2="1332" y2="448"/><line class="grid" x1="108" y1="512" x2="1332" y2="512"/><line class="grid" x1="108" y1="576" x2="1332" y2="576"/><line class="grid" x1="108" y1="640" x2="1332" y2="640"/><line class="grid" x1="108" y1="704" x2="1332" y2="704"/>
+<path class="curve" d="M108,598 C208,520 290,410 372,430 C451,448 512,572 598,560 C680,548 741,366 842,360 C940,354 1024,476 1108,470 C1176,466 1248,398 1332,412"/>
+<line x1="108" y1="512" x2="1332" y2="512" stroke="#9fe3bf" stroke-width="1.2" stroke-dasharray="6 6"/>
+<circle class="thumb" cx="108" cy="598" r="4"/>
+<circle class="thumb" cx="1332" cy="412" r="4"/>
+
+<rect class="panel2" x="84" y="766" width="1272" height="170" rx="18"/>
+<text class="muted small" x="108" y="796">BOTTOM CONTROL STRIP / minimal palette while performing</text>
+
+<rect class="button" x="108" y="816" width="220" height="84" rx="10"/>
+<text class="text label" x="128" y="846">Rate</text>
+<line class="stroke" x1="128" y1="872" x2="308" y2="872"/>
+<circle class="thumb" cx="236" cy="872" r="10"/>
+<text class="muted small" x="128" y="892">0.25× — 4×</text>
+
+<rect class="button" x="348" y="816" width="220" height="84" rx="10"/>
+<text class="text label" x="368" y="846">Direction</text>
+<rect class="buttonAccent" x="368" y="858" width="56" height="28" rx="8"/>
+<text class="text small" x="385" y="876">Fwd</text>
+<rect class="button" x="432" y="858" width="56" height="28" rx="8"/>
+<text class="text small" x="444" y="876">Rev</text>
+<rect class="button" x="496" y="858" width="56" height="28" rx="8"/>
+<text class="text small" x="501" y="876">Ping</text>
+
+<rect class="button" x="588" y="816" width="320" height="84" rx="10"/>
+<text class="text label" x="608" y="846">Range</text>
+<line class="stroke" x1="618" y1="872" x2="868" y2="872"/>
+<circle class="thumb" cx="668" cy="872" r="10"/>
+<circle class="thumb" cx="828" cy="872" r="10"/>
+<text class="muted small" x="608" y="892">dual-thumb output window</text>
+
+<rect class="button" x="928" y="816" width="180" height="84" rx="10"/>
+<text class="text label" x="948" y="846">Smooth</text>
+<line class="stroke" x1="948" y1="872" x2="1088" y2="872"/>
+<circle class="thumb" cx="1008" cy="872" r="10"/>
+
+<rect class="button" x="1128" y="816" width="228" height="84" rx="10"/>
+<text class="text label" x="1148" y="846">Mode</text>
+<text class="muted small" x="1148" y="878">CC / Aft / PB / Note</text>
+</g><g transform="translate(1480,0)">
+
+
+    <rect class="bg" x="0" y="0" width="1440" height="1024"/>
+    <text class="text title" x="56" y="64">DrawnCurve / Circular Time</text>
+    <text class="muted subtitle" x="56" y="92">Performance-first. Gesture capture around a polar loop with minimal visible tooling.</text>
+    
+<rect class="panel" x="56" y="124" width="1328" height="844" rx="22"/>
+
+<rect class="panel2" x="88" y="156" width="260" height="742" rx="18"/>
+<text class="muted small" x="112" y="186">COMPACT STATUS COLUMN</text>
+<rect class="buttonAccent" x="112" y="212" width="96" height="36" rx="10"/><text class="text label" x="144" y="236">Play</text>
+<rect class="button" x="220" y="212" width="96" height="36" rx="10"/><text class="text label" x="250" y="236">Sync</text>
+
+<text class="text label" x="112" y="302">Rate</text>
+<line class="stroke" x1="112" y1="324" x2="312" y2="324"/><circle class="thumb" cx="226" cy="324" r="10"/>
+<text class="text label" x="112" y="386">Direction</text>
+<rect class="buttonAccent" x="112" y="400" width="64" height="30" rx="8"/><text class="text small" x="129" y="420">Fwd</text>
+<rect class="button" x="184" y="400" width="64" height="30" rx="8"/><text class="text small" x="201" y="420">Rev</text>
+<rect class="button" x="256" y="400" width="64" height="30" rx="8"/><text class="text small" x="264" y="420">Ping</text>
+
+<text class="text label" x="112" y="492">Range</text>
+<line class="stroke" x1="112" y1="514" x2="312" y2="514"/><circle class="thumb" cx="154" cy="514" r="9"/><circle class="thumb" cx="276" cy="514" r="9"/>
+<text class="text label" x="112" y="576">Smooth</text>
+<line class="stroke" x1="112" y1="598" x2="312" y2="598"/><circle class="thumb" cx="214" cy="598" r="10"/>
+<text class="text label" x="112" y="660">Mode</text>
+<text class="muted small" x="112" y="686">CC / Aft / PB / Note</text>
+
+<rect class="panel2" x="376" y="156" width="976" height="742" rx="18"/>
+<text class="muted small" x="404" y="186">MAIN LOOP SURFACE / direct touch on ring or full disc</text>
+
+<circle cx="864" cy="528" r="276" fill="none" stroke="#2c333b" stroke-width="1.5"/>
+<circle cx="864" cy="528" r="220" fill="none" stroke="#2c333b" stroke-width="1.5"/>
+<circle cx="864" cy="528" r="164" fill="none" stroke="#2c333b" stroke-width="1.5"/>
+<line class="grid" x1="864" y1="528" x2="1140.0" y2="528.0"/><line class="grid" x1="864" y1="528" x2="1103.0" y2="666.0"/><line class="grid" x1="864" y1="528" x2="1002.0" y2="767.0"/><line class="grid" x1="864" y1="528" x2="864.0" y2="804.0"/><line class="grid" x1="864" y1="528" x2="726.0" y2="767.0"/><line class="grid" x1="864" y1="528" x2="625.0" y2="666.0"/><line class="grid" x1="864" y1="528" x2="588.0" y2="528.0"/><line class="grid" x1="864" y1="528" x2="625.0" y2="390.0"/><line class="grid" x1="864" y1="528" x2="726.0" y2="289.0"/><line class="grid" x1="864" y1="528" x2="864.0" y2="252.0"/><line class="grid" x1="864" y1="528" x2="1002.0" y2="289.0"/><line class="grid" x1="864" y1="528" x2="1103.0" y2="390.0"/>
+<path class="curve" d="M1140,528 C1128,454 1087,388 1020,346 C936,292 835,288 760,332 C683,376 634,458 632,544 C630,626 675,704 748,750 C826,800 930,806 1012,768"/>
+<path class="curve2" d="M1112,528 A248 248 0 0 1 1040 704" stroke-dasharray="4 8"/>
+<circle class="thumb" cx="1112" cy="528" r="8"/>
+<text class="text label" x="836" y="532">loop</text>
+
+<rect class="button" x="1072" y="196" width="244" height="64" rx="12"/>
+<text class="text label" x="1094" y="224">Floating micro HUD</text>
+<text class="muted small" x="1094" y="246">hideable • no palette in the way</text>
+</g><g transform="translate(0,1064)">
+
+
+    <rect class="bg" x="0" y="0" width="1440" height="1024"/>
+    <text class="text title" x="56" y="64">DrawnCurve / Timeline Clip</text>
+    <text class="muted subtitle" x="56" y="92">Scalable lane-based view. Better for later multi-lane expansion than for immediate performance.</text>
+    
+<rect class="panel" x="56" y="124" width="1328" height="844" rx="22"/>
+
+<rect class="panel2" x="84" y="156" width="1272" height="88" rx="18"/>
+<rect class="buttonAccent" x="108" y="182" width="92" height="36" rx="10"/><text class="text label" x="136" y="206">Play</text>
+<rect class="button" x="212" y="182" width="92" height="36" rx="10"/><text class="text label" x="239" y="206">Loop</text>
+<rect class="button" x="316" y="182" width="118" height="36" rx="10"/><text class="text label" x="348" y="206">Length</text>
+<rect class="button" x="1160" y="182" width="160" height="36" rx="10"/><text class="text label" x="1212" y="206">Zoom</text>
+
+<rect class="panel2" x="84" y="268" width="1272" height="594" rx="18"/>
+<text class="muted small" x="108" y="296">LANE STACK / same curve engine per lane, mapping later</text>
+
+<rect class="panel" x="108" y="324" width="1224" height="150" rx="14"/>
+<text class="text label" x="128" y="350">Lane 1</text>
+<line class="grid" x1="128" y1="364" x2="128" y2="454"/><line class="grid" x1="128" y1="532" x2="128" y2="622"/><line class="grid" x1="128" y1="700" x2="128" y2="790"/><line class="grid" x1="228" y1="364" x2="228" y2="454"/><line class="grid" x1="228" y1="532" x2="228" y2="622"/><line class="grid" x1="228" y1="700" x2="228" y2="790"/><line class="grid" x1="328" y1="364" x2="328" y2="454"/><line class="grid" x1="328" y1="532" x2="328" y2="622"/><line class="grid" x1="328" y1="700" x2="328" y2="790"/><line class="grid" x1="428" y1="364" x2="428" y2="454"/><line class="grid" x1="428" y1="532" x2="428" y2="622"/><line class="grid" x1="428" y1="700" x2="428" y2="790"/><line class="grid" x1="528" y1="364" x2="528" y2="454"/><line class="grid" x1="528" y1="532" x2="528" y2="622"/><line class="grid" x1="528" y1="700" x2="528" y2="790"/><line class="grid" x1="628" y1="364" x2="628" y2="454"/><line class="grid" x1="628" y1="532" x2="628" y2="622"/><line class="grid" x1="628" y1="700" x2="628" y2="790"/><line class="grid" x1="728" y1="364" x2="728" y2="454"/><line class="grid" x1="728" y1="532" x2="728" y2="622"/><line class="grid" x1="728" y1="700" x2="728" y2="790"/><line class="grid" x1="828" y1="364" x2="828" y2="454"/><line class="grid" x1="828" y1="532" x2="828" y2="622"/><line class="grid" x1="828" y1="700" x2="828" y2="790"/><line class="grid" x1="928" y1="364" x2="928" y2="454"/><line class="grid" x1="928" y1="532" x2="928" y2="622"/><line class="grid" x1="928" y1="700" x2="928" y2="790"/><line class="grid" x1="1028" y1="364" x2="1028" y2="454"/><line class="grid" x1="1028" y1="532" x2="1028" y2="622"/><line class="grid" x1="1028" y1="700" x2="1028" y2="790"/><line class="grid" x1="1128" y1="364" x2="1128" y2="454"/><line class="grid" x1="1128" y1="532" x2="1128" y2="622"/><line class="grid" x1="1128" y1="700" x2="1128" y2="790"/><line class="grid" x1="1228" y1="364" x2="1228" y2="454"/><line class="grid" x1="1228" y1="532" x2="1228" y2="622"/><line class="grid" x1="1228" y1="700" x2="1228" y2="790"/><line class="grid" x1="128" y1="380" x2="1312" y2="380"/><line class="grid" x1="128" y1="548" x2="1312" y2="548"/><line class="grid" x1="128" y1="716" x2="1312" y2="716"/><line class="grid" x1="128" y1="402" x2="1312" y2="402"/><line class="grid" x1="128" y1="570" x2="1312" y2="570"/><line class="grid" x1="128" y1="738" x2="1312" y2="738"/><line class="grid" x1="128" y1="424" x2="1312" y2="424"/><line class="grid" x1="128" y1="592" x2="1312" y2="592"/><line class="grid" x1="128" y1="760" x2="1312" y2="760"/><line class="grid" x1="128" y1="446" x2="1312" y2="446"/><line class="grid" x1="128" y1="614" x2="1312" y2="614"/><line class="grid" x1="128" y1="782" x2="1312" y2="782"/>
+<path class="curve" d="M128,438 C224,420 274,388 354,392 C438,396 512,442 598,430 C710,414 756,362 850,354 C962,344 1050,414 1132,406 C1200,399 1264,374 1312,380"/>
+
+<rect class="panel" x="108" y="492" width="1224" height="150" rx="14"/>
+<text class="text label" x="128" y="518">Lane 2</text>
+<path class="curve2" d="M128,606 C198,560 276,560 364,582 C436,600 510,616 598,586 C668,562 724,514 806,518 C902,522 980,620 1086,612 C1172,606 1230,562 1312,548"/>
+
+<rect class="panel" x="108" y="660" width="1224" height="150" rx="14"/>
+<text class="text label" x="128" y="686">Lane 3</text>
+<path class="curve" d="M128,780 C212,770 288,726 378,726 C466,726 516,786 604,786 C704,786 748,716 852,716 C966,716 1042,780 1136,780 C1218,780 1262,748 1312,738"/>
+
+<rect class="panel2" x="84" y="884" width="1272" height="52" rx="14"/>
+<text class="muted small" x="108" y="916">Bottom strip reserved for later mapping / routing. Keep hidden in performance mode.</text>
+</g><g transform="translate(1480,1064)">
+
+
+    <rect class="bg" x="0" y="0" width="1440" height="1024"/>
+    <text class="text title" x="56" y="64">DrawnCurve / Scientific Plot</text>
+    <text class="muted subtitle" x="56" y="92">Precision-forward graphing view. Clear for review, debugging, and algorithmic discussion.</text>
+    
+<rect class="panel" x="56" y="124" width="1328" height="844" rx="22"/>
+
+<rect class="panel2" x="88" y="156" width="240" height="742" rx="18"/>
+<text class="muted small" x="112" y="186">LEFT SIDEBAR / compact, static controls</text>
+<text class="text label" x="112" y="246">Quantize</text>
+<rect class="buttonAccent" x="112" y="262" width="86" height="32" rx="8"/><text class="text small" x="133" y="283">On</text>
+<text class="text label" x="112" y="340">Smooth</text>
+<line class="stroke" x1="112" y1="360" x2="292" y2="360"/><circle class="thumb" cx="192" cy="360" r="10"/>
+<text class="text label" x="112" y="428">Range</text>
+<line class="stroke" x1="112" y1="448" x2="292" y2="448"/><circle class="thumb" cx="146" cy="448" r="9"/><circle class="thumb" cx="256" cy="448" r="9"/>
+<text class="text label" x="112" y="516">Grid</text>
+<text class="muted small" x="112" y="540">time × value</text>
+
+<rect class="panel2" x="356" y="156" width="996" height="742" rx="18"/>
+<text class="muted small" x="384" y="186">PLOT AREA / direct line drawing, optional point editing later</text>
+<text class="muted small" x="392" y="820">time →</text>
+<text class="muted small" x="374" y="242" transform="rotate(-90 374 242)">value ↑</text>
+<line class="grid" x1="420" y1="216" x2="420" y2="812"/><line class="grid" x1="510" y1="216" x2="510" y2="812"/><line class="grid" x1="600" y1="216" x2="600" y2="812"/><line class="grid" x1="690" y1="216" x2="690" y2="812"/><line class="grid" x1="780" y1="216" x2="780" y2="812"/><line class="grid" x1="870" y1="216" x2="870" y2="812"/><line class="grid" x1="960" y1="216" x2="960" y2="812"/><line class="grid" x1="1050" y1="216" x2="1050" y2="812"/><line class="grid" x1="1140" y1="216" x2="1140" y2="812"/><line class="grid" x1="1230" y1="216" x2="1230" y2="812"/><line class="grid" x1="420" y1="216" x2="1290" y2="216"/><line class="grid" x1="420" y1="290" x2="1290" y2="290"/><line class="grid" x1="420" y1="364" x2="1290" y2="364"/><line class="grid" x1="420" y1="438" x2="1290" y2="438"/><line class="grid" x1="420" y1="512" x2="1290" y2="512"/><line class="grid" x1="420" y1="586" x2="1290" y2="586"/><line class="grid" x1="420" y1="660" x2="1290" y2="660"/><line class="grid" x1="420" y1="734" x2="1290" y2="734"/><line class="grid" x1="420" y1="808" x2="1290" y2="808"/>
+<line x1="420" y1="812" x2="1290" y2="812" stroke="#e9edf2" stroke-width="1.5"/>
+<line x1="420" y1="812" x2="420" y2="216" stroke="#e9edf2" stroke-width="1.5"/>
+<path class="curve" d="M420,694 C504,652 558,484 646,468 C722,454 768,566 840,586 C926,610 978,530 1048,462 C1110,402 1188,346 1290,338"/>
+<circle class="thumb" cx="420" cy="694" r="5"/><circle class="thumb" cx="646" cy="468" r="5"/><circle class="thumb" cx="840" cy="586" r="5"/><circle class="thumb" cx="1048" cy="462" r="5"/><circle class="thumb" cx="1290" cy="338" r="5"/>
+
+<rect class="button" x="1052" y="196" width="264" height="70" rx="12"/>
+<text class="text label" x="1074" y="224">Inspection overlay</text>
+<text class="muted small" x="1074" y="248">sample count • smoothing • clipping</text>
+</g>
+</svg>

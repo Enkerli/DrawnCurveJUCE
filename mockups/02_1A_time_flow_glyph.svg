@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1024" viewBox="0 0 1440 1024">
+<style>
+.bg { fill: #0f1115; }
+.panel { fill: #171b22; stroke: #3b4657; stroke-width: 1.5; }
+.text { fill: #eef3fb; font-family: Inter, Arial, sans-serif; }
+.muted { fill: #97a6ba; font-family: Inter, Arial, sans-serif; }
+.title { font-size: 30px; font-weight: 700; }
+.label { font-size: 15px; font-weight: 600; }
+.small { font-size: 12px; }
+.stroke { stroke: #3b4657; stroke-width: 1.5; fill: none; }
+.line { stroke: #8fb8ff; stroke-width: 4; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.line2 { stroke: #b7ffd4; stroke-width: 4; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.button { fill: #1f2632; stroke: #3b4657; stroke-width: 1.2; }
+.buttonActive { fill: #22354d; stroke: #8fb8ff; stroke-width: 1.6; }
+.node { fill: #2a313d; stroke: #3b4657; stroke-width: 1.3; }
+.nodeActive { fill: #22354d; stroke: #8fb8ff; stroke-width: 2; }
+.ring { fill: none; stroke: #3b4657; stroke-width: 1.4; }
+</style>
+<rect class="bg" x="0" y="0" width="1440" height="1024"/>
+<text class="text title" x="56" y="68">DrawnCurve / Micro-design 1A</text>
+<text class="muted label" x="56" y="96">Playback direction concept</text>
+<rect class="panel" x="56" y="132" width="1328" height="836" rx="28"/>
+<text class="muted small" x="88" y="170">1A · TIME FLOW GLYPH — one animated control expressing traversal behavior</text>
+<rect class="panel" x="88" y="220" width="1264" height="360" rx="26"/>
+<text class="muted small" x="116" y="258">single control area</text>
+<circle cx="278" cy="404" r="132" class="button"/>
+<line class="stroke" x1="196" y1="404" x2="360" y2="404" stroke-width="4"/>
+<path class="line" d="M230,404 L310,404 M284,378 L310,404 L284,430"/>
+<text class="text label" x="244" y="560">Forward</text>
+<circle cx="720" cy="404" r="132" class="buttonActive"/>
+<line class="stroke" x1="638" y1="404" x2="802" y2="404" stroke-width="4"/>
+<path class="line" d="M672,404 L768,404 M698,378 L672,404 L698,430 M742,378 L768,404 L742,430"/>
+<text class="text label" x="686" y="560">Pingpong</text>
+<circle cx="1162" cy="404" r="132" class="button"/>
+<line class="stroke" x1="1080" y1="404" x2="1244" y2="404" stroke-width="4"/>
+<path class="line" d="M1210,404 L1130,404 M1156,378 L1130,404 L1156,430"/>
+<text class="text label" x="1128" y="560">Reverse</text>
+<rect class="panel" x="88" y="620" width="1264" height="316" rx="26"/>
+<text class="muted small" x="116" y="660">gesture hints</text>
+<rect class="button" x="136" y="706" width="320" height="140" rx="22"/>
+<text class="text label" x="168" y="738">Swipe right</text>
+<path class="line" d="M182,790 C230,790 272,790 332,790 M306,764 L332,790 L306,816"/>
+<rect class="button" x="560" y="706" width="320" height="140" rx="22"/>
+<text class="text label" x="592" y="738">Scribble back/forth</text>
+<path class="line" d="M608,792 C640,758 676,826 712,792 C748,758 784,826 820,792"/>
+<rect class="button" x="984" y="706" width="320" height="140" rx="22"/>
+<text class="text label" x="1016" y="738">Swipe left</text>
+<path class="line" d="M1122,790 C1062,790 1020,790 972,790 M998,764 L972,790 L998,816"/>
+</svg>

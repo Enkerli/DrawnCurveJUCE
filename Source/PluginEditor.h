@@ -143,31 +143,27 @@ private:
 
     struct SyncLF : public juce::LookAndFeel_V4
     {
+        // Draws two stacked labels: "FREE" and "SYNC".
+        // The button's text string is "FREE" or "SYNC"; the active one is
+        // drawn at full opacity, the inactive one at 35%.
         void drawButtonText (juce::Graphics& g, juce::TextButton& btn,
                              bool, bool) override
         {
-            const auto col = btn.findColour (juce::TextButton::textColourOffId);
-            const auto b   = btn.getLocalBounds().toFloat();
-            const float r  = juce::jmin (b.getWidth(), b.getHeight()) * 0.28f;
-            const float cx = b.getCentreX(), cy = b.getCentreY();
-            const float thk = r * 0.30f;
-            using M = juce::MathConstants<float>;
-            const float startA = -M::halfPi + M::pi * 0.28f;
-            const float endA   = startA + M::pi * 1.62f;
-            g.setColour (col);
-            juce::Path arc;
-            arc.addCentredArc (cx, cy, r, r, 0.0f, startA, endA, true);
-            g.strokePath (arc, juce::PathStrokeType (thk, juce::PathStrokeType::curved,
-                                                     juce::PathStrokeType::butt));
-            const float ax = cx + r * std::cos (endA), ay = cy + r * std::sin (endA);
-            const float tx = -std::sin (endA), ty = std::cos (endA);
-            const float nx =  std::cos (endA), ny = std::sin (endA);
-            const float as = thk * 1.5f;
-            juce::Path head;
-            head.addTriangle (ax + tx*as, ay + ty*as,
-                              ax - tx*as + nx*as, ay - ty*as + ny*as,
-                              ax - tx*as - nx*as, ay - ty*as - ny*as);
-            g.fillPath (head);
+            const juce::String active = btn.getButtonText();   // "FREE" or "SYNC"
+            const auto col   = btn.findColour (juce::TextButton::textColourOffId);
+            const auto b     = btn.getLocalBounds().toFloat();
+            const float half = b.getHeight() * 0.5f;
+            g.setFont (juce::Font (9.5f, juce::Font::bold));
+            for (int i = 0; i < 2; ++i)
+            {
+                const juce::String label = (i == 0) ? "FREE" : "SYNC";
+                const bool isActive = (label == active);
+                g.setColour (col.withAlpha (isActive ? 1.0f : 0.32f));
+                g.drawFittedText (label,
+                    juce::roundToInt (b.getX()), juce::roundToInt (b.getY() + half * i),
+                    juce::roundToInt (b.getWidth()), juce::roundToInt (half),
+                    juce::Justification::centred, 1);
+            }
         }
     };
     SyncLF _syncLF;
@@ -272,8 +268,9 @@ private:
     std::unique_ptr<Attach> smoothingAttach;
 
     // ── Routing matrix — one row per lane ─────────────────────────────────────
-    // Each row: target type (CC/PB/Note/Aft) | detail label | channel label | teach | mute
-    std::array<SegmentedControl, kMaxLanes> laneTargetCtrl;
+    // Each row: type button | detail label | channel label | teach | mute
+    // laneTypeBtn cycles through CC/PB/Note/Aft on click; right-click = popup menu.
+    std::array<juce::TextButton, kMaxLanes> laneTypeBtn;
     std::array<juce::Label,      kMaxLanes> laneDetailLabel;
     std::array<juce::Label,      kMaxLanes> laneChannelLabel;
     std::array<juce::TextButton, kMaxLanes> laneTeachBtn;

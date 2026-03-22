@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1024" viewBox="0 0 1440 1024">
+<style>
+    .bg { fill: #111315; }
+    .panel { fill: #191c20; stroke: #5f6b7a; stroke-width: 1.5; }
+    .panel2 { fill: #1f242a; stroke: #5f6b7a; stroke-width: 1.5; }
+    .grid { stroke: #2c333b; stroke-width: 1; }
+    .stroke { stroke: #5f6b7a; stroke-width: 1.5; fill: none; }
+    .curve { stroke: #75b7ff; stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .curve2 { stroke: #9fe3bf; stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .text { fill: #e9edf2; font-family: Inter, Arial, sans-serif; }
+    .muted { fill: #9aa7b5; font-family: Inter, Arial, sans-serif; }
+    .label { font-size: 14px; font-weight: 600; }
+    .small { font-size: 12px; }
+    .title { font-size: 28px; font-weight: 700; }
+    .subtitle { font-size: 16px; font-weight: 500; }
+    .button { fill: #1f242a; stroke: #5f6b7a; stroke-width: 1.2; }
+    .buttonAccent { fill: #1a2b3e; stroke: #75b7ff; stroke-width: 1.2; }
+    .thumb { fill: #75b7ff; }
+</style>
+
+    <rect class="bg" x="0" y="0" width="1440" height="1024"/>
+    <text class="text title" x="56" y="64">DrawnCurve / Utility Panel</text>
+    <text class="muted subtitle" x="56" y="92">Baseline desktop-like layout. Safe, reviewable, implementation-friendly.</text>
+    
+<rect class="panel" x="56" y="124" width="1328" height="844" rx="22"/>
+<rect class="panel2" x="84" y="156" width="1272" height="86" rx="18"/>
+<rect class="buttonAccent" x="108" y="180" width="112" height="38" rx="10"/>
+<text class="text label" x="144" y="204">Draw</text>
+<rect class="button" x="232" y="180" width="112" height="38" rx="10"/>
+<text class="text label" x="270" y="204">Erase</text>
+<rect class="button" x="356" y="180" width="112" height="38" rx="10"/>
+<text class="text label" x="397" y="204">Snap</text>
+<rect class="button" x="1220" y="180" width="96" height="38" rx="10"/>
+<text class="text label" x="1256" y="204">?</text>
+
+<rect class="panel2" x="84" y="266" width="1272" height="472" rx="18"/>
+<text class="muted small" x="108" y="296">CURVE DISPLAY / direct-touch drawing area</text>
+<line class="grid" x1="108" y1="320" x2="108" y2="704"/><line class="grid" x1="232" y1="320" x2="232" y2="704"/><line class="grid" x1="356" y1="320" x2="356" y2="704"/><line class="grid" x1="480" y1="320" x2="480" y2="704"/><line class="grid" x1="604" y1="320" x2="604" y2="704"/><line class="grid" x1="728" y1="320" x2="728" y2="704"/><line class="grid" x1="852" y1="320" x2="852" y2="704"/><line class="grid" x1="976" y1="320" x2="976" y2="704"/><line class="grid" x1="1100" y1="320" x2="1100" y2="704"/><line class="grid" x1="1224" y1="320" x2="1224" y2="704"/><line class="grid" x1="108" y1="320" x2="1332" y2="320"/><line class="grid" x1="108" y1="384" x2="1332" y2="384"/><line class="grid" x1="108" y1="448" x2="1332" y2="448"/><line class="grid" x1="108" y1="512" x2="1332" y2="512"/><line class="grid" x1="108" y1="576" x2="1332" y2="576"/><line class="grid" x1="108" y1="640" x2="1332" y2="640"/><line class="grid" x1="108" y1="704" x2="1332" y2="704"/>
+<path class="curve" d="M108,598 C208,520 290,410 372,430 C451,448 512,572 598,560 C680,548 741,366 842,360 C940,354 1024,476 1108,470 C1176,466 1248,398 1332,412"/>
+<line x1="108" y1="512" x2="1332" y2="512" stroke="#9fe3bf" stroke-width="1.2" stroke-dasharray="6 6"/>
+<circle class="thumb" cx="108" cy="598" r="4"/>
+<circle class="thumb" cx="1332" cy="412" r="4"/>
+
+<rect class="panel2" x="84" y="766" width="1272" height="170" rx="18"/>
+<text class="muted small" x="108" y="796">BOTTOM CONTROL STRIP / minimal palette while performing</text>
+
+<rect class="button" x="108" y="816" width="220" height="84" rx="10"/>
+<text class="text label" x="128" y="846">Rate</text>
+<line class="stroke" x1="128" y1="872" x2="308" y2="872"/>
+<circle class="thumb" cx="236" cy="872" r="10"/>
+<text class="muted small" x="128" y="892">0.25× — 4×</text>
+
+<rect class="button" x="348" y="816" width="220" height="84" rx="10"/>
+<text class="text label" x="368" y="846">Direction</text>
+<rect class="buttonAccent" x="368" y="858" width="56" height="28" rx="8"/>
+<text class="text small" x="385" y="876">Fwd</text>
+<rect class="button" x="432" y="858" width="56" height="28" rx="8"/>
+<text class="text small" x="444" y="876">Rev</text>
+<rect class="button" x="496" y="858" width="56" height="28" rx="8"/>
+<text class="text small" x="501" y="876">Ping</text>
+
+<rect class="button" x="588" y="816" width="320" height="84" rx="10"/>
+<text class="text label" x="608" y="846">Range</text>
+<line class="stroke" x1="618" y1="872" x2="868" y2="872"/>
+<circle class="thumb" cx="668" cy="872" r="10"/>
+<circle class="thumb" cx="828" cy="872" r="10"/>
+<text class="muted small" x="608" y="892">dual-thumb output window</text>
+
+<rect class="button" x="928" y="816" width="180" height="84" rx="10"/>
+<text class="text label" x="948" y="846">Smooth</text>
+<line class="stroke" x1="948" y1="872" x2="1088" y2="872"/>
+<circle class="thumb" cx="1008" cy="872" r="10"/>
+
+<rect class="button" x="1128" y="816" width="228" height="84" rx="10"/>
+<text class="text label" x="1148" y="846">Mode</text>
+<text class="muted small" x="1148" y="878">CC / Aft / PB / Note</text>
+</svg>
