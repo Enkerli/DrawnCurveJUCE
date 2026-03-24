@@ -53,26 +53,28 @@ juce_add_plugin(DrawnCurve
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     COPY_PLUGIN_AFTER_BUILD     FALSE
     MICROPHONE_PERMISSION_ENABLED FALSE
-    # Declare all four orientations for the Standalone host app.
-    # AUv3 extensions inherit orientation from the host; this key is for the
-    # standalone wrapper only, but JUCE merges it into all format plists.
-    PLIST_TO_MERGE "
-        <key>UISupportedInterfaceOrientations</key>
-        <array>
-            <string>UIInterfaceOrientationPortrait</string>
-            <string>UIInterfaceOrientationPortraitUpsideDown</string>
-            <string>UIInterfaceOrientationLandscapeLeft</string>
-            <string>UIInterfaceOrientationLandscapeRight</string>
-        </array>
-        <key>UISupportedInterfaceOrientations~ipad</key>
-        <array>
-            <string>UIInterfaceOrientationPortrait</string>
-            <string>UIInterfaceOrientationPortraitUpsideDown</string>
-            <string>UIInterfaceOrientationLandscapeLeft</string>
-            <string>UIInterfaceOrientationLandscapeRight</string>
-        </array>
-    "
+    # JUCE generates UISupportedInterfaceOrientations from these properties;
+    # using IPHONE_SCREEN_ORIENTATIONS / IPAD_SCREEN_ORIENTATIONS here takes
+    # precedence over the JUCE default (Portrait + Landscape only) and ensures
+    # PortraitUpsideDown is included.  PLIST_TO_MERGE for the same key was
+    # silently ignored because JUCE writes the key after the merge step.
+    IPHONE_SCREEN_ORIENTATIONS
+        UIInterfaceOrientationPortrait
+        UIInterfaceOrientationPortraitUpsideDown
+        UIInterfaceOrientationLandscapeLeft
+        UIInterfaceOrientationLandscapeRight
+    IPAD_SCREEN_ORIENTATIONS
+        UIInterfaceOrientationPortrait
+        UIInterfaceOrientationPortraitUpsideDown
+        UIInterfaceOrientationLandscapeLeft
+        UIInterfaceOrientationLandscapeRight
 )
+
+# Ensure all source files are interpreted as UTF-8 (for Unicode symbols)
+add_compile_options($<$<CXX_COMPILER_ID:GNU,Clang>:-finput-charset=UTF-8>)
+
+# For MSVC, ensure /source-charset:utf-8 is used (uncomment if needed):
+# add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/source-charset:utf-8>)
 
 # ── Symbol font binary data (currently disabled) ──────────────────────────────
 #
@@ -111,6 +113,11 @@ target_sources(DrawnCurve PRIVATE
     Source/PluginEditor.cpp
     Source/Engine/GestureEngine.cpp
     Source/Engine/GestureCaptureSession.cpp
+    # Header-only — listed so Xcode shows them in the project navigator
+    Source/ScaleData.h
+    Source/UI/PCSPreview.h
+    Source/UI/IconFactory.h
+    Source/ScaleLattice.h
 )
 
 target_include_directories(DrawnCurve PRIVATE Source/Engine Source Source/UI)
@@ -151,3 +158,4 @@ target_link_libraries(DrawnCurve
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags
 )
+

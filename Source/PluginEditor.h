@@ -5,7 +5,7 @@
  *
  * DrawnCurveEditor — JUCE AudioProcessorEditor for DrawnCurve AUv3.
  *
- * UI Layout (640 × 560 px)
+ * UI Layout (640 × 700 px)
  * ────────────────────────
  *   Utility bar (28 px)  : Theme toggle · Help button
  *   ┌──────────────────────────────────┬───────────────────────┐
@@ -23,14 +23,109 @@
  *   └──────────────────────────────────┴───────────────────────┘
  */
 
+#include <array>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "PluginProcessor.h"
 #include "SegmentedControl.h"
 #include "ScaleLattice.h"
 #include "UI/IconFactory.h"
+#include "ScaleData.h"
 
 // Colour palette struct — defined in PluginEditor.cpp.
 struct Theme;
+
+//==============================================================================
+/**
+ * App-level LookAndFeel — delivers SF Pro for every font request via
+ * getTypefaceForFont(), bypassing JUCE's internal name→CTFontDescriptor lookup
+ * which fails for SF Pro because its internal PostScript names (e.g.
+ * ".SFUI-Regular") are not registered as CTFont family names.
+ *
+ * Root fix: JUCE exposes Typeface::findSystemTypeface() which calls
+ * CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, …) — the only CoreText
+ * API that reliably yields the real SF Pro CTFontRef on every iOS version.
+ * Overriding getTypefaceForFont() to return this typeface ensures HarfBuzz
+ * is backed by the actual SF Pro font object with full Unicode coverage,
+ * including ♭ (U+266D), ♯ (U+266F), ♮ (U+266E) and every other glyph Apple
+ * ships in the system typeface.
+ *
+ * All widget-specific LookAndFeel subclasses inside DrawnCurveEditor inherit
+ * from this class so they all get the same font.
+ */
+class DrawnCurveLookAndFeel : public juce::LookAndFeel_V4
+{
+public:
+    DrawnCurveLookAndFeel()
+    {
+        // Expose the system typeface family name so any LookAndFeel-wide
+        // query for the default sans-serif also resolves to SF Pro.
+        if (auto tp = sfProTypeface())
+            setDefaultSansSerifTypefaceName (tp->getName());
+    }
+
+    /** Override: return the real SF Pro typeface for every font request.
+     *  Size / style adjustments are applied by JUCE on top of the typeface,
+     *  so this does not affect layout metrics or weight handling. */
+    juce::Typeface::Ptr getTypefaceForFont (const juce::Font& f) override
+    {
+        if (auto tp = sfProTypeface())
+            return tp;
+        return LookAndFeel_V4::getTypefaceForFont (f);
+    }
+
+    juce::Font getLabelFont (juce::Label&) override
+    {
+        return makeFont (12.0f);
+    }
+
+    juce::Font getTextButtonFont (juce::TextButton&, int buttonHeight) override
+    {
+        return makeFont (juce::jmin (14.0f, (float) buttonHeight * 0.55f));
+    }
+
+    juce::Font getComboBoxFont (juce::ComboBox&) override
+    {
+        return makeFont (13.0f);
+    }
+
+    /** Shared font factory — use this everywhere a juce::Font is needed.
+     *
+     *  Relies on DrawnCurveLookAndFeel being installed as the GLOBAL default
+     *  LookAndFeel (via LookAndFeel::setDefaultLookAndFeel in the editor
+     *  constructor).  That causes juce_getTypefaceForFont() to call our
+     *  getTypefaceForFont() override, which always returns sfProTypeface()
+     *  regardless of the name string here.
+     *
+     *  We deliberately do NOT call FontOptions::withTypeface() here:
+     *    • withTypeface embeds a size-0 CTFontRef (from findSystemTypeface())
+     *      directly into the Font object, bypassing JUCE's per-render sizing.
+     *      HarfBuzz then uses the size-0 metrics and mishandles multi-byte
+     *      Unicode glyphs — ♭ ♯ ♮ render as raw UTF-8 bytes ("â[?]®6" etc.).
+     *    • When JUCE's fallback shaper (findSuitableFontForText) later calls
+     *      withTypeface() on the same FontOptions — which now has non-empty
+     *      name and style set by the first withTypeface() call — it fires
+     *      jassert(x == nullptr || style.isEmpty()) in juce_FontOptions.h:126.
+     *
+     *  withFallbackEnabled is still set so CoreText substitutes any code points
+     *  SF Pro delegates to a secondary typeface (emoji, rare scripts, etc.). */
+    static juce::Font makeFont (float height)
+    {
+        return juce::Font (juce::FontOptions{}
+                               .withName (juce::Font::getDefaultSansSerifFontName())
+                               .withHeight (height)
+                               .withFallbackEnabled (true));
+    }
+
+private:
+    /** Process-lifetime SF Pro typeface used by getTypefaceForFont() to cover
+     *  fonts NOT created via makeFont() — JUCE's own widget internals, fonts
+     *  created by third-party code, SegmentedControl, ScaleLattice, etc. */
+    static const juce::Typeface::Ptr& sfProTypeface()
+    {
+        static const juce::Typeface::Ptr instance = juce::Typeface::findSystemTypeface();
+        return instance;
+    }
+};
 
 // ---------------------------------------------------------------------------
 // Lane colour/stroke identifiers — used by CurveDisplay and routing matrix.
@@ -77,6 +172,7 @@ public:
     void setLightMode   (bool light);
     void setFocusedLane (int lane)  { _focusedLane = lane; repaint(); }
     int  getFocusedLane()    const  { return _focusedLane; }
+    void setUseFlats    (bool b)    { _useFlats = b; repaint(); }
 
     void setXDivisions (int n) { _xDivisions = juce::jlimit (2, 8, n); repaint(); }
     void setYDivisions (int n) { _yDivisions = juce::jlimit (2, 8, n); repaint(); }
@@ -94,6 +190,7 @@ private:
     bool       _blinkOn         { true  };   ///< Toggled by _blinkCounter to drive pause blink
     int        _blinkCounter    { 0     };   ///< Incremented each timer tick; wraps at kBlinkPeriod
     static constexpr int kBlinkPeriod = 12; ///< Timer ticks per blink half-cycle (~1.25 Hz at 30 Hz)
+    bool       _useFlats        { false };   ///< Mirror of editor flag; controls note name rendering
     juce::Path capturePath;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CurveDisplay)
@@ -131,14 +228,15 @@ public:
 private:
     // ── Custom LookAndFeels ───────────────────────────────────────────────────
 
-    struct SymbolLF : public juce::LookAndFeel_V4
+    struct SymbolLF : public DrawnCurveLookAndFeel
     {
         void drawButtonText (juce::Graphics& g, juce::TextButton& btn,
                              bool, bool) override
         {
-            const auto b   = btn.getLocalBounds().toFloat().reduced (3.0f, 2.0f);
+            const auto b = btn.getLocalBounds().toFloat().reduced (3.0f, 2.0f);
+            if (b.isEmpty()) return;    // guard: tiny button → skip to avoid assertion
             g.setColour (btn.findColour (juce::TextButton::textColourOffId));
-            g.setFont (juce::Font (juce::FontOptions{}.withHeight (12.0f)));
+            g.setFont (DrawnCurveLookAndFeel::makeFont (12.0f));  // fallback chain included
             g.drawFittedText (btn.getButtonText(), b.toNearestInt(),
                               juce::Justification::centred, 1);
         }
@@ -148,7 +246,7 @@ private:
     /// LookAndFeel that draws a dcui icon instead of text — applied to
     /// TextButton arrays (mute, teach) that cannot be changed to IconButton
     /// without structural changes.
-    struct IconDrawLF : public juce::LookAndFeel_V4
+    struct IconDrawLF : public DrawnCurveLookAndFeel
     {
         dcui::IconType iconType { dcui::IconType::mute };
 
@@ -171,50 +269,14 @@ private:
                                            : juce::TextButton::textColourOffId);
             if (isHover) col = col.brighter (0.18f);
             const auto iconBounds = btn.getLocalBounds().toFloat().reduced (5.0f, 5.0f);
+            if (iconBounds.isEmpty()) return;   // guard: tiny button → skip
             dcui::IconFactory::drawIcon (g, iconType, iconBounds, col);
         }
     };
     IconDrawLF _muteDrawLF;
     IconDrawLF _teachDrawLF;
 
-    struct ScaleActionLF : public juce::LookAndFeel_V4
-    {
-        void drawButtonText (juce::Graphics& g, juce::TextButton& btn,
-                             bool, bool) override
-        {
-            const auto  col  = btn.findColour (juce::TextButton::textColourOffId);
-            const auto  b    = btn.getLocalBounds().toFloat().reduced (4.0f, 5.0f);
-            const float r    = juce::jmin (b.getWidth(), b.getHeight()) * 0.38f;
-            const float cx   = b.getCentreX(), cy = b.getCentreY();
-            const auto  text = btn.getButtonText();
-            g.setColour (col);
-            if (text == "All")
-                g.fillEllipse (cx-r, cy-r, r*2.0f, r*2.0f);
-            else if (text == "None")
-                g.drawEllipse (cx-r, cy-r, r*2.0f, r*2.0f, 1.5f);
-            else if (text == "Inv")
-            {
-                g.drawEllipse (cx-r, cy-r, r*2.0f, r*2.0f, 1.5f);
-                juce::Path half;
-                half.addPieSegment (cx-r, cy-r, r*2.0f, r*2.0f,
-                                    -juce::MathConstants<float>::halfPi,
-                                     juce::MathConstants<float>::halfPi, 0.0f);
-                g.fillPath (half);
-            }
-            else if (text == "Root")
-            {
-                const float d = r * 0.82f;
-                juce::Path dia;
-                dia.startNewSubPath (cx, cy-d); dia.lineTo (cx+d, cy);
-                dia.lineTo (cx, cy+d);          dia.lineTo (cx-d, cy);
-                dia.closeSubPath();
-                g.fillPath (dia);
-            }
-        }
-    };
-    ScaleActionLF _scaleActionLF;
-
-    struct DensityLF : public juce::LookAndFeel_V4
+    struct DensityLF : public DrawnCurveLookAndFeel
     {
         void drawButtonText (juce::Graphics& g, juce::TextButton& btn,
                              bool, bool) override
@@ -224,6 +286,7 @@ private:
             const bool  isDense = text.endsWithChar   ('+');
             const auto  col     = btn.findColour (juce::TextButton::textColourOffId);
             const auto  b       = btn.getLocalBounds().toFloat().reduced (4.0f, 5.0f);
+            if (b.isEmpty()) return;    // guard: avoid assertion with negative rect
             const int   n       = isDense ? 5 : 3;
             g.setColour (col);
             for (int i = 0; i < n; ++i)
@@ -237,6 +300,11 @@ private:
         }
     };
     DensityLF _densityLF;
+
+    /// App-level LookAndFeel — set on the editor so all child components that
+    /// don't have their own LF inherit it.  Must be declared before any
+    /// component that might reference it during construction.
+    DrawnCurveLookAndFeel _appLF;
 
     // ── Core references ───────────────────────────────────────────────────────
     DrawnCurveProcessor& proc;
@@ -291,25 +359,152 @@ private:
     /// One-line detail text below the matrix rows: e.g. "CC 74 · Ch 1"
     juce::Label mappingDetailLabel;
 
-    // ── Notes editor (visible in Note mode for focused lane) ──────────────────
-    static constexpr int kNumScalePresets = 8;
-    std::array<juce::TextButton, kNumScalePresets> scalePresetBtns;
-    juce::Label scaleLabel { {}, "Scale" };
+    // ── Notes editor — family browser (visible in Note mode) ─────────────────
+
+    // Family tab bar — one button per dcScale family.
+    std::array<juce::TextButton, dcScale::kNumFamilies> familyBtns;
+
+    // Subfamily chips — one per mode in the active family.
+    // SubfamilyLF renders the mode name + a miniature 5+7 two-row lattice into
+    // each TextButton using a custom drawButtonText.
+    static constexpr int kMaxModes = 11;   // Chordal is the largest family (11 entries)
+
+    struct SubfamilyLF : public DrawnCurveLookAndFeel
+    {
+        uint16_t     mask   { 0xAD5 };
+        juce::Colour colOn  { 0xffC9D6E3 };
+        juce::Colour colOff { 0xff2A3340 };
+
+        void drawButtonText (juce::Graphics& g, juce::TextButton& btn,
+                             bool /*isHover*/, bool /*isDown*/) override
+        {
+            const auto b = btn.getLocalBounds().toFloat().reduced (2.0f, 2.0f);
+            if (b.isEmpty()) return;
+
+            // ── Name (top ~60 %) ─────────────────────────────────────────
+            const float dotsH    = juce::jmax (14.0f, b.getHeight() * 0.40f);
+            const auto  nameRect = b.withTrimmedBottom (dotsH + 2.0f);
+            const auto  dotsRect = b.withTrimmedTop    (b.getHeight() - dotsH);
+
+            g.setColour (btn.findColour (juce::TextButton::textColourOffId));
+            g.setFont (DrawnCurveLookAndFeel::makeFont (
+                juce::jmin (11.0f, nameRect.getHeight() * 0.72f)));
+            g.drawFittedText (btn.getButtonText(), nameRect.toNearestInt(),
+                              juce::Justification::centred, 2);
+
+            // ── Miniature 5+7 lattice (bottom ~40 %) ─────────────────────
+            // Matches the full ScaleLattice geometry exactly:
+            //   Bottom row: C D E F G A B   (7 naturals)
+            //   Top row:  C♯ D♯  F♯ G♯ A♯  (5 chromatics)
+            //   C/C♯/D and every adjacent triple form equilateral triangles.
+            //
+            // Geometry constraints (same formulae as ScaleLattice::buildLayout):
+            //   rFromW: 6 natSteps (= 15r) + 2 edge radii (2r) + 2px margin → (dw-2)/17
+            //   rFromH: two rows of circles + equilateral row-sep fit in dh
+            //           → (dh-2) / (2 + 2.5*√3/2)
+            static constexpr float kSqrt3  = 1.7320508f;
+            static constexpr int   kNatPC[7] = { 0, 2, 4, 5, 7, 9, 11 };
+            static constexpr int   kChrPC[5] = { 1, 3, 6, 8, 10 };
+            static constexpr int   kChrL[5]  = { 0, 1, 3, 4, 5 };
+            static constexpr int   kChrR[5]  = { 1, 2, 4, 5, 6 };
+
+            const float dw = dotsRect.getWidth();
+            const float dh = dotsRect.getHeight();
+
+            const float rFromW  = (dw - 2.0f) / 17.0f;
+            const float rFromH  = (dh - 2.0f) / (2.0f + 2.5f * kSqrt3 * 0.5f);
+            const float r       = juce::jmax (1.0f, juce::jmin (rFromW, rFromH));
+            const float natStep = 2.5f * r;
+            const float rowSep  = natStep * kSqrt3 * 0.5f;
+
+            // Centre the 7 naturals in the available width.
+            const float margin = (dw - 6.0f * natStep) * 0.5f;
+            float natX[7];
+            for (int i = 0; i < 7; ++i)
+                natX[i] = dotsRect.getX() + margin + static_cast<float>(i) * natStep;
+
+            const float midY = dotsRect.getCentreY();
+            const float natY = midY + rowSep * 0.5f;
+            const float chrY = midY - rowSep * 0.5f;
+
+            // Chip background colour — used as inactive-dot fill so they read like
+            // the full lattice's "empty" nodes (filled circle, tinted border).
+            const juce::Colour chipBg = btn.findColour (juce::TextButton::buttonColourId);
+
+            auto drawDot = [&] (float cx, float cy, bool on)
+            {
+                const juce::Rectangle<float> circ (cx - r, cy - r, r * 2.0f, r * 2.0f);
+                const float borderW = juce::jmax (0.6f, r * 0.18f);
+                if (on)
+                {
+                    g.setColour (colOn);
+                    g.fillEllipse (circ);
+                    g.setColour (colOn.darker (0.25f));
+                    g.drawEllipse (circ, borderW);
+                }
+                else
+                {
+                    // Filled like inactive nodes in the full lattice: chip-bg fill + tinted border.
+                    g.setColour (chipBg.brighter (0.08f));
+                    g.fillEllipse (circ);
+                    g.setColour (colOff);
+                    g.drawEllipse (circ, borderW);
+                }
+            };
+
+            for (int i = 0; i < 7; ++i)
+                drawDot (natX[i], natY, ((mask >> (11 - kNatPC[i])) & 1) != 0);
+
+            for (int j = 0; j < 5; ++j)
+            {
+                const float cx = (natX[kChrL[j]] + natX[kChrR[j]]) * 0.5f;
+                drawDot (cx, chrY, ((mask >> (11 - kChrPC[j])) & 1) != 0);
+            }
+        }
+    };
+
+    std::array<SubfamilyLF,      kMaxModes> _subfamilyLF;
+    std::array<juce::TextButton, kMaxModes> subfamilyBtns;
+
+    // Transformation / action row buttons
+    juce::TextButton scaleNotationBtn;  ///< ♯/♭ toggle — switches chromatic note label style
+    juce::TextButton scaleRotateBtn;    ///< ↻  transpose PCS + root up by 1 semitone
+    juce::TextButton scaleAllBtn;       ///< ●  all 12 notes active
+    juce::TextButton scaleNoneBtn;      ///< ○  root only
+    juce::TextButton scaleInvBtn;       ///< ◑  complement (toggle membership)
+    juce::TextButton scaleRootBtn;      ///< ◆  enter root-select mode
+
+    // Status labels (mode name + decimal bitmask)
+    juce::Label scaleLabel { {}, "Scale" };   ///< Dynamic mode name or "Custom"
+    juce::Label maskLabel;                     ///< Decimal bitmask display (read-only)
 
     ScaleLattice scaleLattice;
 
-    juce::TextButton scaleAllBtn  { "All"  };
-    juce::TextButton scaleNoneBtn { "None" };
-    juce::TextButton scaleInvBtn  { "Inv"  };
-    juce::TextButton scaleRootBtn { "Root" };
-
-    juce::Label maskLabel;
-
     static constexpr int kScaleLatticeH = 100;
+
+    // Recognition cache — updated by updateScaleStatus(), read by updateScalePresetButtons().
+    int _recognisedFamily { -1 };
+    int _recognisedMode   { -1 };
+
+    // Active browsed family (tab highlight + chip row) — set by setActiveFamily().
+    // kRecentFamilyIdx is a virtual sentinel meaning "show _recentMasks".
+    static constexpr int kRecentFamilyIdx = dcScale::kNumFamilies;   // = 8
+    static constexpr int kMaxRecentMasks  = 5;
+    int _activeFamilyIdx   { 0 };
+    int _numSubfamilyChips { 0 };
+
+    // Recent-history tab: most recently applied relative masks, newest first.
+    juce::TextButton      recentFamilyBtn;     ///< "Recent" tab (9th in family bar)
+    std::vector<uint16_t> _recentMasks;        ///< relative masks, max kMaxRecentMasks
 
     // ── Editor state ──────────────────────────────────────────────────────────
     bool _lightMode    { true  };
+    bool _useFlats     { false };   ///< Chromatic notation: false = ♯ names, true = ♭ names
     int  _focusedLane  { 0     };   ///< Which lane's shaping / notes are shown
+
+    /// Last mode index selected per family (index 0..kNumFamilies-1).
+    /// Persists across tab switches so re-visiting a family restores the last mode used.
+    std::array<int, dcScale::kNumFamilies> _lastModePerFamily {};   // default = 0 (first mode)
 
     // Section background rects (set in resized, read in paint).
     juce::Rectangle<int> _secTransport;
@@ -335,10 +530,12 @@ private:
     void updateLaneRow      (int lane);   ///< Refresh target/detail/channel display for one lane
     void updateAllLaneRows  ();           ///< Refresh all three lane rows
     void updateScaleVisibility();
-    void updateScalePresetButtons();
+    void setActiveFamily (int familyIdx);     ///< Populate subfamily chips for the chosen family.
+    void addRecentMask   (uint16_t relMask);  ///< Push rel mask to recent history; refresh if tab active.
+    void updateScalePresetButtons();          ///< Colour-only refresh (uses cached recognition).
+    void updateScaleStatus();                 ///< Full refresh: recognition → cache → labels → colours.
     void updateRangeSlider();
     void updateRangeLabel();
-    void updateMaskLabel();
 
     void parameterChanged (const juce::String& paramID, float newValue) override;
 

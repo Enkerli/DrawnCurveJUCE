@@ -57,6 +57,11 @@ public:
     void setRootSelectMode (bool on) { _rootSelectMode = on; repaint(); }
     bool isRootSelectMode  () const  { return _rootSelectMode; }
 
+    // ── Notation ─────────────────────────────────────────────────────────────
+    /// false = sharp names (C♯ D♯ F♯ G♯ A♯), true = flat names (D♭ E♭ G♭ A♭ B♭).
+    void setUseFlats (bool b) { _useFlats = b; repaint(); }
+    bool getUseFlats () const { return _useFlats; }
+
     // ── Colours — assign from applyTheme() ───────────────────────────────────
 
     juce::Colour colBg           { 0xffFFFFFF };  ///< Inactive node fill
@@ -99,9 +104,10 @@ public:
 private:
     struct Node
     {
-        int         pc;    ///< Pitch class 0–11
-        float       cx, cy, r;
-        const char* name;
+        int   pc;    ///< Pitch class 0–11
+        float cx, cy, r;
+        int   idx;   ///< 0–6 for naturals, 0–4 for chromatics
+        bool  nat;   ///< true = natural note, false = chromatic
     };
 
     uint16_t _mask           { 0xFFF };
@@ -109,6 +115,7 @@ private:
     int      _pressed        { -1 };
     bool     _longFired      { false };
     bool     _rootSelectMode { false };
+    bool     _useFlats       { false };
 
     std::vector<Node> _nodes;   ///< [0..6] = naturals, [7..11] = chromatics
 
@@ -166,29 +173,25 @@ inline void ScaleLattice::buildLayout()
     // ── Node data ─────────────────────────────────────────────────────────────
 
     // Natural notes (bottom row)
-    static const int         kNatPC  [7] = {  0,  2,  4,  5,  7,  9, 11 };
-    static const char* const kNatName[7] = { "C","D","E","F","G","A","B" };
-
-    // Chromatic notes (top row) — all sharps
-    static const int         kChrPC   [5] = {  1,  3,  6,  8, 10 };
-    static const char* const kChrName [5] = { "C#","D#","F#","G#","A#" };
-    // Indices of the flanking naturals in the array above
-    static const int         kChrLeft [5] = { 0, 1, 3, 4, 5 };
-    static const int         kChrRight[5] = { 1, 2, 4, 5, 6 };
+    static const int kNatPC   [7] = {  0,  2,  4,  5,  7,  9, 11 };
+    // Chromatic notes (top row)
+    static const int kChrPC   [5] = {  1,  3,  6,  8, 10 };
+    static const int kChrLeft [5] = { 0, 1, 3, 4, 5 };
+    static const int kChrRight[5] = { 1, 2, 4, 5, 6 };
 
     // Naturals first (rendered below, lose hit tests to overlapping chromatics)
     float natX[7] = {};
     for (int i = 0; i < 7; ++i)
     {
         natX[i] = margin + static_cast<float>(i) * natStep;
-        _nodes.push_back ({ kNatPC[i], natX[i], natY, r, kNatName[i] });
+        _nodes.push_back ({ kNatPC[i], natX[i], natY, r, i, true });
     }
 
     // Chromatics last (rendered on top, win hit tests)
     for (int j = 0; j < 5; ++j)
     {
         const float cx = (natX[kChrLeft[j]] + natX[kChrRight[j]]) * 0.5f;
-        _nodes.push_back ({ kChrPC[j], cx, chrY, r, kChrName[j] });
+        _nodes.push_back ({ kChrPC[j], cx, chrY, r, j, false });
     }
 }
 
@@ -212,7 +215,9 @@ inline void ScaleLattice::mouseDown (const juce::MouseEvent& e)
 {
     _pressed   = nodeAt (e.position.x, e.position.y);
     _longFired = false;
-    if (_pressed >= 0)
+    // In root-select mode (◆ button active), any short tap sets the root —
+    // suppress the long-press timer to avoid the two paths firing at once.
+    if (_pressed >= 0 && !_rootSelectMode)
         startTimer (400);
 }
 
@@ -258,6 +263,12 @@ inline void ScaleLattice::paint (juce::Graphics& g)
 {
     if (_nodes.empty()) return;
 
+    // ── Note name tables ──────────────────────────────────────────────────────
+    // Natural names are ASCII; chromatic names use charToString for ♯/♭ (U+266F/U+266D)
+    // so they go through JUCE's internal Unicode storage, not the ASCII String ctor.
+    static const char* const kNatName[7] = { "C","D","E","F","G","A","B" };
+    // Chromatic labels constructed at call time from the toggle state (see below).
+
     // Root-select mode: amber border hints that the next tap sets the root.
     if (_rootSelectMode)
     {
@@ -267,11 +278,18 @@ inline void ScaleLattice::paint (juce::Graphics& g)
 
     static constexpr float kRingOvhg = 4.0f;
 
+    // Sharp: C♯ D♯ F♯ G♯ A♯   Flat: D♭ E♭ G♭ A♭ B♭
+    static const char  kChrSharpRoot[5] = { 'C','D','F','G','A' };
+    static const char  kChrFlatRoot [5] = { 'D','E','G','A','B' };
+    const juce::juce_wchar kAccSharp = 0x266F;   // ♯
+    const juce::juce_wchar kAccFlat  = 0x266D;   // ♭
+
     for (const auto& n : _nodes)
     {
         // Bitmask convention: bit (11 - pc) = pitch class pc active.
         const bool active = ((_mask >> (11 - n.pc)) & 1) != 0;
         const bool isRoot = (n.pc == _root);
+        const bool isNat  = n.nat;
         const juce::Rectangle<float> circ (n.cx - n.r, n.cy - n.r,
                                             n.r * 2.0f, n.r * 2.0f);
 
@@ -314,6 +332,19 @@ inline void ScaleLattice::paint (juce::Graphics& g)
         g.setColour (textCol);
         const float fontSize = juce::jmax (9.0f, n.r * 0.62f);
         g.setFont (juce::Font (juce::FontOptions{}.withHeight (fontSize).withStyle ("Bold")));
-        g.drawFittedText (n.name, circ.toNearestInt(), juce::Justification::centred, 1);
+
+        juce::String label;
+        if (isNat)
+        {
+            label = juce::String (kNatName[n.idx]);
+        }
+        else
+        {
+            const int ci = n.idx;   // 0–4 chromatic index
+            const char rootChar = _useFlats ? kChrFlatRoot[ci] : kChrSharpRoot[ci];
+            label = juce::String::charToString (static_cast<juce::juce_wchar> (rootChar))
+                  + juce::String::charToString (_useFlats ? kAccFlat : kAccSharp);
+        }
+        g.drawFittedText (label, circ.toNearestInt(), juce::Justification::centred, 1);
     }
 }

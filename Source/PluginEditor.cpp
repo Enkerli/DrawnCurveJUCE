@@ -56,7 +56,7 @@ static const Theme kLight
 namespace Layout
 {
     static constexpr int editorW  = 640;
-    static constexpr int editorH  = 560;
+    static constexpr int editorH  = 700;
     static constexpr int pad      = 6;
     static constexpr int colGap   = 8;
     static constexpr int rightColW = 244;
@@ -70,7 +70,10 @@ namespace Layout
     // Left column
     static constexpr int yStepperW  = 28;
     static constexpr int xStepperH  = 28;
-    static constexpr int scaleRowH  = 28;
+    // Note editor — family browser strip heights
+    static constexpr int kFamilyBarH    = 30;   // family tab row
+    static constexpr int kSubfamilyRowH = 68;   // mode-chip row (name + dot preview)
+    static constexpr int kActionRowH    = 28;   // ↻ ● ○ ◑ ◆ + status labels
 
     static constexpr int paramLabelH  = 14;
     static constexpr int paramSliderH = 30;
@@ -342,9 +345,11 @@ void CurveDisplay::paint (juce::Graphics& g)
         const float speed  = proc.getEffectiveSpeedRatio();
         const float dur    = (recDur > 0.0f) ? recDur / std::max (speed, 0.001f) : 0.0f;
 
-        static const char* kNoteNames[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
-        auto midiNoteName = [] (int note) -> juce::String {
-            return juce::String (kNoteNames[note % 12]) + juce::String (note / 12 - 1);
+        static const char* kNoteNamesSharp[] = { "C","C\u266f","D","D\u266f","E","F","F\u266f","G","G\u266f","A","A\u266f","B" };
+        static const char* kNoteNamesFlat [] = { "C","D\u266d","D","E\u266d","E","F","G\u266d","G","A\u266d","A","B\u266d","B" };
+        auto midiNoteName = [&] (int note) -> juce::String {
+            const auto* names = _useFlats ? kNoteNamesFlat : kNoteNamesSharp;
+            return juce::String::fromUTF8 (names[note % 12]) + juce::String (note / 12 - 1);
         };
 
         const bool isNote = (msgType == MessageType::Note);
@@ -583,6 +588,20 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
       proc (p),
       curveDisplay (p)
 {
+    // Set _appLF as BOTH the component LookAndFeel and the global default.
+    //
+    // Why both?
+    //   • setLookAndFeel(&_appLF)  → widgets that call LookAndFeel virtual methods
+    //     (drawButtonText, getLabelFont, …) use _appLF.
+    //   • setDefaultLookAndFeel(&_appLF) → direct g.setFont() calls inside custom
+    //     paint/drawButtonText overrides resolve the typeface through
+    //     juce_getTypefaceForFont, which is wired to
+    //     LookAndFeel::getDefaultLookAndFeel().getTypefaceForFont().  Without this
+    //     second line, those calls go through JUCE's stock LookAndFeel_V4 which maps
+    //     the default sans-serif to "Helvetica" on iOS — a font that lacks ♭ ♯ ♮.
+    juce::LookAndFeel::setDefaultLookAndFeel (&_appLF);
+    setLookAndFeel (&_appLF);
+
     setSize (Layout::editorW, Layout::editorH);
     setWantsKeyboardFocus (true);
 
@@ -611,10 +630,21 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     panicButton.onClick = [this] { proc.sendPanic(); };
 
     addAndMakeVisible (themeButton);
-    themeButton.onClick = [this]
+    // ☾ = go to dark mode  ☀ = go to light mode (symbol shows destination)
+    //
+    // SF Pro (installed as primary typeface via DrawnCurveLookAndFeel) carries
+    // text-form glyphs for both U+263E ☾ and U+2600 ☀ in its Miscellaneous
+    // Symbols block coverage.  With SF Pro as the primary typeface, CoreText
+    // uses SF Pro's glyph directly without falling back to Apple Color Emoji.
+    // U+FE0E (VARIATION SELECTOR-15) is NOT appended here: JUCE renders it as
+    // a visible [?] box rather than skipping it as a zero-width modifier.
+    const juce::String kMoon = juce::String::charToString (0x263E);   // ☾
+    const juce::String kSun  = juce::String::charToString (0x263C);   // ☼ (WHITE SUN WITH RAYS — text glyph in SF Pro, unlike U+2600 which routes to emoji)
+    themeButton.setButtonText (kMoon);   // start in light mode → offer dark
+    themeButton.onClick = [this, kMoon, kSun]
     {
         _lightMode = ! _lightMode;
-        themeButton.setButtonText (_lightMode ? "Dark" : "Light");
+        themeButton.setButtonText (_lightMode ? kMoon : kSun);
         curveDisplay.setLightMode (_lightMode);
         helpOverlay.setLightMode (_lightMode);
         applyTheme();
@@ -769,24 +799,27 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     rangeSlider.onValueChange = [this]
     {
         const int L = _focusedLane;
-        if (auto* p = dynamic_cast<juce::AudioParameterFloat*> (
-                          proc.apvts.getParameter (laneParam (L, "minOutput"))))
-            *p = static_cast<float> (rangeSlider.getMinValue());
-        if (auto* p2 = dynamic_cast<juce::AudioParameterFloat*> (
-                          proc.apvts.getParameter (laneParam (L, "maxOutput"))))
-            *p2 = static_cast<float> (rangeSlider.getMaxValue());
+        if (auto* pMin = dynamic_cast<juce::AudioParameterFloat*> (
+                             proc.apvts.getParameter (laneParam (L, "minOutput"))))
+            *pMin = static_cast<float> (rangeSlider.getMinValue());
+        if (auto* pMax = dynamic_cast<juce::AudioParameterFloat*> (
+                             proc.apvts.getParameter (laneParam (L, "maxOutput"))))
+            *pMax = static_cast<float> (rangeSlider.getMaxValue());
         updateRangeLabel();
     };
 
     // Phase offset slider (per focused lane, like smoothingSlider)
-    setupSlider (phaseOffsetSlider, phaseOffsetLabel, "Phase");
+    setupSlider (phaseOffsetSlider, phaseOffsetLabel,
+                 juce::String::charToString (juce::juce_wchar (0x03C6)) + " Phase");  // φ Phase
     phaseOffsetSlider.setTextValueSuffix ("%");
     phaseOffsetSlider.setNumDecimalPlacesToDisplay (0);
 
     // One-shot toggle (inline with lane focus selector in shaping panel)
     addAndMakeVisible (oneShotBtn);
     oneShotBtn.setClickingTogglesState (false);   // we manage state manually via bindShapingToLane
-    oneShotBtn.setButtonText (u8"\u221E");         // ∞ = loop (default)
+    // Use charToString to build the infinity glyph from its codepoint — avoids
+    // any source-file encoding ambiguity with u8 string literals.
+    oneShotBtn.setButtonText (juce::String::charToString (juce::juce_wchar (0x221E)));  // ∞ = loop
 
     // Bind shaping to lane 0 at startup.
     bindShapingToLane (0);
@@ -800,7 +833,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         const int curType = static_cast<int> (
             proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load());
         // initial text set via updateLaneRow below; just pre-populate here
-        { static auto s = [] (int t) -> juce::String { switch(t){case 0:return "CC";case 1:return "At";case 2:return "PB";case 3:return "N";}return "?"; };
+        { const juce::String kNote = juce::String::charToString (juce::juce_wchar (0x2669));  // ♩
+          auto s = [&kNote] (int t) -> juce::String { switch(t){case 0:return "CC";case 1:return "AT";case 2:return "PB";case 3:return kNote;}return "?"; };
           laneTypeBtn[static_cast<size_t>(L)].setButtonText (s (curType)); }
         laneTypeBtn[static_cast<size_t>(L)].setLookAndFeel (&_symbolLF);
         laneTypeBtn[static_cast<size_t>(L)].onClick = [this, L]
@@ -979,27 +1013,99 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 
     updateAllLaneRows();
 
-    // ── Scale quantization controls ───────────────────────────────────────────
-    static const std::array<const char*, 8> kScaleNames
-        { "Chrom", "Major", "Minor", "Dorian", "Penta+", "Penta-", "Blues", "Custom" };
+    // ── Scale quantization controls — family browser ──────────────────────────
 
     addAndMakeVisible (scaleLabel);
-    scaleLabel.setFont (juce::Font (juce::FontOptions{}.withHeight (11.0f)));
+    scaleLabel.setFont (DrawnCurveLookAndFeel::makeFont (11.0f));
+    scaleLabel.setJustificationType (juce::Justification::centred);
 
-    for (int i = 0; i < kNumScalePresets; ++i)
+    // Family tab buttons
+    for (int f = 0; f < dcScale::kNumFamilies; ++f)
     {
-        scalePresetBtns[static_cast<size_t>(i)].setButtonText (kScaleNames[static_cast<size_t>(i)]);
-        scalePresetBtns[static_cast<size_t>(i)].setLookAndFeel (&_symbolLF);
-        addAndMakeVisible (scalePresetBtns[static_cast<size_t>(i)]);
-        scalePresetBtns[static_cast<size_t>(i)].onClick = [this, i]
+        auto& btn = familyBtns[static_cast<size_t>(f)];
+        btn.setButtonText (juce::String::fromUTF8 (dcScale::kFamilies[f].name));
+        btn.setLookAndFeel (&_symbolLF);
+        addAndMakeVisible (btn);
+        btn.onClick = [this, f]
         {
+            setActiveFamily (f);
+
+            // Auto-select: if the current scale does not already belong to this
+            // family, apply the last mode the user picked in it (or mode 0 if
+            // this family has never been visited).  This prevents two families
+            // appearing simultaneously highlighted (active tab ≠ recognised family).
+            if (_recognisedFamily != f)
+            {
+                const auto& fam = dcScale::kFamilies[f];
+                const int modeIdx = juce::jlimit (0, fam.count - 1,
+                                                  _lastModePerFamily[static_cast<size_t>(f)]);
+                const uint16_t relMask = fam.modes[static_cast<size_t>(modeIdx)].mask;
+                const int root = static_cast<int> (
+                    proc.apvts.getRawParameterValue ("scaleRoot")->load());
+                const uint16_t absMask = dcScale::pcsRotate (relMask, 12 - root);
+                if (auto* pMask = dynamic_cast<juce::AudioParameterInt*> (
+                        proc.apvts.getParameter ("scaleMask")))
+                    *pMask = static_cast<int> (absMask);
+                if (auto* pMode = dynamic_cast<juce::AudioParameterInt*> (
+                        proc.apvts.getParameter ("scaleMode")))
+                    *pMode = 7;
+                proc.updateAllLaneScales();
+                scaleLattice.setMask (absMask);
+                addRecentMask (relMask);
+                updateScaleStatus();
+                curveDisplay.repaint();
+            }
+
+            updateScalePresetButtons();   // repaint chip/tab colours
+        };
+    }
+
+    // Recent-history tab button
+    recentFamilyBtn.setButtonText (juce::String::charToString (juce::juce_wchar (0x2605))
+                                   + " Recent");   // ★ Recent
+    recentFamilyBtn.setLookAndFeel (&_symbolLF);
+    addChildComponent (recentFamilyBtn);   // hidden until Note mode (like family tabs)
+    recentFamilyBtn.onClick = [this]
+    {
+        setActiveFamily (kRecentFamilyIdx);
+        updateScalePresetButtons();
+    };
+
+    // Subfamily chip buttons — populated by setActiveFamily(); hidden until Note mode.
+    for (int i = 0; i < kMaxModes; ++i)
+    {
+        auto& btn = subfamilyBtns[static_cast<size_t>(i)];
+        btn.setLookAndFeel (&_subfamilyLF[static_cast<size_t>(i)]);
+        addChildComponent (btn);   // invisible until setActiveFamily() shows them
+        btn.onClick = [this, i]
+        {
+            // Determine the relative mask (root-relative interval set).
+            uint16_t relMask;
+            if (_activeFamilyIdx == kRecentFamilyIdx)
+            {
+                if (i >= static_cast<int> (_recentMasks.size())) return;
+                relMask = _recentMasks[static_cast<size_t>(i)];
+            }
+            else
+            {
+                const auto& fam = dcScale::kFamilies[_activeFamilyIdx];
+                if (i >= fam.count) return;
+                relMask = fam.modes[static_cast<size_t>(i)].mask;
+            }
+            const int root = static_cast<int> (proc.apvts.getRawParameterValue ("scaleRoot")->load());
+            // Root-relative → absolute: rotate left by (12 - root).
+            const uint16_t absMask = dcScale::pcsRotate (relMask, 12 - root);
+            if (auto* pMask = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMask")))
+                *pMask = static_cast<int> (absMask);
             if (auto* pMode = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
-                *pMode = i;
+                *pMode = 7;
             proc.updateAllLaneScales();
-            updateScalePresetButtons();
-            scaleLattice.setMask (calcAbsLatticeMask (proc, 0));
-            scaleLattice.setRoot (static_cast<int> (proc.apvts.getRawParameterValue ("scaleRoot")->load()));
-            updateMaskLabel();
+            scaleLattice.setMask (absMask);
+            addRecentMask (relMask);   // record in history (idempotent for Recent tab re-clicks)
+            // Remember which mode was last used in this family so switching back restores it.
+            if (_activeFamilyIdx != kRecentFamilyIdx)
+                _lastModePerFamily[static_cast<size_t> (_activeFamilyIdx)] = i;
+            updateScaleStatus();
             curveDisplay.repaint();
         };
     }
@@ -1008,13 +1114,15 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 
     scaleLattice.onMaskChanged = [this] (uint16_t mask)
     {
-        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMask")))
-            *p = static_cast<int> (mask);
-        if (auto* p2 = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
-            *p2 = 7;
+        if (auto* pMask = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMask")))
+            *pMask = static_cast<int> (mask);
+        if (auto* pMode = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
+            *pMode = 7;
         proc.updateAllLaneScales();
-        updateScalePresetButtons();
-        updateMaskLabel();
+        // Convert abs mask → relative before storing in recent history.
+        const int root = static_cast<int> (proc.apvts.getRawParameterValue ("scaleRoot")->load());
+        addRecentMask (dcScale::pcsRotate (mask, root));
+        updateScaleStatus();
         curveDisplay.repaint();
     };
 
@@ -1024,19 +1132,22 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     // Scale action buttons
     auto applyMask = [this] (uint16_t mask)
     {
-        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMask")))
-            *p = static_cast<int> (mask);
-        if (auto* p2 = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
-            *p2 = 7;
+        if (auto* pMask = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMask")))
+            *pMask = static_cast<int> (mask);
+        if (auto* pMode = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
+            *pMode = 7;
         proc.updateAllLaneScales();
-        updateScalePresetButtons();
         scaleLattice.setMask (mask);
-        updateMaskLabel();
+        updateScaleStatus();
         curveDisplay.repaint();
     };
 
-    for (auto* b : { &scaleAllBtn, &scaleNoneBtn, &scaleInvBtn, &scaleRootBtn })
-        b->setLookAndFeel (&_scaleActionLF);
+    // Scale action buttons — Unicode glyphs, no custom LF needed.
+    // ● all  ○ none  ◑ invert  ◆ root
+    scaleAllBtn .setButtonText (juce::String::charToString (juce::juce_wchar (0x25CF)));  // ●
+    scaleNoneBtn.setButtonText (juce::String::charToString (juce::juce_wchar (0x25CB)));  // ○
+    scaleInvBtn .setButtonText (juce::String::charToString (juce::juce_wchar (0x25D1)));  // ◑
+    scaleRootBtn.setButtonText (juce::String::charToString (juce::juce_wchar (0x25C6)));  // ◆
 
     addAndMakeVisible (scaleAllBtn);
     scaleAllBtn.onClick = [applyMask] { applyMask (0x0FFF); };
@@ -1079,35 +1190,103 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
                                 entering ? juce::Colours::white : btnText);
     };
 
-    scaleLattice.onRootChanged = [this, resetRootBtn] (int root)
+    scaleLattice.onRootChanged = [this, resetRootBtn] (int newRoot)
     {
+        // Semantic: changing root TRANSPOSES the scale to the new root —
+        // the root-relative interval pattern stays the same.
+        //
+        // For presets (mode 0–6) the APVTS already models this: the processor
+        // stores mode + root separately, so simply updating scaleRoot gives the
+        // correct preset transposition automatically.
+        //
+        // For custom masks (mode = 7) the absolute pitch-class mask is stored
+        // directly, so we must re-derive it from the current relative pattern.
+        const int mode    = static_cast<int> (proc.apvts.getRawParameterValue ("scaleMode")->load());
+        const int oldRoot = static_cast<int> (proc.apvts.getRawParameterValue ("scaleRoot")->load());
+
+        if (mode == 7 && newRoot != oldRoot)
+        {
+            const uint16_t absMask  = calcAbsLatticeMask (proc, 0);
+            const uint16_t relMask  = dcScale::pcsRotate (absMask, oldRoot);
+            const uint16_t newAbs   = dcScale::pcsRotate (relMask, (12 - newRoot) % 12);
+            if (auto* pMask = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMask")))
+                *pMask = static_cast<int> (newAbs);
+            scaleLattice.setMask (newAbs);  // immediate visual update; async also fires
+        }
+
         if (auto* pRoot = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleRoot")))
-            *pRoot = root;
+            *pRoot = newRoot;
         proc.updateAllLaneScales();
+        scaleLattice.setRoot (newRoot);
         curveDisplay.repaint();
         resetRootBtn();
-        updateMaskLabel();
+        updateScaleStatus();
     };
 
-    // Mask label
-    maskLabel.setFont (juce::Font (juce::FontOptions{}.withName (juce::Font::getDefaultMonospacedFontName()).withHeight (12.0f)));
-    maskLabel.setJustificationType (juce::Justification::centred);
-    maskLabel.setEditable (false, true, false);
-    addAndMakeVisible (maskLabel);
-    maskLabel.onEditorHide = [this]
+    // Notation toggle — switches chromatic labels between ♯ (sharps) and ♭ (flats).
+    scaleNotationBtn.setButtonText (juce::String::charToString (juce::juce_wchar (0x266F)));  // ♯
+    addAndMakeVisible (scaleNotationBtn);
+    scaleNotationBtn.onClick = [this]
     {
-        const int val = juce::jlimit (0, 4095, maskLabel.getText().getIntValue());
-        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMask")))
-            *p = val;
-        if (auto* p2 = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
-            *p2 = 7;
+        _useFlats = !_useFlats;
+        scaleLattice.setUseFlats (_useFlats);
+        curveDisplay.setUseFlats (_useFlats);
+        scaleNotationBtn.setButtonText (
+            juce::String::charToString (juce::juce_wchar (_useFlats ? 0x266D : 0x266F)));
+        updateRangeLabel();   // refreshes note-name range text if in Note mode
+    };
+
+    // Rotate button — ↻ cycle to the next mode in the current family (same root).
+    scaleRotateBtn.setButtonText (juce::String::charToString (juce::juce_wchar (0x21BB)));  // ↻
+    addAndMakeVisible (scaleRotateBtn);
+    scaleRotateBtn.onClick = [this]
+    {
+        // Require a recognised family; if none, do nothing (button becomes a no-op
+        // for fully custom scales, which have no ordered mode sequence to cycle).
+        if (_recognisedFamily < 0)
+            return;
+
+        const int root = static_cast<int> (proc.apvts.getRawParameterValue ("scaleRoot")->load());
+        const auto& fam     = dcScale::kFamilies[_recognisedFamily];
+        const int   nextMode = (_recognisedMode + 1) % fam.count;
+        const uint16_t relMask  = fam.modes[nextMode].mask;
+
+        // Keep root fixed; only the interval pattern (mode) changes.
+        const uint16_t absMask = dcScale::pcsRotate (relMask, (12 - root) % 12);
+
+        if (auto* pM = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMask")))
+            *pM = static_cast<int> (absMask);
+        if (auto* pMo = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
+            *pMo = 7;   // Custom — mode-specific preset slots not used for mode cycling
         proc.updateAllLaneScales();
+        scaleLattice.setMask (absMask);
+        addRecentMask (relMask);
+
+        updateScaleStatus();
+        if (_recognisedFamily >= 0 && _recognisedFamily != _activeFamilyIdx)
+            setActiveFamily (_recognisedFamily);
         updateScalePresetButtons();
-        scaleLattice.setMask (static_cast<uint16_t> (val));
-        updateMaskLabel();
         curveDisplay.repaint();
     };
-    updateMaskLabel();
+
+    // Initialise the family browser to match the current scale (or Diatonic if unrecognised).
+    {
+        const int mode = static_cast<int> (proc.apvts.getRawParameterValue ("scaleMode")->load());
+        const int root = static_cast<int> (proc.apvts.getRawParameterValue ("scaleRoot")->load());
+        const uint16_t relMask = (mode < 7)
+            ? proc.getScaleConfig (0).mask
+            : dcScale::pcsRotate (static_cast<uint16_t> (
+                  proc.apvts.getRawParameterValue ("scaleMask")->load()), root);
+        const auto id = dcScale::pcsRecognise (relMask);
+        setActiveFamily (id.exact ? id.family : 0);
+    }
+
+    // Mask label — display only (no text editor, avoids UIKit tracking element warning).
+    // The lattice is the primary editing surface for the scale mask.
+    maskLabel.setFont (DrawnCurveLookAndFeel::makeFont (11.0f));
+    maskLabel.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (maskLabel);
+    updateScaleStatus();
 
     // ── Curve display + help overlay ──────────────────────────────────────────
     addAndMakeVisible (curveDisplay);
@@ -1124,15 +1303,20 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 
 DrawnCurveEditor::~DrawnCurveEditor()
 {
-    // Reset all L&Fs before structs are destroyed.
+    // Restore defaults before _appLF is destroyed.
+    juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
+    setLookAndFeel (nullptr);
+
+    // Reset all widget-specific L&Fs before structs are destroyed.
     for (auto& b : laneTypeBtn)   b.setLookAndFeel (nullptr);
     for (auto& b : laneTeachBtn)  b.setLookAndFeel (nullptr);
     for (auto& b : laneMuteBtn)   b.setLookAndFeel (nullptr);
-    for (auto& b : scalePresetBtns) b.setLookAndFeel (nullptr);
+    for (auto& b : familyBtns)   b.setLookAndFeel (nullptr);
+    recentFamilyBtn.setLookAndFeel (nullptr);
+    for (auto& b : subfamilyBtns) b.setLookAndFeel (nullptr);
     for (auto* b : { &tickYMinusBtn, &tickYPlusBtn, &tickXMinusBtn, &tickXPlusBtn })
         b->setLookAndFeel (nullptr);
-    for (auto* b : { &scaleAllBtn, &scaleNoneBtn, &scaleInvBtn, &scaleRootBtn })
-        b->setLookAndFeel (nullptr);
+    // scaleAllBtn / None / Inv / Root use no custom LF; nothing to reset here.
 
     // Remove all APVTS listeners.
     proc.apvts.removeParameterListener (ParamID::playbackDirection, this);
@@ -1208,13 +1392,15 @@ void DrawnCurveEditor::bindShapingToLane (int lane)
 
     // One-shot toggle
     const bool isOneShot = proc.apvts.getRawParameterValue (laneParam (lane, "loopMode"))->load() > 0.5f;
-    oneShotBtn.setButtonText (isOneShot ? "1" : u8"\u221E");
+    static const juce::String kLoopSym = juce::String::charToString (juce::juce_wchar (0x221E)); // ∞
+    oneShotBtn.setButtonText (isOneShot ? "1" : kLoopSym);
     oneShotBtn.onClick = [this, lane] {
         if (auto* pLoop = dynamic_cast<juce::AudioParameterBool*>(
                               proc.apvts.getParameter (laneParam (lane, "loopMode")))) {
+            static const juce::String kLoop = juce::String::charToString (juce::juce_wchar (0x221E));
             const bool nowOneShot = ! pLoop->get();
             *pLoop = nowOneShot;
-            oneShotBtn.setButtonText (nowOneShot ? "1" : u8"\u221E");
+            oneShotBtn.setButtonText (nowOneShot ? "1" : kLoop);
             proc.updateLaneSnapshot (lane);
         }
     };
@@ -1244,8 +1430,9 @@ void DrawnCurveEditor::updateLaneRow (int lane)
     laneDetailLabel[static_cast<size_t>(lane)].setText (detailText, juce::dontSendNotification);
 
     // Type button symbol
-    static auto sym = [] (int t) -> juce::String {
-        switch (t) { case 0: return "CC"; case 1: return "At"; case 2: return "PB"; case 3: return "N"; } return "?";
+    const juce::String kNoteSymbol = juce::String::charToString (juce::juce_wchar (0x2669));  // ♩
+    auto sym = [&kNoteSymbol] (int t) -> juce::String {
+        switch (t) { case 0: return "CC"; case 1: return "AT"; case 2: return "PB"; case 3: return kNoteSymbol; } return "?";
     };
     laneTypeBtn[static_cast<size_t>(lane)].setButtonText (sym (type));
 
@@ -1270,6 +1457,10 @@ void DrawnCurveEditor::updateLaneRow (int lane)
         detail += "  |  Ch " + juce::String (ch);
         if (! enabled) detail += "  [muted]";
         mappingDetailLabel.setText (detail, juce::dontSendNotification);
+
+        // Message type affects how the range slider values are labelled (CC 0-127,
+        // PB ±8192, note names).  Refresh the label whenever the focused row changes.
+        updateRangeLabel();
     }
 }
 
@@ -1351,7 +1542,8 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
                 juce::MessageManager::callAsync ([this] {
                     const bool isOneShot = proc.apvts.getRawParameterValue (
                         laneParam (_focusedLane, "loopMode"))->load() > 0.5f;
-                    oneShotBtn.setButtonText (isOneShot ? "1" : u8"\u221E");
+                    static const juce::String kLoop = juce::String::charToString (juce::juce_wchar (0x221E));
+                    oneShotBtn.setButtonText (isOneShot ? "1" : kLoop);
                     applyTheme();
                 });
             }
@@ -1388,11 +1580,10 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
     {
         proc.updateAllLaneScales();
         juce::MessageManager::callAsync ([this] {
-            updateScalePresetButtons();
             scaleLattice.setMask (calcAbsLatticeMask (proc, 0));
             scaleLattice.setRoot (static_cast<int> (
                 proc.apvts.getRawParameterValue ("scaleRoot")->load()));
-            updateMaskLabel();
+            updateScaleStatus();
             curveDisplay.repaint();
         });
     }
@@ -1408,20 +1599,31 @@ void DrawnCurveEditor::onSyncToggled (bool isSync)
     if (isSync)
     {
         speedAttach = std::make_unique<Attach> (proc.apvts, ParamID::syncBeats, speedSlider);
-        // Invert the slider range so right = fewer beats = faster (consistent
-        // with FREE mode where right = faster).  The APVTS attachment still
-        // writes the actual beat count; the slider's inverted [32→1] range
-        // maps positions correctly.
-        speedSlider.setRange (32.0, 1.0, 1.0);
-        speedLabel.setText ("Length", juce::dontSendNotification);
-        speedSlider.setTextValueSuffix (" bars");
+        // Invert the slider so right = fewer bars = faster (matches FREE direction).
+        // JUCE's NormalisableRange requires start < end, so use custom convert lambdas.
+        // The APVTS attachment maps slider.getValue() → param via param.convertTo0to1(),
+        // which still receives the real bar count (1–32); the inversion only affects
+        // the visual position on screen.
+        juce::NormalisableRange<double> inv (1.0, 32.0,
+            // from01: t=1 → 1 beat (right=fast), t=0 → 32 beats (left=slow)
+            [](double, double, double t) { return 32.0 - juce::jlimit (0.0, 1.0, t) * 31.0; },
+            // to01:   v=1 → 1.0 (right), v=32 → 0.0 (left)
+            [](double, double, double v) { return juce::jlimit (0.0, 1.0, (32.0 - v) / 31.0); },
+            [](double, double, double v) { return (double) juce::roundToInt (v); });
+        speedSlider.setNormalisableRange (inv);
+        speedSlider.setValue (proc.apvts.getRawParameterValue (ParamID::syncBeats)->load(),
+                              juce::dontSendNotification);
+        speedLabel.setText ("SYNC", juce::dontSendNotification);
+        speedSlider.setTextValueSuffix (" beats");
         speedSlider.setNumDecimalPlacesToDisplay (0);
     }
     else
     {
         speedAttach = std::make_unique<Attach> (proc.apvts, ParamID::playbackSpeed, speedSlider);
-        speedSlider.setRange (0.25, 4.0, 0.0);   // restore normal range
-        speedLabel.setText ("Speed", juce::dontSendNotification);
+        speedSlider.setNormalisableRange (juce::NormalisableRange<double> (0.25, 4.0));
+        speedSlider.setValue (proc.apvts.getRawParameterValue (ParamID::playbackSpeed)->load(),
+                              juce::dontSendNotification);
+        speedLabel.setText ("FREE", juce::dontSendNotification);
         speedSlider.setTextValueSuffix ("x");
         speedSlider.setNumDecimalPlacesToDisplay (2);
     }
@@ -1445,41 +1647,143 @@ void DrawnCurveEditor::updateScaleVisibility()
         if (static_cast<int> (proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load()) == 3)
             { anyNote = true; break; }
 
-    scaleLabel.setVisible (anyNote);
-    for (auto& b : scalePresetBtns) b.setVisible (anyNote);
-    scaleLattice   .setVisible (anyNote);
-    scaleAllBtn    .setVisible (anyNote);
-    scaleNoneBtn   .setVisible (anyNote);
-    scaleInvBtn    .setVisible (anyNote);
-    scaleRootBtn   .setVisible (anyNote);
-    maskLabel      .setVisible (anyNote);
+    scaleLabel    .setVisible (anyNote);
+    maskLabel     .setVisible (anyNote);
+    scaleLattice  .setVisible (anyNote);
+    scaleNotationBtn.setVisible (anyNote);
+    scaleRotateBtn  .setVisible (anyNote);
+    scaleAllBtn     .setVisible (anyNote);
+    scaleNoneBtn  .setVisible (anyNote);
+    scaleInvBtn   .setVisible (anyNote);
+    scaleRootBtn  .setVisible (anyNote);
+    for (auto& b : familyBtns) b.setVisible (anyNote);
+    recentFamilyBtn.setVisible (anyNote);
+    // Subfamily chips are individually shown/hidden by setActiveFamily().
 
     if (anyNote)
     {
         scaleLattice.setMask (calcAbsLatticeMask (proc, 0));
         scaleLattice.setRoot (static_cast<int> (
             proc.apvts.getRawParameterValue ("scaleRoot")->load()));
-        updateScalePresetButtons();
-        updateMaskLabel();
+        updateScaleStatus();
     }
 
     resized();
 }
 
+void DrawnCurveEditor::setActiveFamily (int familyIdx)
+{
+    // kRecentFamilyIdx (= kNumFamilies) is a valid virtual index for the Recent tab.
+    _activeFamilyIdx = juce::jlimit (0, kRecentFamilyIdx, familyIdx);
+
+    if (_activeFamilyIdx == kRecentFamilyIdx)
+    {
+        // ── Recent history tab ────────────────────────────────────────────────
+        _numSubfamilyChips = static_cast<int> (_recentMasks.size());
+        for (int i = 0; i < kMaxModes; ++i)
+        {
+            const bool vis = (i < _numSubfamilyChips);
+            if (vis)
+            {
+                const uint16_t m  = _recentMasks[static_cast<size_t>(i)];
+                // Use recognised name if available, otherwise "Custom"
+                const auto    id  = dcScale::pcsRecognise (m);
+                const juce::String name = id.exact
+                    ? juce::String::fromUTF8 (dcScale::kFamilies[id.family].modes[id.mode].name)
+                    : juce::String ("Custom");
+                subfamilyBtns[static_cast<size_t>(i)].setButtonText (name);
+                _subfamilyLF  [static_cast<size_t>(i)].mask = m;
+            }
+            subfamilyBtns[static_cast<size_t>(i)].setVisible (vis);
+        }
+    }
+    else
+    {
+        // ── Named family tab ─────────────────────────────────────────────────
+        const auto& fam    = dcScale::kFamilies[_activeFamilyIdx];
+        _numSubfamilyChips = fam.count;
+        for (int i = 0; i < kMaxModes; ++i)
+        {
+            const bool vis = (i < _numSubfamilyChips);
+            if (vis)
+            {
+                subfamilyBtns[static_cast<size_t>(i)].setButtonText (juce::String::fromUTF8 (fam.modes[i].name));
+                _subfamilyLF  [static_cast<size_t>(i)].mask = fam.modes[i].mask;
+            }
+            subfamilyBtns[static_cast<size_t>(i)].setVisible (vis);
+        }
+    }
+
+    resized();
+}
+
+void DrawnCurveEditor::addRecentMask (uint16_t relMask)
+{
+    // De-duplicate: remove if already present, then prepend.
+    _recentMasks.erase (std::remove (_recentMasks.begin(), _recentMasks.end(), relMask),
+                        _recentMasks.end());
+    _recentMasks.insert (_recentMasks.begin(), relMask);
+    if (static_cast<int> (_recentMasks.size()) > kMaxRecentMasks)
+        _recentMasks.resize (static_cast<size_t> (kMaxRecentMasks));
+
+    // If the Recent tab is currently open, refresh it immediately.
+    if (_activeFamilyIdx == kRecentFamilyIdx)
+        setActiveFamily (kRecentFamilyIdx);
+}
+
 void DrawnCurveEditor::updateScalePresetButtons()
 {
-    const int sel = static_cast<int> (proc.apvts.getRawParameterValue ("scaleMode")->load());
+    // ── Family tab colours ────────────────────────────────────────────────────
+    // Visual priority: the tab the user is LOOKING AT (active/browsed) always
+    // carries the strong highlight.  The recognised tab (the family the current
+    // scale actually belongs to, if different) carries a secondary dim highlight
+    // so orientation is still preserved without stealing focus.
+    //
+    //   Active (browsed)           → famActive  (strong)
+    //   Recognised, not active     → famBrowsed (dim "scale lives here" cue)
+    //   All others                 → famInactive
+    const juce::Colour famActive    = _lightMode ? juce::Colour (0xff0B6E4F) : juce::Colour (0xff2979ff);
+    const juce::Colour famBrowsed   = _lightMode ? juce::Colour (0xffA7C4A0) : juce::Colour (0xff33557A);
+    const juce::Colour famInactive  = _lightMode ? juce::Colour (0xffF0EFE7) : juce::Colour (0xff333355);
+    const juce::Colour famTextAct   = juce::Colours::white;
+    const juce::Colour famTextOff   = _lightMode ? juce::Colour (0xff706D64) : juce::Colours::lightgrey;
 
-    const juce::Colour activeCol    = _lightMode ? juce::Colour (0xff0B6E4F) : juce::Colour (0xff2979ff);
-    const juce::Colour inactiveBg   = _lightMode ? juce::Colour (0xffF0EFE7) : juce::Colour (0xff333355);
-    const juce::Colour inactiveText = _lightMode ? juce::Colour (0xff706D64) : juce::Colours::lightgrey;
-
-    for (int i = 0; i < kNumScalePresets; ++i)
+    for (int f = 0; f < dcScale::kNumFamilies; ++f)
     {
-        const bool active = (i == sel);
-        scalePresetBtns[static_cast<size_t>(i)].setColour (juce::TextButton::buttonColourId,  active ? activeCol : inactiveBg);
-        scalePresetBtns[static_cast<size_t>(i)].setColour (juce::TextButton::buttonOnColourId, activeCol);
-        scalePresetBtns[static_cast<size_t>(i)].setColour (juce::TextButton::textColourOffId, active ? juce::Colours::white : inactiveText);
+        const bool isActive     = (f == _activeFamilyIdx);              // user is viewing this tab
+        const bool isRecognised = (f == _recognisedFamily) && !isActive; // scale lives here (secondary)
+        const auto bg   = isActive     ? famActive
+                        : isRecognised ? famBrowsed
+                                       : famInactive;
+        const auto text = (isActive || isRecognised) ? famTextAct : famTextOff;
+        familyBtns[static_cast<size_t>(f)].setColour (juce::TextButton::buttonColourId,   bg);
+        familyBtns[static_cast<size_t>(f)].setColour (juce::TextButton::buttonOnColourId,  famActive);
+        familyBtns[static_cast<size_t>(f)].setColour (juce::TextButton::textColourOffId,   text);
+    }
+    // Recent tab: strong highlight when active (it has no recognised-family counterpart).
+    {
+        const bool isActive = (_activeFamilyIdx == kRecentFamilyIdx);
+        recentFamilyBtn.setColour (juce::TextButton::buttonColourId,  isActive ? famActive   : famInactive);
+        recentFamilyBtn.setColour (juce::TextButton::buttonOnColourId, famActive);
+        recentFamilyBtn.setColour (juce::TextButton::textColourOffId,  isActive ? famTextAct : famTextOff);
+    }
+
+    // ── Subfamily chip colours ────────────────────────────────────────────────
+    // Highlight the chip whose mode matches the current scale within the active family.
+    const juce::Colour chipOn   = _lightMode ? juce::Colour (0xff1D4ED8) : juce::Colour (0xff60A5FA);
+    const juce::Colour chipOff  = _lightMode ? juce::Colour (0xffE5E7EB) : juce::Colour (0xff374151);
+    const juce::Colour dotOn    = _lightMode ? juce::Colour (0xff1E40AF) : juce::Colour (0xff93C5FD);
+    const juce::Colour dotOff   = _lightMode ? juce::Colour (0xffBFDBFE) : juce::Colour (0xff1E3A5F);
+
+    for (int i = 0; i < _numSubfamilyChips; ++i)
+    {
+        const bool match = (_recognisedFamily == _activeFamilyIdx) && (_recognisedMode == i);
+        subfamilyBtns[static_cast<size_t>(i)].setColour (juce::TextButton::buttonColourId,   match ? chipOn : chipOff);
+        subfamilyBtns[static_cast<size_t>(i)].setColour (juce::TextButton::textColourOffId,   match ? juce::Colours::white
+                                                         : (_lightMode ? juce::Colour (0xff374151) : juce::Colour (0xffD1D5DB)));
+        _subfamilyLF[static_cast<size_t>(i)].colOn  = dotOn;
+        _subfamilyLF[static_cast<size_t>(i)].colOff = dotOff;
+        subfamilyBtns[static_cast<size_t>(i)].repaint();
     }
 }
 
@@ -1504,27 +1808,71 @@ void DrawnCurveEditor::updateRangeLabel()
 
     if (msgType == MessageType::Note)
     {
-        // Show MIDI note names (e.g. "C2 - G5")
-        static const char* kNoteNames[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
+        // Show MIDI note names (e.g. "C2 – G5"), honouring the ♯/♭ notation toggle.
+        static const char* kSharpNames[] = { "C","C\u266f","D","D\u266f","E","F","F\u266f","G","G\u266f","A","A\u266f","B" };
+        static const char* kFlatNames [] = { "C","D\u266d","D","E\u266d","E","F","G\u266d","G","A\u266d","A","B\u266d","B" };
         auto noteName = [&] (float norm) -> juce::String {
             const int midi = juce::jlimit (0, 127, juce::roundToInt (norm * 127.0f));
-            return juce::String (kNoteNames[midi % 12]) + juce::String (midi / 12 - 1);
+            const char* nm = _useFlats ? kFlatNames[midi % 12] : kSharpNames[midi % 12];
+            return juce::String::fromUTF8 (nm) + juce::String (midi / 12 - 1);
         };
         rangeLabel.setText (noteName (mn) + " - " + noteName (mx),
                             juce::dontSendNotification);
     }
+    else if (msgType == MessageType::PitchBend)
+    {
+        // Show signed pitch-bend values (-8192 – +8191)
+        const int lo = juce::jlimit (-8192, 8191, juce::roundToInt (mn * 16383.0f) - 8192);
+        const int hi = juce::jlimit (-8192, 8191, juce::roundToInt (mx * 16383.0f) - 8192);
+        rangeLabel.setText (juce::String (lo) + " - " + juce::String (hi),
+                            juce::dontSendNotification);
+    }
     else
     {
-        rangeLabel.setText (juce::String (mn, 2) + " - " + juce::String (mx, 2),
+        // CC (0-127) and Channel Pressure (0-127)
+        const int lo = juce::jlimit (0, 127, juce::roundToInt (mn * 127.0f));
+        const int hi = juce::jlimit (0, 127, juce::roundToInt (mx * 127.0f));
+        rangeLabel.setText (juce::String (lo) + " - " + juce::String (hi),
                             juce::dontSendNotification);
     }
 }
 
-void DrawnCurveEditor::updateMaskLabel()
+void DrawnCurveEditor::updateScaleStatus()
 {
-    const uint16_t mask = calcAbsLatticeMask (proc, _focusedLane);
-    maskLabel.setText (juce::String (static_cast<int> (mask)).paddedLeft ('0', 4),
+    // ── 1. Root-relative mask → recognition ──────────────────────────────────
+    const int mode = static_cast<int> (proc.apvts.getRawParameterValue ("scaleMode")->load());
+    const int root = static_cast<int> (proc.apvts.getRawParameterValue ("scaleRoot")->load());
+
+    const uint16_t relMask = (mode < 7)
+        ? proc.getScaleConfig (0).mask
+        : dcScale::pcsRotate (
+              static_cast<uint16_t> (proc.apvts.getRawParameterValue ("scaleMask")->load()),
+              root);
+
+    const auto id = dcScale::pcsRecognise (relMask);
+    _recognisedFamily = id.exact ? id.family : -1;
+    _recognisedMode   = id.exact ? id.mode   : -1;
+
+    // Do NOT auto-switch the active family here.  The family tab is a browser:
+    // the user navigates it manually; recognition just highlights which chip
+    // matches (if any) and updates the name label.  Auto-switching would revert
+    // a manual tab browse every time a parameterChanged callAsync fires.
+
+    // ── 2. Decimal bitmask display ───────────────────────────────────────────
+    const uint16_t absMask = calcAbsLatticeMask (proc, _focusedLane);
+    maskLabel.setText (juce::String (static_cast<int> (absMask)).paddedLeft ('0', 4),
                        juce::dontSendNotification);
+
+    // ── 3. Mode-name label ───────────────────────────────────────────────────
+    if (id.exact)
+        scaleLabel.setText (juce::String::fromUTF8 (dcScale::kFamilies[id.family].modes[id.mode].name),
+                            juce::dontSendNotification);
+    else
+        scaleLabel.setText ((relMask == 0x0FFF) ? "Chrom." : "Custom",
+                            juce::dontSendNotification);
+
+    // ── 4. Colour highlight for tabs + chips ─────────────────────────────────
+    updateScalePresetButtons();
 }
 
 //==============================================================================
@@ -1657,7 +2005,6 @@ void DrawnCurveEditor::applyTheme()
     mappingDetailLabel.setColour (juce::Label::textColourId, dimText);
 
     // Scale controls
-    updateScalePresetButtons();
     scaleLabel.setColour (juce::Label::textColourId, dimText);
 
     scaleLattice.colBg           = light ? juce::Colours::white          : juce::Colour (0xff252538);
@@ -1672,11 +2019,12 @@ void DrawnCurveEditor::applyTheme()
     scaleLattice.colRootText     = light ? juce::Colour (0xff92400E)     : juce::Colours::black;
     scaleLattice.repaint();
 
-    for (auto* b : { &scaleAllBtn, &scaleNoneBtn, &scaleInvBtn, &scaleRootBtn })
+    for (auto* b : { &scaleNotationBtn, &scaleRotateBtn, &scaleAllBtn, &scaleNoneBtn, &scaleInvBtn, &scaleRootBtn })
     {
         b->setColour (juce::TextButton::buttonColourId,  btnBg);
         b->setColour (juce::TextButton::textColourOffId, btnText);
     }
+    updateScalePresetButtons();   // re-colour family tabs + chips for new theme
 
     maskLabel.setColour (juce::Label::textColourId,            textCol);
     maskLabel.setColour (juce::Label::backgroundColourId,      btnBg);
@@ -1781,7 +2129,7 @@ void DrawnCurveEditor::resized()
     // ── Utility bar ───────────────────────────────────────────────────────────
     {
         auto row = area.removeFromTop (utilityRowH);
-        themeButton.setBounds (row.removeFromRight (62));
+        themeButton.setBounds (row.removeFromRight (28));   // single glyph ☾/☀
         row.removeFromRight (pad);
         helpButton .setBounds (row.removeFromRight (28));
         row.removeFromRight (pad);
@@ -1911,7 +2259,8 @@ void DrawnCurveEditor::resized()
     const bool isNote = anyNoteMode;
 
     // ── Note editor strip (pink, bottom of left col) ──────────────────────────
-    static constexpr int kNoteEditorH = 4 + scaleRowH + pad + kScaleLatticeH + 2;
+    static constexpr int kNoteEditorH = 4 + kFamilyBarH + 4 + kSubfamilyRowH + 4
+                                          + kActionRowH + 4 + kScaleLatticeH + 2;  // = 244
 
     if (isNote)
     {
@@ -1922,34 +2271,63 @@ void DrawnCurveEditor::resized()
         auto ne = _secNotes;
         ne.removeFromTop (4);
 
-        // Scale preset row
+        // ── Family tab bar (8 named families + 1 "Recent" tab = 9 total) ────────
         {
-            auto row = ne.removeFromTop (scaleRowH);
-            scaleLabel.setBounds (row.removeFromLeft (32).withSizeKeepingCentre (32, 14));
-            row.removeFromLeft (3);
-            maskLabel.setBounds (row.removeFromRight (48).withSizeKeepingCentre (48, 20));
-            row.removeFromRight (3);
-            const int presetW = (row.getWidth() - (kNumScalePresets - 1) * 2) / kNumScalePresets;
-            for (int i = 0; i < kNumScalePresets; ++i)
+            auto fRow = ne.removeFromTop (kFamilyBarH);
+            const int N    = dcScale::kNumFamilies + 1;   // +1 for Recent
+            const int btnW = (fRow.getWidth() - (N - 1)) / N;
+            for (int f = 0; f < dcScale::kNumFamilies; ++f)
             {
-                scalePresetBtns[static_cast<size_t>(i)].setBounds (row.removeFromLeft (presetW));
-                if (i < kNumScalePresets - 1) row.removeFromLeft (2);
+                familyBtns[static_cast<size_t>(f)].setBounds (fRow.removeFromLeft (btnW));
+                fRow.removeFromLeft (1);
+            }
+            recentFamilyBtn.setBounds (fRow.removeFromLeft (btnW));
+        }
+        ne.removeFromTop (4);
+
+        // ── Subfamily chip row ────────────────────────────────────────────────
+        {
+            auto sRow = ne.removeFromTop (kSubfamilyRowH);
+            const int N = _numSubfamilyChips;
+            if (N > 0)
+            {
+                const int chipW = (sRow.getWidth() - (N - 1) * 2) / N;
+                for (int i = 0; i < kMaxModes; ++i)
+                {
+                    if (i < N)
+                    {
+                        subfamilyBtns[static_cast<size_t>(i)].setBounds (sRow.removeFromLeft (chipW));
+                        if (i < N - 1) sRow.removeFromLeft (2);
+                    }
+                    else
+                    {
+                        subfamilyBtns[static_cast<size_t>(i)].setBounds ({});
+                    }
+                }
             }
         }
-        ne.removeFromTop (pad);
+        ne.removeFromTop (4);
 
-        // Lattice + action buttons
-        auto latticeRow = ne.removeFromTop (kScaleLatticeH);
+        // ── Action row: ↻ ● ○ ◑ ◆  [spacer]  [mode-name] [decimal] ──────────
         {
-            auto actionCol = latticeRow.removeFromRight (34);
-            latticeRow.removeFromRight (pad);
-            const int btnH = (actionCol.getHeight() - 6) / 4;
-            scaleAllBtn .setBounds (actionCol.removeFromTop (btnH)); actionCol.removeFromTop (2);
-            scaleNoneBtn.setBounds (actionCol.removeFromTop (btnH)); actionCol.removeFromTop (2);
-            scaleInvBtn .setBounds (actionCol.removeFromTop (btnH)); actionCol.removeFromTop (2);
-            scaleRootBtn.setBounds (actionCol.removeFromTop (btnH));
+            auto aRow = ne.removeFromTop (kActionRowH);
+            // Right side first (labels)
+            maskLabel .setBounds (aRow.removeFromRight (52).withSizeKeepingCentre (52, 20));
+            aRow.removeFromRight (3);
+            scaleLabel.setBounds (aRow.removeFromRight (84).withSizeKeepingCentre (84, 14));
+            aRow.removeFromRight (8);
+            // Left side (action buttons)
+            scaleNotationBtn.setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (4);
+            scaleRotateBtn  .setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (6);
+            scaleAllBtn     .setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (2);
+            scaleNoneBtn    .setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (2);
+            scaleInvBtn     .setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (2);
+            scaleRootBtn    .setBounds (aRow.removeFromLeft (28));
         }
-        scaleLattice.setBounds (latticeRow);
+        ne.removeFromTop (4);
+
+        // ── Scale lattice: full width ─────────────────────────────────────────
+        scaleLattice.setBounds (ne.removeFromTop (kScaleLatticeH));
     }
     else
     {
