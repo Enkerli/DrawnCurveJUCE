@@ -3,6 +3,17 @@
  *
  * Implementation of DrawnCurveProcessor.
  * See PluginProcessor.h for the architecture overview.
+ *
+ * @brief Core processing logic for DrawnCurve MIDI modulation plugin.
+ *
+ * @thread_safety
+ * This class processes audio and MIDI data on the audio thread,
+ * with a hi-res timer thread for fallback MIDI output.
+ * Thread synchronization is managed via spinlocks and atomics.
+ *
+ * @note The lane snapshot lifecycle involves deliberate snapshot replacements
+ * with intentional leaks to avoid realtime deletion issues.
+ * Future refactoring should consider shared_ptr-based ownership models.
  */
 
 #include "PluginProcessor.h"
@@ -15,6 +26,36 @@ static juce::MidiMessage makeMidiMessage (uint8_t status, uint8_t d1, uint8_t d2
         return juce::MidiMessage (status, d1);
     return juce::MidiMessage (status, d1, d2);
 }
+
+#if JUCE_DEBUG
+#include <atomic>
+
+static std::atomic<uint64_t> gHiResTimerTryLockFailures { 0 };
+static std::atomic<uint64_t> gHiResTimerDispatches      { 0 };
+static std::atomic<uint64_t> gFallbackMidiFlushes       { 0 };
+static std::atomic<uint64_t> gSnapshotReplacements      { 0 };
+
+static void dbgLogCountersIfNeeded()
+{
+    static juce::int64 lastLogMs = 0;
+    const juce::int64 now = juce::Time::getMillisecondCounterHiRes();
+
+    if (now - lastLogMs >= 5000)
+    {
+        lastLogMs = now;
+
+        uint64_t tries = gHiResTimerTryLockFailures.load(std::memory_order_relaxed);
+        uint64_t dispatches = gHiResTimerDispatches.load(std::memory_order_relaxed);
+        uint64_t fallbackFlushes = gFallbackMidiFlushes.load(std::memory_order_relaxed);
+        uint64_t snapRepls = gSnapshotReplacements.load(std::memory_order_relaxed);
+
+        juce::Logger::writeToLog ("[DrawnCurve Debug] HiResTimer Dispatches: " + juce::String(dispatches)
+            + ", TryLock Failures: " + juce::String(tries)
+            + ", Fallback MIDI Flushes: " + juce::String(fallbackFlushes)
+            + ", Snapshot Replacements: " + juce::String(snapRepls));
+    }
+}
+#endif // JUCE_DEBUG
 
 //==============================================================================
 juce::AudioProcessorValueTreeState::ParameterLayout DrawnCurveProcessor::createParams()
@@ -91,6 +132,26 @@ juce::AudioProcessorValueTreeState::ParameterLayout DrawnCurveProcessor::createP
             juce::ParameterID { laneParam (L, ParamID::phaseOffset), 1 },
             lname + "Phase Offset", 0, 100, 0));  ///< Curve start offset in percent
 
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+        // TODO: add ParamID entries for per-lane playback
+        // Prep: Per-lane playback controls (currently unused by engine; UI TBD)
+        layout.add (std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID { laneParam (L, ParamID::useGlobalPlayback), 1 },
+            lname + "Use Global Playback", false));  // false = per-lane values active by default
+
+        layout.add (std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID { laneParam (L, ParamID::laneSpeedMul), 1 },
+            lname + "Speed Multiplier",
+            juce::NormalisableRange<float> (0.25f, 4.0f, 0.01f, 0.5f), 1.0f));
+
+        layout.add (std::make_unique<juce::AudioParameterChoice>(
+            juce::ParameterID { laneParam (L, ParamID::laneDirection), 1 },
+            lname + "Playback Direction (Lane)", juce::StringArray { "Forward", "Reverse", "Ping-Pong" }, 0));
+
+        layout.add (std::make_unique<juce::AudioParameterInt>(
+            juce::ParameterID { laneParam (L, ParamID::laneSyncGroup), 1 },
+            lname + "Sync Group", 0, 4, 0));  // 0 = none/global; 1..4 = group ids
+#endif
     }
 
     // ── Global scale quantization (shared by all Note-mode lanes) ─────────────
@@ -109,7 +170,85 @@ juce::AudioProcessorValueTreeState::ParameterLayout DrawnCurveProcessor::createP
     return layout;
 }
 
+// Bitmask convention: bit (11 - interval) = interval present in scale.
+// Bit 11 = root (interval 0 = C when root=C), bit 0 = major-7th (interval 11 = B).
+// Example: 0xFFF = 0b111111111111 = all 12 notes (Chromatic).
+//          0xAD5 = 0b101011010101 = C D E F G A B (Major from C).
+static constexpr uint16_t kScalePresetMasks[8] =
+{
+    0xFFF,   // 0 Chromatic       — all 12 intervals
+    0xAD5,   // 1 Major           — 0 2 4 5 7 9 11
+    0xB5A,   // 2 Natural Minor   — 0 2 3 5 7 8 10
+    0xB56,   // 3 Dorian          — 0 2 3 5 7 9 10
+    0xA94,   // 4 Pentatonic Maj  — 0 2 4 7 9
+    0x952,   // 5 Pentatonic Min  — 0 3 5 7 10
+    0x972,   // 6 Blues           — 0 3 5 6 7 10
+    0x000,   // 7 Custom          — stored in scaleMask param
+};
+
 //==============================================================================
+// Prep: helpers to compute per-lane effective playback (currently unused by engine)
+static inline float laneEffectiveSpeed (const juce::AudioProcessorValueTreeState& apvts, int lane, float globalSpeed)
+{
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+    const bool useGlobal = apvts.getRawParameterValue (laneParam (lane, ParamID::useGlobalPlayback))->load() > 0.5f;
+    if (useGlobal) return globalSpeed;
+    const float mul = apvts.getRawParameterValue (laneParam (lane, ParamID::laneSpeedMul))->load();
+    return juce::jlimit (0.01f, 16.0f, globalSpeed * juce::jmax (0.01f, mul));
+#else
+    return globalSpeed;
+#endif
+}
+
+static inline PlaybackDirection laneEffectiveDirection (const juce::AudioProcessorValueTreeState& apvts, int lane, PlaybackDirection globalDir)
+{
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+    const bool useGlobal = apvts.getRawParameterValue (laneParam (lane, ParamID::useGlobalPlayback))->load() > 0.5f;
+    if (useGlobal) return globalDir;
+    const int idx = static_cast<int> (apvts.getRawParameterValue (laneParam (lane, ParamID::laneDirection))->load());
+    return static_cast<PlaybackDirection> (juce::jlimit (0, 2, idx));
+#else
+    return globalDir;
+#endif
+}
+// TODO: lane sync groups can be handled by aligning phase across lanes that share the same non-zero group id.
+
+//==============================================================================
+// Internal helper for potential future per-lane scale support.
+// Currently, all lanes use the global scale config.
+static inline bool useGlobalScaleForLane(int /*lane*/) { return true; } // TODO: replace with per-lane parameter when introduced.
+
+ScaleConfig DrawnCurveProcessor::getScaleConfig (int /*lane*/) const noexcept
+{
+    // Note: lane argument ignored; all lanes share global scale config as useGlobalScaleForLane(lane) is hardcoded true.
+    const int     mode = static_cast<int> (
+        apvts.getRawParameterValue (ParamID::scaleMode)->load());
+    const uint8_t root = static_cast<uint8_t> (
+        apvts.getRawParameterValue (ParamID::scaleRoot)->load());
+
+    uint16_t mask;
+    if (mode == 7)
+        mask = static_cast<uint16_t> (
+            apvts.getRawParameterValue (ParamID::scaleMask)->load());
+    else
+        mask = kScalePresetMasks[std::clamp (mode, 0, 7)];
+
+    return { mask, root };
+}
+
+void DrawnCurveProcessor::updateEngineScale (int lane)
+{
+    _engine.setScaleConfig (lane, getScaleConfig (lane));
+}
+
+void DrawnCurveProcessor::updateAllLaneScales()
+{
+    for (int i = 0; i < kMaxLanes; ++i)
+        updateEngineScale (i);
+}
+
+//==============================================================================
+
 DrawnCurveProcessor::DrawnCurveProcessor()
     : AudioProcessor (BusesProperties()),
       apvts (*this, nullptr, "DrawnCurve", createParams())
@@ -205,6 +344,10 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         {
             midiMessages.addEvents (_pendingMidi, 0, -1, 0);
             _pendingMidi.clear();
+
+#if JUCE_DEBUG
+            ++gFallbackMidiFlushes;
+#endif
         }
     }
 
@@ -270,7 +413,22 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         }
     }
 
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+    // Compute per-lane speed and direction.  When sync is on, speed comes from the
+    // host BPM calculation (all lanes share the same tempo-derived rate); only the
+    // direction can differ.  In free mode each lane may also have its own multiplier.
+    std::array<float, kMaxLanes>            laneSpeedRatios;
+    std::array<PlaybackDirection, kMaxLanes> laneDirs;
+    for (int L = 0; L < kMaxLanes; ++L)
+    {
+        laneSpeedRatios[static_cast<size_t>(L)] =
+            syncOn ? effectiveSpeed : laneEffectiveSpeed (apvts, L, effectiveSpeed);
+        laneDirs[static_cast<size_t>(L)] = laneEffectiveDirection (apvts, L, dir);
+    }
+    _effectiveSpeedRatio.store (laneSpeedRatios[0], std::memory_order_relaxed);
+#else
     _effectiveSpeedRatio.store (effectiveSpeed, std::memory_order_relaxed);
+#endif
 
     // ── Push per-lane mute state to engine (detects enabled→disabled transition) ─
     // When a Teach session is active, that lane is isolated: all other lanes
@@ -289,15 +447,17 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     // ── Advance engine on the audio thread ────────────────────────────────────
     {
         juce::SpinLock::ScopedLockType lock (_engineLock);
-        _engine.processBlock (
-            static_cast<uint32_t> (buffer.getNumSamples()),
-            getSampleRate(),
-            [&midiMessages] (uint8_t status, uint8_t d1, uint8_t d2)
-            {
-                midiMessages.addEvent (makeMidiMessage (status, d1, d2), 0);
-            },
-            effectiveSpeed,
-            dir);
+        auto midiOut = [&midiMessages] (uint8_t status, uint8_t d1, uint8_t d2)
+        {
+            midiMessages.addEvent (makeMidiMessage (status, d1, d2), 0);
+        };
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+        _engine.processBlock (static_cast<uint32_t> (buffer.getNumSamples()),
+                              getSampleRate(), midiOut, laneSpeedRatios, laneDirs);
+#else
+        _engine.processBlock (static_cast<uint32_t> (buffer.getNumSamples()),
+                              getSampleRate(), midiOut, effectiveSpeed, dir);
+#endif
     }
 }
 
@@ -306,6 +466,10 @@ void DrawnCurveProcessor::hiResTimerCallback()
 {
     if (! isPlaying() || ! anyLaneHasCurve()) return;
 
+#if JUCE_DEBUG
+    ++gHiResTimerDispatches;
+#endif
+
     const int64_t now    = juce::Time::currentTimeMillis();
     const int64_t lastAT = _lastProcessBlockMs.load (std::memory_order_relaxed);
     if (now - lastAT < kAudioThreadTimeoutMs) return;
@@ -313,24 +477,40 @@ void DrawnCurveProcessor::hiResTimerCallback()
     const auto nominalFrames =
         static_cast<uint32_t> (_timerSampleRate * kTimerIntervalMs / 1000.0);
 
-    const float speed = _effectiveSpeedRatio.load (std::memory_order_relaxed);
-    const auto  dir   = static_cast<PlaybackDirection> (
+    const float globalSpeed = _effectiveSpeedRatio.load (std::memory_order_relaxed);
+    const auto  globalDir   = static_cast<PlaybackDirection> (
         static_cast<int> (apvts.getRawParameterValue (ParamID::playbackDirection)->load()));
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+    std::array<float, kMaxLanes>            laneSpeedRatios;
+    std::array<PlaybackDirection, kMaxLanes> laneDirs;
+    for (int L = 0; L < kMaxLanes; ++L)
+    {
+        laneSpeedRatios[static_cast<size_t>(L)] = laneEffectiveSpeed  (apvts, L, globalSpeed);
+        laneDirs       [static_cast<size_t>(L)] = laneEffectiveDirection (apvts, L, globalDir);
+    }
+#endif
 
     juce::MidiBuffer localBuf;
     {
         juce::SpinLock::ScopedTryLockType tryLock (_engineLock);
-        if (! tryLock.isLocked()) return;
+        if (! tryLock.isLocked()) {
+#if JUCE_DEBUG
+            gHiResTimerTryLockFailures.fetch_add(1, std::memory_order_relaxed);
+#endif
+            return;
+        }
 
-        _engine.processBlock (
-            nominalFrames,
-            _timerSampleRate,
-            [&localBuf] (uint8_t status, uint8_t d1, uint8_t d2)
-            {
-                localBuf.addEvent (makeMidiMessage (status, d1, d2), 0);
-            },
-            speed,
-            dir);
+        auto timerMidiOut = [&localBuf] (uint8_t status, uint8_t d1, uint8_t d2)
+        {
+            localBuf.addEvent (makeMidiMessage (status, d1, d2), 0);
+        };
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+        _engine.processBlock (nominalFrames, _timerSampleRate,
+                              timerMidiOut, laneSpeedRatios, laneDirs);
+#else
+        _engine.processBlock (nominalFrames, _timerSampleRate,
+                              timerMidiOut, globalSpeed, globalDir);
+#endif
     }
 
     if (! localBuf.isEmpty())
@@ -339,6 +519,10 @@ void DrawnCurveProcessor::hiResTimerCallback()
         for (const auto meta : localBuf)
             _pendingMidi.addEvent (meta.getMessage(), meta.samplePosition);
     }
+
+#if JUCE_DEBUG
+    dbgLogCountersIfNeeded();
+#endif
 }
 
 //==============================================================================
@@ -377,10 +561,22 @@ void DrawnCurveProcessor::finalizeCapture (int lane)
     const bool  oneShot     = apvts.getRawParameterValue (laneParam (lane, ParamID::loopMode))->load() > 0.5f;
     const float phaseOffPct = apvts.getRawParameterValue (laneParam (lane, ParamID::phaseOffset))->load();
 
+    /* Snapshot replacement strategy:
+     * Each new snapshot is allocated and assigned to _laneSnaps without deleting
+     * the previous one, intentionally leaking the old snapshot. This avoids
+     * realtime unsafe deallocation while the audio thread might still access the old snapshot.
+     * TODO: migrate to shared_ptr<const LaneSnapshot> ownership to allow safe
+     * reclamation without leaks.
+     */
     auto* snap = new LaneSnapshot (_capture.finalize (ccNum, ch, minOut, maxOut, smooth, msgType));
     snap->noteVelocity = noteVel;
     snap->oneShot      = oneShot;
     snap->phaseOffset  = phaseOffPct / 100.0f;
+
+#if JUCE_DEBUG
+    ++gSnapshotReplacements;
+#endif
+
     _laneSnaps[static_cast<size_t>(lane)] = snap;
 
     {
@@ -411,6 +607,13 @@ void DrawnCurveProcessor::updateLaneSnapshot (int lane)
     const bool  oneShot     = apvts.getRawParameterValue (laneParam (lane, ParamID::loopMode))->load() > 0.5f;
     const float phaseOffPct = apvts.getRawParameterValue (laneParam (lane, ParamID::phaseOffset))->load();
 
+    /* Snapshot replacement strategy:
+     * Each new snapshot is allocated and assigned to _laneSnaps without deleting
+     * the previous one, intentionally leaking the old snapshot. This avoids
+     * realtime unsafe deallocation while the audio thread might still access the old snapshot.
+     * TODO: migrate to shared_ptr<const LaneSnapshot> ownership to allow safe
+     * reclamation without leaks.
+     */
     // Clone the existing snapshot, then overwrite only the param-driven fields.
     auto* snap = new LaneSnapshot (*existing);
     snap->ccNumber       = ccNum;
@@ -422,6 +625,10 @@ void DrawnCurveProcessor::updateLaneSnapshot (int lane)
     snap->noteVelocity   = noteVel;
     snap->oneShot        = oneShot;
     snap->phaseOffset    = phaseOffPct / 100.0f;
+
+#if JUCE_DEBUG
+    ++gSnapshotReplacements;
+#endif
 
     _laneSnaps[static_cast<size_t>(lane)] = snap;
 
@@ -463,6 +670,26 @@ void DrawnCurveProcessor::clearAllSnapshots()
 // MIDI Panic
 //==============================================================================
 
+void DrawnCurveProcessor::setLanePaused (int lane, bool paused)
+{
+    _engine.setLanePaused (lane, paused);
+}
+
+bool DrawnCurveProcessor::getLanePaused (int lane) const noexcept
+{
+    return _engine.getLanePaused (lane);
+}
+
+void DrawnCurveProcessor::setLanesSynced (bool synced)
+{
+    _engine.setLanesSynced (synced);
+}
+
+bool DrawnCurveProcessor::getLanesSynced() const noexcept
+{
+    return _engine.getLanesSynced();
+}
+
 void DrawnCurveProcessor::restartAllLanes()
 {
     const auto dir = static_cast<PlaybackDirection> (
@@ -499,6 +726,25 @@ void DrawnCurveProcessor::setPlaying (bool on)
 }
 
 bool DrawnCurveProcessor::isPlaying() const noexcept { return _engine.getPlaying(); }
+
+//==============================================================================
+// Teach / Learn
+//==============================================================================
+
+void DrawnCurveProcessor::beginTeach (int lane)
+{
+    _teachPendingLane.store (lane, std::memory_order_relaxed);
+}
+
+void DrawnCurveProcessor::cancelTeach()
+{
+    _teachPendingLane.store (-1, std::memory_order_relaxed);
+}
+
+bool DrawnCurveProcessor::isTeachPending (int lane) const noexcept
+{
+    return _teachPendingLane.load (std::memory_order_relaxed) == lane;
+}
 
 //==============================================================================
 // Query API
@@ -538,78 +784,12 @@ float DrawnCurveProcessor::curveDuration (int lane) const noexcept
 // Scale quantization
 //==============================================================================
 
-// Bitmask convention: bit (11 - interval) = interval present in scale.
-// Bit 11 = root (interval 0 = C when root=C), bit 0 = major-7th (interval 11 = B).
-// Example: 0xFFF = 0b111111111111 = all 12 notes (Chromatic).
-//          0xAD5 = 0b101011010101 = C D E F G A B (Major from C).
-static constexpr uint16_t kScalePresetMasks[8] =
-{
-    0xFFF,   // 0 Chromatic       — all 12 intervals
-    0xAD5,   // 1 Major           — 0 2 4 5 7 9 11
-    0xB5A,   // 2 Natural Minor   — 0 2 3 5 7 8 10
-    0xB56,   // 3 Dorian          — 0 2 3 5 7 9 10
-    0xA94,   // 4 Pentatonic Maj  — 0 2 4 7 9
-    0x952,   // 5 Pentatonic Min  — 0 3 5 7 10
-    0x972,   // 6 Blues           — 0 3 5 6 7 10
-    0x000,   // 7 Custom          — stored in scaleMask param
-};
-
-ScaleConfig DrawnCurveProcessor::getScaleConfig (int /*lane*/) const noexcept
-{
-    // Scale is now global — the lane argument is retained for API compatibility
-    // but ignored; all Note-mode lanes share the same quantization.
-    const int     mode = static_cast<int> (
-        apvts.getRawParameterValue (ParamID::scaleMode)->load());
-    const uint8_t root = static_cast<uint8_t> (
-        apvts.getRawParameterValue (ParamID::scaleRoot)->load());
-
-    uint16_t mask;
-    if (mode == 7)
-        mask = static_cast<uint16_t> (
-            apvts.getRawParameterValue (ParamID::scaleMask)->load());
-    else
-        mask = kScalePresetMasks[std::clamp (mode, 0, 7)];
-
-    return { mask, root };
-}
-
-void DrawnCurveProcessor::updateEngineScale (int lane)
-{
-    _engine.setScaleConfig (lane, getScaleConfig (lane));
-}
-
-void DrawnCurveProcessor::updateAllLaneScales()
-{
-    for (int i = 0; i < kMaxLanes; ++i)
-        updateEngineScale (i);
-}
-
-//==============================================================================
-// Teach / Learn
-//==============================================================================
-
-void DrawnCurveProcessor::beginTeach (int lane)
-{
-    _teachPendingLane.store (lane, std::memory_order_relaxed);
-}
-
-void DrawnCurveProcessor::cancelTeach()
-{
-    _teachPendingLane.store (-1, std::memory_order_relaxed);
-}
-
-bool DrawnCurveProcessor::isTeachPending (int lane) const noexcept
-{
-    return _teachPendingLane.load (std::memory_order_relaxed) == lane;
-}
-
-//==============================================================================
-// State persistence
-//==============================================================================
-
 void DrawnCurveProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
+
+    // Increment when making breaking schema changes.
+    state.setProperty ("stateVersion", 2, nullptr);
 
     for (int L = 0; L < kMaxLanes; ++L)
     {
@@ -641,6 +821,11 @@ void DrawnCurveProcessor::setStateInformation (const void* data, int sizeInBytes
 
     auto state = juce::ValueTree::fromXml (*xml);
     apvts.replaceState (state);
+
+    // Retrieve version for possible future migration logic.
+    const int stateVersion = static_cast<int> (state.getProperty ("stateVersion", 1));
+    // Future upgrades can branch based on stateVersion to migrate old state formats.
+
     updateAllLaneScales();
 
     for (int L = 0; L < kMaxLanes; ++L)
@@ -727,3 +912,4 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new DrawnCurveProcessor();
 }
+

@@ -14,6 +14,7 @@ GestureEngine::GestureEngine()
         _noteOffNeeded[static_cast<size_t>(i)].store(false,   std::memory_order_relaxed);
         _scalesPacked[static_cast<size_t>(i)].store (0xFFF,   std::memory_order_relaxed);
         _laneEnabled[static_cast<size_t>(i)].store  (true,    std::memory_order_relaxed);
+        _lanePaused[static_cast<size_t>(i)].store   (false,   std::memory_order_relaxed);
         _lanePhases[static_cast<size_t>(i)].store   (0.0f,    std::memory_order_relaxed);
     }
 }
@@ -66,10 +67,13 @@ void GestureEngine::reset()
         }
         _runtimes[static_cast<size_t>(i)].playheadSeconds = 0.0;
         _runtimes[static_cast<size_t>(i)].smoothedValue   = 0.0f;
-        _lanePhases[static_cast<size_t>(i)].store (0.0f, std::memory_order_relaxed);
+        _lanePhases[static_cast<size_t>(i)].store (0.0f,  std::memory_order_relaxed);
+        _lanePaused[static_cast<size_t>(i)].store (false, std::memory_order_relaxed);
     }
 
     _currentPhase.store (0.0f, std::memory_order_relaxed);
+    _syncMasterPlayhead = 0.0;
+    _syncWasEnabled     = false;   // force re-snap on next processBlock if sync is active
 }
 
 void GestureEngine::resetForDirection (PlaybackDirection dir)
@@ -99,6 +103,8 @@ void GestureEngine::resetForDirection (PlaybackDirection dir)
     }
 
     _currentPhase.store (rawPhase, std::memory_order_relaxed);
+    _syncMasterPlayhead = 0.0;
+    _syncWasEnabled     = false;
 }
 
 void GestureEngine::stopLane (int lane)
@@ -135,6 +141,36 @@ void GestureEngine::setLaneEnabled (int lane, bool enabled)
     const bool wasEnabled = _laneEnabled[static_cast<size_t>(lane)].exchange (enabled, std::memory_order_acq_rel);
     if (wasEnabled && ! enabled)
         stopLane (lane);    // sets _noteOffNeeded; fires in the current processLane call
+}
+
+void GestureEngine::setLanePaused (int lane, bool paused)
+{
+    if (lane < 0 || lane >= kMaxLanes) return;
+    // Queue a Note Off on the false→true (playing→paused) edge, so any held
+    // note stops immediately rather than sustaining indefinitely.
+    const bool wasPaused = _lanePaused[static_cast<size_t>(lane)].exchange (paused, std::memory_order_acq_rel);
+    if (! wasPaused && paused)
+        stopLane (lane);
+}
+
+bool GestureEngine::getLanePaused (int lane) const noexcept
+{
+    if (lane < 0 || lane >= kMaxLanes) return false;
+    return _lanePaused[static_cast<size_t>(lane)].load (std::memory_order_acquire);
+}
+
+void GestureEngine::setLanesSynced (bool synced)
+{
+    // Only write the atomic flag here — _syncMasterPlayhead is render-thread-only
+    // and must not be touched from the UI thread to avoid a data race.
+    // The render thread detects the false→true transition itself and resets
+    // _syncMasterPlayhead at that point (see processBlock).
+    _lanesSynced.store (synced, std::memory_order_release);
+}
+
+bool GestureEngine::getLanesSynced() const noexcept
+{
+    return _lanesSynced.load (std::memory_order_acquire);
 }
 
 void GestureEngine::setScaleConfig (int lane, ScaleConfig config)
@@ -219,7 +255,8 @@ float GestureEngine::sampleCurve (const LaneSnapshot& snap, float phase) const
 
 void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRate,
                                   const MIDIOut& midiOut,
-                                  float speedRatio, PlaybackDirection direction)
+                                  float speedRatio, PlaybackDirection direction,
+                                  float forcedPhase)
 {
     auto& rt  = _runtimes[static_cast<size_t>(lane)];
     const auto* snap = _snapshots[static_cast<size_t>(lane)].load (std::memory_order_acquire);
@@ -240,6 +277,7 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
     if (! snap || ! snap->valid) return;
     if (! _isPlaying.load (std::memory_order_acquire)) return;
     if (! _laneEnabled[static_cast<size_t>(lane)].load (std::memory_order_acquire)) return;   // muted
+    if (  _lanePaused [static_cast<size_t>(lane)].load (std::memory_order_acquire)) return;   // individually paused
 
     const double effectiveDur = static_cast<double> (snap->durationSeconds)
                                 / static_cast<double> (std::max (speedRatio, 0.001f));
@@ -254,7 +292,26 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
 
     // ── Phase (direction-dependent) ───────────────────────────────────────────
     float phase;
-    if (direction == PlaybackDirection::Reverse)
+
+    // When forcedPhase is provided (lane-sync master phase) and this lane loops,
+    // skip own phase computation and use the master phase directly.
+    // playheadSeconds is still advanced above so it stays coherent when sync is disabled.
+    if (forcedPhase >= 0.0f && ! snap->oneShot)
+    {
+        // Keep own playheadSeconds wrapped so it doesn't drift unboundedly
+        if (direction == PlaybackDirection::PingPong)
+        {
+            if (rt.playheadSeconds >= 2.0 * effectiveDur)
+                rt.playheadSeconds = std::fmod (rt.playheadSeconds, 2.0 * effectiveDur);
+        }
+        else
+        {
+            if (rt.playheadSeconds >= effectiveDur)
+                rt.playheadSeconds = std::fmod (rt.playheadSeconds, effectiveDur);
+        }
+        phase = forcedPhase;
+    }
+    else if (direction == PlaybackDirection::Reverse)
     {
         if (rt.playheadSeconds >= effectiveDur)
         {
@@ -432,6 +489,113 @@ void GestureEngine::processBlock (uint32_t frameCount, double sampleRate,
                                    const MIDIOut& midiOut,
                                    float speedRatio, PlaybackDirection direction)
 {
+    // ── Lane sync: compute master phase once and pass to all lanes ────────────
+    const bool syncNow = _lanesSynced.load (std::memory_order_relaxed);
+    // Detect false→true transition: reset the master clock so all lanes snap
+    // to a clean phase-0 start the moment sync is engaged.
+    if (syncNow && ! _syncWasEnabled)
+        _syncMasterPlayhead = 0.0;
+    _syncWasEnabled = syncNow;
+
+    float masterPhase = -1.0f;
+    if (syncNow && _isPlaying.load (std::memory_order_acquire))
+    {
+        // Use the first valid lane's duration as the master period.
+        double masterDur = 0.0;
+        for (int i = 0; i < kMaxLanes; ++i)
+        {
+            const auto* s = _snapshots[static_cast<size_t>(i)].load (std::memory_order_acquire);
+            if (s && s->valid)
+            {
+                masterDur = static_cast<double> (s->durationSeconds)
+                            / static_cast<double> (std::max (speedRatio, 0.001f));
+                break;
+            }
+        }
+        if (masterDur > 0.0)
+        {
+            // PingPong cycles over twice the duration; everything else over masterDur.
+            const double cycleDur = (direction == PlaybackDirection::PingPong)
+                                    ? 2.0 * masterDur : masterDur;
+
+            _syncMasterPlayhead += static_cast<double> (frameCount) / sampleRate;
+            if (_syncMasterPlayhead >= cycleDur)
+                _syncMasterPlayhead = std::fmod (_syncMasterPlayhead, cycleDur);
+
+            if (direction == PlaybackDirection::Reverse)
+            {
+                masterPhase = 1.0f - static_cast<float> (_syncMasterPlayhead / masterDur);
+            }
+            else if (direction == PlaybackDirection::PingPong)
+            {
+                const double frac = _syncMasterPlayhead / masterDur;
+                masterPhase = (frac <= 1.0) ? static_cast<float> (frac)
+                                            : static_cast<float> (2.0 - frac);
+            }
+            else
+            {
+                masterPhase = static_cast<float> (_syncMasterPlayhead / masterDur);
+            }
+        }
+    }
+
     for (int lane = 0; lane < kMaxLanes; ++lane)
-        processLane (lane, frameCount, sampleRate, midiOut, speedRatio, direction);
+        processLane (lane, frameCount, sampleRate, midiOut, speedRatio, direction, masterPhase);
+}
+
+void GestureEngine::processBlock (uint32_t frameCount, double sampleRate,
+                                   const MIDIOut& midiOut,
+                                   const std::array<float, kMaxLanes>& speedRatios,
+                                   const std::array<PlaybackDirection, kMaxLanes>& directions)
+{
+    // ── Lane sync: same logic as the single-speed overload ────────────────────
+    const bool syncNow = _lanesSynced.load (std::memory_order_relaxed);
+    if (syncNow && ! _syncWasEnabled)
+        _syncMasterPlayhead = 0.0;
+    _syncWasEnabled = syncNow;
+
+    float masterPhase = -1.0f;
+    if (syncNow && _isPlaying.load (std::memory_order_acquire))
+    {
+        // Use the first valid lane's speed and direction as the master clock.
+        double masterDur = 0.0;
+        PlaybackDirection masterDir = PlaybackDirection::Forward;
+        for (int i = 0; i < kMaxLanes; ++i)
+        {
+            const auto* s = _snapshots[static_cast<size_t>(i)].load (std::memory_order_acquire);
+            if (s && s->valid)
+            {
+                masterDur = static_cast<double> (s->durationSeconds)
+                            / static_cast<double> (std::max (speedRatios[static_cast<size_t>(i)], 0.001f));
+                masterDir = directions[static_cast<size_t>(i)];
+                break;
+            }
+        }
+        if (masterDur > 0.0)
+        {
+            const double cycleDur = (masterDir == PlaybackDirection::PingPong)
+                                    ? 2.0 * masterDur : masterDur;
+
+            _syncMasterPlayhead += static_cast<double> (frameCount) / sampleRate;
+            if (_syncMasterPlayhead >= cycleDur)
+                _syncMasterPlayhead = std::fmod (_syncMasterPlayhead, cycleDur);
+
+            if (masterDir == PlaybackDirection::Reverse)
+                masterPhase = 1.0f - static_cast<float> (_syncMasterPlayhead / masterDur);
+            else if (masterDir == PlaybackDirection::PingPong)
+            {
+                const double frac = _syncMasterPlayhead / masterDur;
+                masterPhase = (frac <= 1.0) ? static_cast<float> (frac)
+                                            : static_cast<float> (2.0 - frac);
+            }
+            else
+                masterPhase = static_cast<float> (_syncMasterPlayhead / masterDur);
+        }
+    }
+
+    for (int lane = 0; lane < kMaxLanes; ++lane)
+        processLane (lane, frameCount, sampleRate, midiOut,
+                     speedRatios[static_cast<size_t>(lane)],
+                     directions[static_cast<size_t>(lane)],
+                     masterPhase);
 }

@@ -340,6 +340,7 @@ private:
     SegmentedControl laneFocusCtrl;   ///< Lane 1 | Lane 2 | Lane 3
 
     juce::TextButton oneShotBtn;            ///< Loop (∞) / One-shot (1) — shaping panel
+    juce::TextButton laneSyncBtn;           ///< Lock all lane playheads to the same phase
     juce::Slider smoothingSlider;
     juce::Slider rangeSlider;
     juce::Slider phaseOffsetSlider;
@@ -511,6 +512,14 @@ private:
     juce::Rectangle<int> _secShaping;
     juce::Rectangle<int> _secRouting;
     juce::Rectangle<int> _secNotes;
+
+    bool _showingAllLanes { false };   ///< true when the "*" (All Lanes) tab is active.
+
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+    /// Rebind speed slider + direction control to lane-specific params (lane ≥ 0)
+    /// or to global params (lane < 0, i.e. the "*" tab).
+    void bindPlaybackToLane (int lane);
+#endif
 
     // ── Private helpers ───────────────────────────────────────────────────────
     void setupSlider (juce::Slider& s, juce::Label& l,

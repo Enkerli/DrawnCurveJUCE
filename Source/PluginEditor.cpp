@@ -63,8 +63,8 @@ namespace Layout
     static constexpr int utilityRowH = 28;
 
     // Right column sections
-    static constexpr int transportH   = 94;    // direction(38)+pad(4)+syncRow(44)+margins(8)
-    static constexpr int shapingH     = 180;   // laneFocus(28)+gap(4)+smooth(44)+gap(4)+range(44)+gap(4)+phase(44)+margins(8)
+    static constexpr int transportH   = 0;     // transport section removed; sync moved to shaping row
+    static constexpr int shapingH     = 228;   // laneFocus(28)+gap(4)+dirSpeed(44)+gap(4)+smooth(44)+gap(4)+range(44)+gap(4)+phase(44)+margins(8)
     static constexpr int routingMatH  = 148;   // header(16)+3×row(28)+gaps(2×3=6)+gap(4)+detail(28)+margins(8) = 148
 
     // Left column
@@ -493,7 +493,10 @@ void CurveDisplay::paint (juce::Graphics& g)
     // _blinkOn toggles each tick, so one on/off cycle = 2 ticks ≈ 60 ms; we slow
     // it with a counter-free approach by only showing at even repaint ticks when
     // _blinkOn = true, giving a ~15 Hz visual rate which reads as a clear blink).
-    if (proc.anyLaneHasCurve() && ! proc.isPlaying())
+    const bool lanePausedForDisplay = proc.anyLaneHasCurve()
+                                      && (! proc.isPlaying()
+                                          || proc.getLanePaused (_focusedLane));
+    if (lanePausedForDisplay)
     {
         const auto laneCol = (_lightMode ? kLaneColourLight : kLaneColourDark)[_focusedLane];
 
@@ -673,43 +676,61 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         if (helpOverlay.isVisible()) helpOverlay.toFront (false);
     };
 
-    // ── Speed slider (shared, transport section) ──────────────────────────────
-    setupSlider (speedSlider, speedLabel, "Speed");
+    // ── Speed slider (shaping section — contextual, bound in bindPlaybackToLane) ─
+    setupSlider (speedSlider, speedLabel, "FREE");
     speedSlider.setTextValueSuffix ("x");
     speedSlider.setNumDecimalPlacesToDisplay (2);
-    speedAttach = std::make_unique<Attach> (proc.apvts, ParamID::playbackSpeed, speedSlider);
+    // speedAttach is set by bindPlaybackToLane() called at end of constructor.
 
-    // ── Direction control ─────────────────────────────────────────────────────
+    // ── Direction control (shaping section — contextual) ──────────────────────
     dirControl.setSegments ({
         { "rev", "", "Reverse" },
         { "pp",  "", "Ping-Pong" },
         { "fwd", "", "Forward" }
     });
-    dirControl.setSelectedIndex (
-        kDirParamToVis[static_cast<int> (
-            proc.apvts.getRawParameterValue (ParamID::playbackDirection)->load())],
-        juce::dontSendNotification);
-    dirControl.onChange = [this] (int vis)
-    {
-        // Direction (Forward / PingPong / Reverse) is always user-controlled.
-        // Sync mode only affects speed/timing from the host BPM; it does not
-        // lock the looping direction.
-        if (auto* pDir = dynamic_cast<juce::AudioParameterChoice*> (
-                          proc.apvts.getParameter (ParamID::playbackDirection)))
-            *pDir = kDirVisToParam[vis];
-    };
+    dirControl.setSelectedIndex (0, juce::dontSendNotification);
+    // dirControl.onChange is set by bindPlaybackToLane() called at end of constructor.
     dirControl.onTap = [this] (int, bool wasAlready)
     {
-        if (wasAlready)
+        if (_showingAllLanes)
         {
-            const bool nowPlaying = ! proc.isPlaying();
-            proc.setPlaying (nowPlaying);
-            playButton.setButtonText (nowPlaying ? "Pause" : "Play");
+            // ── All Lanes tab: tap active segment toggles global play/pause ──
+            if (wasAlready)
+            {
+                const bool nowPlaying = ! proc.isPlaying();
+                proc.setPlaying (nowPlaying);
+                playButton.setButtonText (nowPlaying ? "Pause" : "Play");
+            }
+            else
+            {
+                proc.setPlaying (true);
+                playButton.setButtonText ("Pause");
+            }
         }
         else
         {
-            proc.setPlaying (true);
-            playButton.setButtonText ("Pause");
+            // ── Individual lane tab: tap active segment pauses/resumes that lane ──
+            if (wasAlready)
+            {
+                const bool nowPaused = ! proc.getLanePaused (_focusedLane);
+                proc.setLanePaused (_focusedLane, nowPaused);
+                // Also ensure global engine is playing so other lanes keep running.
+                if (! proc.isPlaying())
+                {
+                    proc.setPlaying (true);
+                    playButton.setButtonText ("Pause");
+                }
+            }
+            else
+            {
+                // Tapped a different direction: un-pause this lane and resume globally.
+                proc.setLanePaused (_focusedLane, false);
+                if (! proc.isPlaying())
+                {
+                    proc.setPlaying (true);
+                    playButton.setButtonText ("Pause");
+                }
+            }
         }
         dirControl.repaint();
         curveDisplay.repaint();
@@ -722,13 +743,14 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         const float aw = bounds.getHeight() * 0.35f;
         const float tw = aw * 0.82f;
 
-        // Semantic states
+        // Semantic states — per-lane when in a lane tab, global when in All Lanes tab
         const bool enginePlaying = proc.isPlaying();
         const bool hasCurve      = proc.anyLaneHasCurve();
-        // "paused" = this direction is selected, a curve exists, but we're not playing
-        const bool paused        = active && hasCurve && ! enginePlaying;
-        // "live"   = this direction is selected and actively playing
-        const bool live          = active && enginePlaying;
+        const bool lanePaused    = ! _showingAllLanes && proc.getLanePaused (_focusedLane);
+        // "paused" = selected direction, curve exists, engine or this lane is paused
+        const bool paused        = active && hasCurve && (! enginePlaying || lanePaused);
+        // "live"   = selected direction, engine running, this lane not paused
+        const bool live          = active && enginePlaying && ! lanePaused;
 
         // Direction arrow opacity:
         //   live  → full (shows which direction is running)
@@ -779,12 +801,17 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 
     // ── Lane focus selector ───────────────────────────────────────────────────
     laneFocusCtrl.setSegments ({
-        { "l1", "1", "Lane 1" },
-        { "l2", "2", "Lane 2" },
-        { "l3", "3", "Lane 3" }
+        { "l1",  "1", "Lane 1" },
+        { "l2",  "2", "Lane 2" },
+        { "l3",  "3", "Lane 3" },
+        { "all", "*", "All Lanes" },
     });
     laneFocusCtrl.setSelectedIndex (0, juce::dontSendNotification);
-    laneFocusCtrl.onChange = [this] (int idx) { setFocusedLane (idx); };
+    laneFocusCtrl.onChange = [this] (int idx)
+    {
+        if (idx == kMaxLanes) { setFocusedLane (-1); return; }
+        setFocusedLane (idx);
+    };
     addAndMakeVisible (laneFocusCtrl);
 
     // ── Shaping sliders ───────────────────────────────────────────────────────
@@ -820,6 +847,19 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     // Use charToString to build the infinity glyph from its codepoint — avoids
     // any source-file encoding ambiguity with u8 string literals.
     oneShotBtn.setButtonText (juce::String::charToString (juce::juce_wchar (0x221E)));  // ∞ = loop
+
+    // Lane sync toggle — locks all looping lane playheads to the same phase.
+    // Visible only in the "All Lanes" (*) tab.  Symbol U+2261 "≡" (identical-to,
+    // three equal lines) suggests all lanes running at the same rate.
+    addChildComponent (laneSyncBtn);   // starts hidden; setFocusedLane(-1) makes it visible
+    laneSyncBtn.setClickingTogglesState (true);
+    laneSyncBtn.setButtonText (juce::String::charToString (juce::juce_wchar (0x2261)));  // ≡
+    laneSyncBtn.setToggleState (proc.getLanesSynced(), juce::dontSendNotification);
+    laneSyncBtn.onClick = [this]
+    {
+        proc.setLanesSynced (laneSyncBtn.getToggleState());
+        applyTheme();
+    };
 
     // Bind shaping to lane 0 at startup.
     bindShapingToLane (0);
@@ -1295,10 +1335,18 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     // Register global param listeners
     proc.apvts.addParameterListener (ParamID::playbackDirection, this);
     proc.apvts.addParameterListener (ParamID::syncEnabled,       this);
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+    for (int L = 0; L < kMaxLanes; ++L)
+        proc.apvts.addParameterListener (laneParam (L, ParamID::laneDirection), this);
+#endif
 
     applyTheme();
     onSyncToggled (proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f);
     updateScaleVisibility();
+
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+    bindPlaybackToLane (0);   // initial binding: lane 0
+#endif
 }
 
 DrawnCurveEditor::~DrawnCurveEditor()
@@ -1326,6 +1374,9 @@ DrawnCurveEditor::~DrawnCurveEditor()
         for (const auto& base : { "msgType", "ccNumber", "midiChannel", "noteVelocity",
                                    "enabled", "loopMode", "phaseOffset", "minOutput", "maxOutput", "smoothing" })
             proc.apvts.removeParameterListener (laneParam (L, base), this);
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+        proc.apvts.removeParameterListener (laneParam (L, ParamID::laneDirection), this);
+#endif
     }
     // Global scale params
     for (const auto& id : { "scaleMode", "scaleRoot", "scaleMask" })
@@ -1364,12 +1415,50 @@ bool DrawnCurveEditor::keyPressed (const juce::KeyPress& key)
 
 void DrawnCurveEditor::setFocusedLane (int lane)
 {
+    // Per-lane controls — visible in the individual lane (1/2/3) tabs.
+    auto setPerLaneVisible = [this] (bool v)
+    {
+        for (juce::Component* w : { static_cast<juce::Component*> (&smoothingLabel),
+                                     static_cast<juce::Component*> (&smoothingSlider),
+                                     static_cast<juce::Component*> (&rangeLabel),
+                                     static_cast<juce::Component*> (&rangeSlider),
+                                     static_cast<juce::Component*> (&phaseOffsetLabel),
+                                     static_cast<juce::Component*> (&phaseOffsetSlider),
+                                     static_cast<juce::Component*> (&oneShotBtn) })
+            w->setVisible (v);
+    };
+
+    if (lane < 0)
+    {
+        // ── All Lanes (*) tab ─────────────────────────────────────────────────
+        _showingAllLanes = true;
+        laneFocusCtrl.setSelectedIndex (kMaxLanes, juce::dontSendNotification);
+        setPerLaneVisible (false);
+        laneSyncBtn.setVisible (true);
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+        bindPlaybackToLane (-1);
+#endif
+        repaint();
+        return;
+    }
+
+    // ── Individual lane tab ───────────────────────────────────────────────────
+    if (_showingAllLanes)
+    {
+        _showingAllLanes = false;
+        laneSyncBtn.setVisible (false);
+        setPerLaneVisible (true);
+    }
+
     _focusedLane = juce::jlimit (0, kMaxLanes - 1, lane);
     curveDisplay.setFocusedLane (_focusedLane);
     laneFocusCtrl.setSelectedIndex (_focusedLane, juce::dontSendNotification);
     bindShapingToLane (_focusedLane);
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+    bindPlaybackToLane (_focusedLane);
+#endif
     updateScaleVisibility();
-    updateLaneRow (_focusedLane);   // refresh mapping detail
+    updateLaneRow (_focusedLane);
     repaint();
 }
 
@@ -1405,6 +1494,63 @@ void DrawnCurveEditor::bindShapingToLane (int lane)
         }
     };
 }
+
+//==============================================================================
+// Per-lane playback binding
+//==============================================================================
+
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+
+void DrawnCurveEditor::bindPlaybackToLane (int lane)
+{
+    const bool isSyncing = proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
+
+    if (lane >= 0 && lane < kMaxLanes)
+    {
+        // Per-lane mode: bind speed to this lane's multiplier param.
+        if (! isSyncing)
+        {
+            speedAttach.reset();
+            speedAttach = std::make_unique<Attach> (
+                proc.apvts, laneParam (lane, ParamID::laneSpeedMul), speedSlider);
+        }
+
+        // Direction: read lane param and rebind onChange.
+        const int dir = static_cast<int> (
+            proc.apvts.getRawParameterValue (laneParam (lane, ParamID::laneDirection))->load());
+        dirControl.setSelectedIndex (kDirParamToVis[juce::jlimit (0, 2, dir)],
+                                     juce::dontSendNotification);
+        dirControl.onChange = [this, lane] (int vis)
+        {
+            if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (
+                    proc.apvts.getParameter (laneParam (lane, ParamID::laneDirection))))
+                *p = kDirVisToParam[vis];
+        };
+    }
+    else
+    {
+        // Global ("all lanes") mode: bind speed to the shared playbackSpeed param.
+        if (! isSyncing)
+        {
+            speedAttach.reset();
+            speedAttach = std::make_unique<Attach> (
+                proc.apvts, ParamID::playbackSpeed, speedSlider);
+        }
+
+        const int dir = static_cast<int> (
+            proc.apvts.getRawParameterValue (ParamID::playbackDirection)->load());
+        dirControl.setSelectedIndex (kDirParamToVis[juce::jlimit (0, 2, dir)],
+                                     juce::dontSendNotification);
+        dirControl.onChange = [this] (int vis)
+        {
+            if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (
+                    proc.apvts.getParameter (ParamID::playbackDirection)))
+                *p = kDirVisToParam[vis];
+        };
+    }
+}
+
+#endif  // DC_HAVE_PER_LANE_PLAYBACK_PARAMS
 
 //==============================================================================
 // Lane row update
@@ -1490,6 +1636,10 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
 {
     if (paramID == ParamID::playbackDirection)
     {
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+        // Only update dirControl if we're currently showing global ("*") params.
+        if (! _showingAllLanes) return;
+#endif
         juce::MessageManager::callAsync ([this] {
             dirControl.setSelectedIndex (
                 kDirParamToVis[static_cast<int> (
@@ -1498,6 +1648,22 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
         });
         return;
     }
+
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+    for (int L = 0; L < kMaxLanes; ++L)
+    {
+        if (paramID == laneParam (L, ParamID::laneDirection) && L == _focusedLane && ! _showingAllLanes)
+        {
+            juce::MessageManager::callAsync ([this, L] {
+                const int dir = static_cast<int> (
+                    proc.apvts.getRawParameterValue (laneParam (L, ParamID::laneDirection))->load());
+                dirControl.setSelectedIndex (kDirParamToVis[juce::jlimit (0, 2, dir)],
+                                             juce::dontSendNotification);
+            });
+            return;
+        }
+    }
+#endif
 
     if (paramID == ParamID::syncEnabled)
     {
@@ -1619,10 +1785,20 @@ void DrawnCurveEditor::onSyncToggled (bool isSync)
     }
     else
     {
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+        bindPlaybackToLane (_showingAllLanes ? -1 : _focusedLane);
+        const juce::String speedID = _showingAllLanes
+            ? ParamID::playbackSpeed
+            : laneParam (_focusedLane, ParamID::laneSpeedMul);
+        speedSlider.setNormalisableRange (juce::NormalisableRange<double> (0.25, 4.0));
+        speedSlider.setValue (proc.apvts.getRawParameterValue (speedID)->load(),
+                              juce::dontSendNotification);
+#else
         speedAttach = std::make_unique<Attach> (proc.apvts, ParamID::playbackSpeed, speedSlider);
         speedSlider.setNormalisableRange (juce::NormalisableRange<double> (0.25, 4.0));
         speedSlider.setValue (proc.apvts.getRawParameterValue (ParamID::playbackSpeed)->load(),
                               juce::dontSendNotification);
+#endif
         speedLabel.setText ("FREE", juce::dontSendNotification);
         speedSlider.setTextValueSuffix ("x");
         speedSlider.setNumDecimalPlacesToDisplay (2);
@@ -1914,10 +2090,17 @@ void DrawnCurveEditor::applyTheme()
     // Utility buttons
     for (auto* b : { &playButton, &panicButton, &themeButton, &helpButton,
                      &tickYMinusBtn, &tickYPlusBtn, &tickXMinusBtn, &tickXPlusBtn,
-                     &oneShotBtn })
+                     &oneShotBtn, &laneSyncBtn })
     {
         b->setColour (juce::TextButton::buttonColourId,  btnBg);
         b->setColour (juce::TextButton::textColourOffId, btnText);
+    }
+
+    // Lane sync button — accent when active to make its state obvious
+    {
+        const auto syncAccent = light ? juce::Colour (0xff0B6E4F) : juce::Colour (0xff34D399);
+        laneSyncBtn.setColour (juce::TextButton::buttonOnColourId,  syncAccent.withAlpha (0.22f));
+        laneSyncBtn.setColour (juce::TextButton::textColourOnId,    syncAccent);
     }
 
     // Panic button — red accent to signal danger
@@ -1934,13 +2117,13 @@ void DrawnCurveEditor::applyTheme()
     dirControl.borderColour = light ? juce::Colour (0x28000000) : juce::Colour (0x33ffffff);
     dirControl.repaint();
 
-    // Lane focus control — use lane 0 colour for emphasis
+    // Lane focus control — active segment uses lane colour (lanes) or neutral accent (*).
     {
-        const auto activeLaneCol = light ? kLaneColourLight[_focusedLane]
-                                         : kLaneColourDark[_focusedLane];
-        // Choose white or near-black label depending on the lane colour's brightness.
+        const auto activeLaneCol = _showingAllLanes
+            ? (light ? juce::Colour (0xff374151) : juce::Colour (0xff94A3B8))
+            : (light ? kLaneColourLight[_focusedLane] : kLaneColourDark[_focusedLane]);
         const auto activeLabelCol = (activeLaneCol.getBrightness() > 0.55f)
-                                    ? juce::Colour (0xdd1a1a1a)   // near-black for bright lanes
+                                    ? juce::Colour (0xdd1a1a1a)
                                     : juce::Colours::white;
         laneFocusCtrl.bgColour     = light ? juce::Colour (0xffF0EFE7) : btnBg;
         laneFocusCtrl.activeColour = activeLaneCol;
@@ -2146,20 +2329,8 @@ void DrawnCurveEditor::resized()
     // RIGHT COLUMN
     // ══════════════════════════════════════════════════════════════════════════
 
-    // ── Transport section (violet) ────────────────────────────────────────────
-    _secTransport = rightCol.removeFromTop (transportH);
-    {
-        auto ts = _secTransport.reduced (4);
-
-        dirControl.setBounds (ts.removeFromTop (38));
-        ts.removeFromTop (4);
-
-        auto row = ts.removeFromTop (paramRowH);
-        syncButton .setBounds (row.removeFromLeft (52).withSizeKeepingCentre (52, 32));
-        row.removeFromLeft (4);
-        speedLabel .setBounds (row.removeFromTop (paramLabelH));
-        speedSlider.setBounds (row);
-    }
+    // ── Transport section removed; sync button is now in the shaping row ─────
+    _secTransport = rightCol.removeFromTop (transportH);  // zero-size
     rightCol.removeFromTop (pad);
 
     // ── Shaping section (amber) ───────────────────────────────────────────────
@@ -2167,7 +2338,8 @@ void DrawnCurveEditor::resized()
     {
         auto ss = _secShaping.reduced (4);
 
-        // Lane focus selector + one-shot toggle (inline in same row)
+        // Lane focus selector + one-shot toggle (inline in same row).
+        // One-shot is per-lane; laneSyncBtn lives in the All Lanes tab (below).
         {
             auto focusRow = ss.removeFromTop (28);
             oneShotBtn.setBounds (focusRow.removeFromRight (28));
@@ -2176,9 +2348,26 @@ void DrawnCurveEditor::resized()
         }
         ss.removeFromTop (4);
 
-        // Smooth
+        // Direction + Sync + Speed row — global controls always visible.
         {
             auto row = ss.removeFromTop (paramRowH);
+            // Sync button on the right.
+            syncButton.setBounds (row.removeFromRight (44).withSizeKeepingCentre (44, 32));
+            row.removeFromRight (4);
+            // Direction segmented control on the left.
+            dirControl.setBounds (row.removeFromLeft (90));
+            row.removeFromLeft (4);
+            // Speed: label on top, slider below in remaining space.
+            speedLabel .setBounds (row.removeFromTop (paramLabelH));
+            speedSlider.setBounds (row);
+        }
+        ss.removeFromTop (4);
+
+        // Smooth — per-lane, visible in lane tabs.
+        // laneSyncBtn is given the SAME bounds so it occupies this slot in the All Lanes tab.
+        {
+            auto row = ss.removeFromTop (paramRowH);
+            laneSyncBtn.setBounds (row);                    // All Lanes tab occupant
             smoothingLabel .setBounds (row.removeFromTop (paramLabelH));
             smoothingSlider.setBounds (row);
         }

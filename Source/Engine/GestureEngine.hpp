@@ -93,6 +93,19 @@ public:
     /// Safe to call from the render thread (processBlock) on every block.
     void setLaneEnabled (int lane, bool enabled);
 
+    /// Pause / resume an individual lane without affecting other lanes.
+    /// On pause the lane's Note Off is queued immediately; on resume playback
+    /// continues from the same playhead position.
+    void setLanePaused (int lane, bool paused);
+    bool getLanePaused (int lane) const noexcept;
+
+    /// Lock all looping lanes to the same normalized phase (0..1).
+    /// When enabled, the first valid lane acts as the phase master;
+    /// all other looping lanes sample their curves at the same phase.
+    /// One-shot lanes are unaffected and still run their own playheads.
+    void setLanesSynced (bool synced);
+    bool getLanesSynced () const noexcept;
+
     // ── Query API (UI or render thread) ──────────────────────────────────────
     bool  getPlaying()      const;
     /// Phase of the first valid playing lane — for backward-compat UI use.
@@ -110,6 +123,11 @@ public:
                        float speedRatio = 1.0f,
                        PlaybackDirection direction = PlaybackDirection::Forward);
 
+    /// Per-lane overload: each lane gets its own speed multiplier and direction.
+    void processBlock (uint32_t frameCount, double sampleRate, const MIDIOut& midiOut,
+                       const std::array<float, kMaxLanes>& speedRatios,
+                       const std::array<PlaybackDirection, kMaxLanes>& directions);
+
     // ── Utility (also called from UI for Y-axis display) ─────────────────────
     static int quantizeNote (int rawNote, ScaleConfig sc, bool movingUp);
 
@@ -118,18 +136,30 @@ private:
     std::array<std::atomic<bool>,                kMaxLanes> _noteOffNeeded;
     std::array<std::atomic<uint32_t>,            kMaxLanes> _scalesPacked;
     std::array<std::atomic<bool>,                kMaxLanes> _laneEnabled;   ///< false = muted
+    std::array<std::atomic<bool>,                kMaxLanes> _lanePaused;    ///< true = lane individually paused
 
     std::atomic<bool>  _isPlaying    { false };
     std::atomic<float> _currentPhase { 0.0f  };   ///< First valid lane's phase (compat)
     std::array<std::atomic<float>, kMaxLanes> _lanePhases;  ///< Per-lane phase 0..1
 
+    std::atomic<bool> _lanesSynced  { false };
+
     std::array<LaneRuntime, kMaxLanes> _runtimes;   ///< Render-thread only
+
+    /// Render-thread-only master clock used when _lanesSynced is true.
+    double _syncMasterPlayhead  { 0.0 };
+    /// Render-thread-only: tracks previous sync state so we can reset the
+    /// master playhead cleanly the moment sync is first enabled.
+    bool   _syncWasEnabled      { false };
 
     float sampleCurve (const LaneSnapshot& snap, float phase) const;
 
+    /// @param forcedPhase  When >= 0, looping lanes use this phase instead of their own
+    ///                     playheadSeconds-derived phase.  One-shot lanes always use their own.
     void processLane (int lane, uint32_t frameCount, double sampleRate,
                       const MIDIOut& midiOut,
-                      float speedRatio, PlaybackDirection direction);
+                      float speedRatio, PlaybackDirection direction,
+                      float forcedPhase = -1.0f);
 
     static uint32_t    packScale   (ScaleConfig s) noexcept { return (uint32_t(s.root) << 12) | s.mask; }
     static ScaleConfig unpackScale (uint32_t p)    noexcept { return { uint16_t(p & 0xFFF), uint8_t(p >> 12) }; }

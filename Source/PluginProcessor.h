@@ -82,6 +82,18 @@ namespace ParamID
     inline const juce::String scaleRoot    { "scaleRoot"    };
     inline const juce::String scaleMask    { "scaleMask"    };
     inline const juce::String laneEnabled  { "enabled"      };
+
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+    // Per-lane playback overrides — always via laneParam(lane, base).
+    /// false → use global speed + direction; true → use lane-specific values below.
+    inline const juce::String useGlobalPlayback { "useGlobalPlayback" };
+    /// Lane-specific speed multiplier (0.25 – 4×).  Ignored when useGlobalPlayback = true.
+    inline const juce::String laneSpeedMul      { "laneSpeedMul"      };
+    /// Lane-specific direction (0=Forward, 1=Reverse, 2=Ping-Pong).  Ignored when useGlobalPlayback = true.
+    inline const juce::String laneDirection     { "laneDirection"     };
+    /// Sync-group ID 0–4 (0 = free-running, 1–4 = phase-lock group).  Ignored when useGlobalPlayback = true.
+    inline const juce::String laneSyncGroup     { "laneSyncGroup"     };
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -154,6 +166,11 @@ public:
     void  setPlaying (bool on);
     bool  isPlaying()  const noexcept;
 
+    /// Pause / resume an individual lane.  Other lanes are unaffected.
+    /// A Note Off is queued immediately when pausing.
+    void setLanePaused (int lane, bool paused);
+    bool getLanePaused (int lane) const noexcept;
+
     // ── Query API (any thread) ────────────────────────────────────────────────
     /// true if the given lane has a valid recorded curve.
     bool  hasCurve (int lane = 0)     const noexcept;
@@ -192,6 +209,12 @@ public:
     void cancelTeach ();
     /// true if the given lane is currently waiting for a CC message.
     bool isTeachPending (int lane) const noexcept;
+
+    // ── Lane phase sync ───────────────────────────────────────────────────────
+    /// Lock all looping lanes to a shared phase so their playheads advance
+    /// at the same rate.  One-shot lanes are unaffected.
+    void setLanesSynced (bool synced);
+    bool getLanesSynced () const noexcept;
 
     // ── Playback control ──────────────────────────────────────────────────────
     /// Restart all lane playheads simultaneously from their phaseOffset start

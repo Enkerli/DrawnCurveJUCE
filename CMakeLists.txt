@@ -140,6 +140,9 @@ target_compile_definitions(DrawnCurve
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
         JUCE_DISPLAY_SPLASH_SCREEN=0
+        # Enable per-lane playback parameters (speed multiplier, direction, sync group).
+        # Remove to compile without per-lane playback support.
+        DC_HAVE_PER_LANE_PLAYBACK_PARAMS=1
         # Known JUCE 8.x issue: the Standalone wrapper tries to open RemoteIO
         # with 2 audio channels even for IS_MIDI_EFFECT plugins (0 audio buses).
         # AURemoteIO returns error 561015905 and logs to console; plugin audio
