@@ -7,6 +7,6 @@ export default defineConfig({
   base: '/DrawnCurveJUCE/',
   build: {
     outDir: resolve(__dirname, '../docs'),
-    emptyOutDir: true,
+    emptyOutDir: false,
   },
 })
