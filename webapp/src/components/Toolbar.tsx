@@ -190,7 +190,7 @@ export function Toolbar({
       {/* MIDI output */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {!midiSupported ? (
-          <span style={{ fontSize: 11, color: '#e0593a' }}>No Web MIDI</span>
+          <span style={{ fontSize: 11, color: '#e0593a' }} title="Web MIDI requires Chrome, Edge, or Opera">No Web MIDI (use Chrome)</span>
         ) : !midiEnabled ? (
           <button onClick={onRequestMidi} style={btnBase}>
             🎹 Enable MIDI
