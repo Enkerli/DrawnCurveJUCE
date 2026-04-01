@@ -53,8 +53,9 @@ export function CurveDisplay({
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const W = canvas.width
-    const H = canvas.height
+    const dpr = window.devicePixelRatio || 1
+    const W = canvas.width / dpr
+    const H = canvas.height / dpr
     const dark = themeRef.current === 'dark'
     const laneColors = dark ? LANE_COLORS_DARK : LANE_COLORS_LIGHT
     const gridColor = dark ? GRID_COLOR_DARK : GRID_COLOR_LIGHT

@@ -31,6 +31,8 @@ export function App() {
   const [midiPorts, setMidiPorts] = useState<MidiPort[]>([])
   const [selectedMidiPort, setSelectedMidiPort] = useState<string | null>(null)
   const [midiSupported] = useState(() => typeof navigator !== 'undefined' && 'requestMIDIAccess' in navigator)
+  const [midiEnabled, setMidiEnabled] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(true)
 
   // Refs to avoid stale closures in the tick loop
   const engineRef = useRef<GestureEngine>(new GestureEngine())
@@ -79,8 +81,11 @@ export function App() {
   const handleRequestMidi = useCallback(async () => {
     try {
       const ports = await midiManagerRef.current.requestAccess()
+      setMidiEnabled(true)
       setMidiPorts(ports)
-      midiManagerRef.current.onPortsChange(setMidiPorts)
+      midiManagerRef.current.onPortsChange(ports => {
+        setMidiPorts(ports)
+      })
       if (ports.length > 0 && !selectedMidiPort) {
         setSelectedMidiPort(ports[0].id)
         midiManagerRef.current.setSelectedOutput(ports[0].id)
@@ -151,6 +156,14 @@ export function App() {
     setSnapshots(new Array(NUM_LANES).fill(null))
   }, [])
 
+  const handlePlayPause = useCallback(() => {
+    setIsPlaying(prev => {
+      const next = !prev
+      engineRef.current.setPlaying(next)
+      return next
+    })
+  }, [])
+
   const handlePanic = useCallback(() => {
     engineRef.current.setPlaying(false)
     midiManagerRef.current.panic()
@@ -177,8 +190,10 @@ export function App() {
       <Toolbar
         speedRatio={speedRatio}
         direction={direction}
+        isPlaying={isPlaying}
         theme={theme}
         midiPorts={midiPorts}
+        midiEnabled={midiEnabled}
         selectedMidiPort={selectedMidiPort}
         midiSupported={midiSupported}
         onSpeedChange={speed => {
@@ -190,6 +205,7 @@ export function App() {
           directionRef.current = dir
         }}
         onThemeToggle={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
+        onPlayPause={handlePlayPause}
         onClearAll={handleClearAll}
         onPanic={handlePanic}
         onRequestMidi={handleRequestMidi}

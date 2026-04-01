@@ -12,12 +12,15 @@ const SPEED_OPTIONS = [
 interface ToolbarProps {
   speedRatio: number
   direction: PlaybackDirection
+  isPlaying: boolean
   theme: 'light' | 'dark'
   midiPorts: MidiPort[]
+  midiEnabled: boolean
   selectedMidiPort: string | null
   midiSupported: boolean
   onSpeedChange: (speed: number) => void
   onDirectionChange: (dir: PlaybackDirection) => void
+  onPlayPause: () => void
   onThemeToggle: () => void
   onClearAll: () => void
   onPanic: () => void
@@ -28,12 +31,15 @@ interface ToolbarProps {
 export function Toolbar({
   speedRatio,
   direction,
+  isPlaying,
   theme,
   midiPorts,
+  midiEnabled,
   selectedMidiPort,
   midiSupported,
   onSpeedChange,
   onDirectionChange,
+  onPlayPause,
   onThemeToggle,
   onClearAll,
   onPanic,
@@ -156,6 +162,17 @@ export function Toolbar({
 
       <div style={dividerStyle} />
 
+      {/* Play / Pause */}
+      <button
+        onClick={onPlayPause}
+        style={activeBtnStyle(!isPlaying, '#e0593a')}
+        title={isPlaying ? 'Pause' : 'Resume'}
+      >
+        {isPlaying ? '⏸' : '▶'}
+      </button>
+
+      <div style={dividerStyle} />
+
       {/* Clear + Panic */}
       <button onClick={onClearAll} style={btnBase}>
         Clear All
@@ -174,7 +191,7 @@ export function Toolbar({
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {!midiSupported ? (
           <span style={{ fontSize: 11, color: '#e0593a' }}>No Web MIDI</span>
-        ) : midiPorts.length === 0 ? (
+        ) : !midiEnabled ? (
           <button onClick={onRequestMidi} style={btnBase}>
             🎹 Enable MIDI
           </button>
