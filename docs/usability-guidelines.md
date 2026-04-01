@@ -1,6 +1,6 @@
-# DrawnCurve — Usability Guidelines for New Features
+# DrawnQurve — Usability Guidelines for New Features
 
-This document sets the standards for adding features to DrawnCurve while
+This document sets the standards for adding features to DrawnQurve while
 maintaining usability across all three interface modes and all five personas.
 Every new feature must pass the checklist at the end of this document before
 it is merged.
@@ -13,7 +13,7 @@ it is merged.
 
 > **This is the foundational design principle. All others serve it.**
 
-DrawnCurve's core value is already present: drawing a curve and hearing something
+DrawnQurve's core value is already present: drawing a curve and hearing something
 change is *immediately* playful. Low cognitive load, no setup required, results
 in seconds.
 
@@ -73,7 +73,7 @@ representation in Standard or Simple mode.
 
 ### 3. The Canvas is the Product
 
-The curve drawing area is the core interaction of DrawnCurve. It must remain
+The curve drawing area is the core interaction of DrawnQurve. It must remain
 the largest single element in all modes and all screen sizes.
 
 **Rule**: The canvas must never occupy less than 55% of the total editor height
@@ -136,7 +136,7 @@ Everything in this document is a hypothesis until user-tested. #TETO.
 
 ### 7. Real-Time Safety is Non-Negotiable
 
-DrawnCurve runs on the audio thread. New features that affect output must:
+DrawnQurve runs on the audio thread. New features that affect output must:
 
 - Never allocate memory on the audio thread
 - Never acquire a non-real-time-safe lock (use SpinLock or atomics)

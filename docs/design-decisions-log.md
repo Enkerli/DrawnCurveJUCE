@@ -1,4 +1,4 @@
-# DrawnCurve — Design Decisions Log
+# DrawnQurve — Design Decisions Log
 
 Running record of decisions made, deferred, and still open.
 Append new entries; do not remove old ones (for audit trail).
@@ -112,7 +112,7 @@ phase) and a tick on the Y axis. Each dot uses that lane's accent colour.
 velocity, message type) had no effect until the user drew a new curve,
 because parameter values were only baked into the snapshot at draw-time.
 
-**Decision**: `DrawnCurveProcessor::updateLaneSnapshot(lane)` clones the
+**Decision**: `DrawnQurveProcessor::updateLaneSnapshot(lane)` clones the
 existing `LaneSnapshot`, writes fresh parameter values into it, and atomically
 swaps it into the engine. Called from `parameterChanged` listeners for all
 per-lane params. Message-type changes that switch output mode also call
@@ -243,7 +243,7 @@ decide whether to show only Note-on events or include CC/other.
 
 ### 2026-03 | DECIDED | Help overlay first-launch push — fixed
 
-**Bug**: `addAndMakeVisible(helpOverlay)` in the DrawnCurveEditor constructor
+**Bug**: `addAndMakeVisible(helpOverlay)` in the DrawnQurveEditor constructor
 calls `setVisible(true)` on the overlay, overriding the `setVisible(false)` set
 in `HelpOverlay`'s own constructor. Result: the overlay appeared unsolicited on
 every first launch — exactly the "push revelation" NN/g identifies as an anti-pattern.
@@ -293,9 +293,9 @@ AUv3 XPC sandbox forbids filesystem access, ruling out loading fonts from a file
    by name from the app bundle, with no filesystem path needed
 
 **The JUCE equivalent**:
-1. Add `juce_add_binary_data(DrawnCurveAssets SOURCES Assets/SymbolFont.ttf)` to
+1. Add `juce_add_binary_data(DrawnQurveAssets SOURCES Assets/SymbolFont.ttf)` to
    `CMakeLists.txt` — JUCE compiles the font file into a C++ `const char[]` array
-2. Link `DrawnCurveAssets` to the plugin target
+2. Link `DrawnQurveAssets` to the plugin target
 3. At runtime:
    ```cpp
    static const juce::Typeface::Ptr tp =
@@ -359,7 +359,7 @@ for the T4 (direction) and T3 (output type) benchmark tasks?
 
 ### 2026-03 | NOTED | This build as a playground — eventual feature split
 
-**Context**: DrawnCurve in its current form is explicitly a development playground.
+**Context**: DrawnQurve in its current form is explicitly a development playground.
 Adding features like scale quantization, multi-stroke, incoming MIDI display makes
 sense here because:
 1. No full Apple developer account available yet for a separate product

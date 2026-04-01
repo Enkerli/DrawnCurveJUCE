@@ -4,7 +4,7 @@ import { resolve } from 'path'
 
 export default defineConfig({
   plugins: [react()],
-  base: '/DrawnCurveJUCE/',
+  base: '/DrawnQurve/',
   build: {
     outDir: resolve(__dirname, '../docs'),
     emptyOutDir: false,

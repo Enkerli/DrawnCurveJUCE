@@ -1,4 +1,4 @@
-# DrawnCurve — Interface Modes
+# DrawnQurve — Interface Modes
 
 > **See also**: [`ROADMAP.md`](../ROADMAP.md) for the full feature roadmap and
 > playflow-based prioritisation. [`docs/personas.md`](personas.md) for detailed
@@ -237,7 +237,7 @@ Mode is an integer (0/1/2) stored in plugin state XML alongside curve data:
 ```cpp
 enum class InterfaceMode { Simple = 0, Standard = 1, Expert = 2 };
 
-// In DrawnCurveEditor:
+// In DrawnQurveEditor:
 void setMode(InterfaceMode m);   // calls setVisible() on control groups
 void resized() override;         // curve display fills freed space
 

@@ -1,8 +1,8 @@
-# DrawnCurveJUCE UI Implementation Handoff
+# DrawnQurve UI Implementation Handoff
 
 ## 1. Purpose
 
-This document is a developer-facing implementation handoff for the current DrawnCurveJUCE UI direction.
+This document is a developer-facing implementation handoff for the current DrawnQurve UI direction.
 
 The target reader is a JUCE developer implementing the editor and its interaction model, not a design reviewer. The goal is to remove ambiguity about layout, state, behavior, component boundaries, and visual tokens before implementation begins.
 
@@ -12,7 +12,7 @@ This document reflects the current design direction represented by the latest mo
 
 ## 2. Product Summary
 
-DrawnCurveJUCE is a MIDI effect plugin centered on one or more drawn curves in a shared canvas.
+DrawnQurve is a MIDI effect plugin centered on one or more drawn curves in a shared canvas.
 
 Core interaction model:
 

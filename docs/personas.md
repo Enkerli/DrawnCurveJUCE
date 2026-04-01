@@ -1,4 +1,4 @@
-# DrawnCurve — User Personas
+# DrawnQurve — User Personas
 
 > **Note (2026-03):** These five personas describe user *profiles*. The
 > [`ROADMAP.md`](../ROADMAP.md) uses complementary **playflow perspectives**
@@ -7,7 +7,7 @@
 > Both lenses are useful: personas for onboarding and mode design; playflows
 > for feature prioritisation. They overlap but are not identical.
 
-Five personas that represent the realistic breadth of DrawnCurve users.
+Five personas that represent the realistic breadth of DrawnQurve users.
 Each drives design decisions: which controls are visible by default, what
 language is used in labels, and what onboarding support is needed.
 
@@ -46,7 +46,7 @@ language is used in labels, and what onboarding support is needed.
 
 ### Scenario
 Tariq has a Moog Grandmother connected via a MIDI-USB adapter. He opens
-DrawnCurve in AUM, draws a slow irregular wave, routes CC74 on channel 2
+DrawnQurve in AUM, draws a slow irregular wave, routes CC74 on channel 2
 to the Grandmother's filter cutoff. He adjusts the range slider to 40–80%
 so the filter never fully closes or opens. He tweaks smoothing to 0.05 so
 the steps are audible but not jarring.
@@ -126,7 +126,7 @@ She never looks at the parameter row.
 - Sync ON and 4-beat default so it "just fits" the song
 
 ### Scenario
-Camille is finishing a track. She adds DrawnCurve in GarageBand, selects
+Camille is finishing a track. She adds DrawnQurve in GarageBand, selects
 "CC" mode. She doesn't know what CC74 is so she leaves it and draws a slow
 wave. She hears the filter opening — she realises CC74 = Filter Cutoff and
 labels it herself in the UI. She adjusts sync beats to 8 to match her verse
@@ -148,7 +148,7 @@ length.
 | **Typical session** | 30 min; in-class exercise or homework |
 
 ### Goals
-- Complete a class exercise: "use DrawnCurve to modulate a synth"
+- Complete a class exercise: "use DrawnQurve to modulate a synth"
 - Understand what the plugin does, not just make it work by accident
 - Feel in control, not overwhelmed
 
@@ -167,7 +167,7 @@ length.
 - Safe defaults that produce audible results immediately
 
 ### Scenario
-Léa opens DrawnCurve for the first time in class. In Simple mode she sees
+Léa opens DrawnQurve for the first time in class. In Simple mode she sees
 only the canvas and a "What to control?" dropdown. She selects "Volume"
 from the list, draws a wave, taps Play. The synth volume rises and falls.
 She understands. She then taps "Show more controls" and explores further.
@@ -209,7 +209,7 @@ extend it."
 
 ### Scenario
 Marcus is building a library of "living" synth patches. He draws a precise
-attack-decay-sustain-release shape in DrawnCurve, fine-tunes the range to
+attack-decay-sustain-release shape in DrawnQurve, fine-tunes the range to
 exactly 40–100%, sets smoothing to 0 for transient accuracy. He uses the
 host's preset system to save 12 variations. He wishes he could export the
 256-point table as a CSV or MIDI file.

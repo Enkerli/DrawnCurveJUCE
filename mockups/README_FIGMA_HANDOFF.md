@@ -1,4 +1,4 @@
-# DrawnCurve SVG / Figma handoff
+# DrawnQurve SVG / Figma handoff
 
 Files:
 - 01_utility_panel.svg

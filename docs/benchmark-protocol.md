@@ -1,4 +1,4 @@
-# DrawnCurve — Benchmarking & Usability Test Protocol
+# DrawnQurve — Benchmarking & Usability Test Protocol
 
 Use this document to run structured usability evaluations of the current
 interface and any proposed changes. It covers task scenarios, success metrics,
@@ -24,9 +24,9 @@ Think-aloud protocol with screen + audio recording.
 
 ## Equipment & Setup
 
-- iPad running the test build of DrawnCurve
+- iPad running the test build of DrawnQurve
 - Host app: **AUM** (consistent across all sessions)
-- Routing pre-configured: DrawnCurve → Moog Model D (AUv3) on the test device
+- Routing pre-configured: DrawnQurve → Moog Model D (AUv3) on the test device
   so participants don't need to route — unless routing is the task being tested
 - Screen recording on (ReplayKit or external camera on stand)
 - Facilitator script (see below)
@@ -36,7 +36,7 @@ Think-aloud protocol with screen + audio recording.
 
 ## Facilitator Script (opening)
 
-> "Thank you for joining us. We're testing a music plugin called DrawnCurve.
+> "Thank you for joining us. We're testing a music plugin called DrawnQurve.
 > We're testing the app, not you — there are no wrong answers.
 >
 > Please think out loud as you work: tell us what you're looking at, what you
@@ -149,7 +149,7 @@ current value clear?
 
 **Success**: User finds host preset save/recall and the curve is restored.
 **Partial**: User doesn't know how to save (relies on host; plugin has no own UI for this).
-**Fail**: User expects a Save button inside DrawnCurve itself.
+**Fail**: User expects a Save button inside DrawnQurve itself.
 
 **Observe**: Do participants expect a Save button inside the plugin? This reveals
 a potential missing feature.

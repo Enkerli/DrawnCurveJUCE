@@ -17,7 +17,7 @@
 .ring { fill: none; stroke: #3b4657; stroke-width: 1.4; }
 </style>
 <rect class="bg" x="0" y="0" width="1440" height="1024"/>
-<text class="text title" x="56" y="68">DrawnCurve / Micro-design 1D</text>
+<text class="text title" x="56" y="68">DrawnQurve / Micro-design 1D</text>
 <text class="muted label" x="56" y="96">Playback direction concept</text>
 <rect class="panel" x="56" y="132" width="1328" height="836" rx="28"/>
 <text class="muted small" x="88" y="170">1D · DUAL-HEAD PLAYHEAD — mode as state of moving entities</text>

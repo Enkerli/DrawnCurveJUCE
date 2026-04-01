@@ -68,7 +68,7 @@
 
   <rect width="1920" height="1200" fill="url(#bgGrad)"/>
 
-  <text x="64" y="58" class="title">DrawnCurveJUCE — high-fidelity light theme v11</text>
+  <text x="64" y="58" class="title">DrawnQurve — high-fidelity light theme v11</text>
   <text x="64" y="84" class="subtitle">Light mode with section-specific accent colours: violet transport, sky-blue curves, amber shaping, green routing, and pink notes.</text>
 
   <!-- Top bar / Transport -->
@@ -106,7 +106,7 @@
 
   <text x="1004" y="190" class="tiny">Project</text>
   <rect x="1004" y="202" width="164" height="42" class="sessionPill"/>
-  <text x="1086" y="223" class="label">DrawnCurve • Session A</text>
+  <text x="1086" y="223" class="label">DrawnQurve • Session A</text>
 
   <text x="1200" y="190" class="tiny">Theme</text>
   <rect x="1200" y="202" width="84" height="42" class="btn"/>

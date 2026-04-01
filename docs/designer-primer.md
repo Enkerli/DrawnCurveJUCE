@@ -1,4 +1,4 @@
-# DrawnCurve — Designer Primer
+# DrawnQurve — Designer Primer
 
 > A plain-language introduction for designers who have never touched MIDI,
 > plugin hosts, or DAW routing.
@@ -7,7 +7,7 @@
 
 ## Elevator Pitch
 
-**DrawnCurve is like drawing a heartbeat with your finger — and then your music
+**DrawnQurve is like drawing a heartbeat with your finger — and then your music
 follows that heartbeat forever.**
 
 You open the app inside a music tool on your iPad. You draw a wave, a zigzag, a
@@ -51,8 +51,8 @@ sends messages like:
 - "This note is being pressed harder" (Aftertouch)
 - "Play the note at position 60 with force 80" (Note On)
 
-DrawnCurve generates a constant stream of these messages as the loop plays.
-No sound comes out of DrawnCurve itself — it only sends remote-control signals
+DrawnQurve generates a constant stream of these messages as the loop plays.
+No sound comes out of DrawnQurve itself — it only sends remote-control signals
 to other apps.
 
 ---
@@ -68,7 +68,7 @@ Common iOS plugin hosts:
 - **Loopy Pro** — loop-based live performance tool
 - **Drambo** — modular-style sequencer
 
-DrawnCurve is an **AUv3 plugin** — a specific standard for iOS music plugins.
+DrawnQurve is an **AUv3 plugin** — a specific standard for iOS music plugins.
 You load it inside a host app, connect its output to a synth's input, and it
 starts controlling that synth.
 
@@ -80,16 +80,16 @@ Routing means connecting the output of one thing to the input of another —
 like plugging a cable between two boxes.
 
 In this case:
-- DrawnCurve outputs MIDI messages (the looping curve)
+- DrawnQurve outputs MIDI messages (the looping curve)
 - The user "routes" those messages to a synthesiser app
 - The synth receives them and moves one of its knobs in real time
 
 Most hosts handle routing visually — the user drags a virtual cable from
-DrawnCurve's output to the synth's input.
+DrawnQurve's output to the synth's input.
 
 ```
   ┌────────────────┐       virtual cable       ┌──────────────┐
-  │  DrawnCurve    │ ──── MIDI messages ──▶    │  Synth app   │
+  │  DrawnQurve    │ ──── MIDI messages ──▶    │  Synth app   │
   │  (the curve    │                           │  (filter     │
   │   loops here)  │                           │   moves)     │
   └────────────────┘                           └──────────────┘

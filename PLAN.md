@@ -1,4 +1,4 @@
-# DrawnCurve — Multilane & Note Mode Issues: Investigation & Plan
+# DrawnQurve — Multilane & Note Mode Issues: Investigation & Plan
 
 > **Status (2026-03):** The investigation and implementation plan in this document
 > is substantially complete. Multi-lane architecture (Issues 3–6), note hysteresis
@@ -48,7 +48,7 @@ So when you draw a new curve while a note is sounding:
 This affects any note that was playing when drawing starts (not just when the new curve finalizes).
 
 ### Also: `beginCapture()` has no note-off logic
-`DrawnCurveProcessor::beginCapture()` (line 244) just calls `_capture.begin()`. No note off. The engine keeps sending MIDI while the user is actively drawing, which means notes can pile up.
+`DrawnQurveProcessor::beginCapture()` (line 244) just calls `_capture.begin()`. No note off. The engine keeps sending MIDI while the user is actively drawing, which means notes can pile up.
 
 ### Fix Plan (belt & suspenders)
 
@@ -61,11 +61,11 @@ Concretely:
 - `processBlock()` already sends the Note Off and then sets `lastSentValue = -1` — this ordering is correct
 
 **Fix B — Stop Playback on `beginCapture()`**
-In `DrawnCurveProcessor::beginCapture()`, call `_engine.setPlaying(false)` first. This sets `_noteOffNeeded = true`. The Note Off will be dispatched on the next `processBlock()` before drawing completes.
+In `DrawnQurveProcessor::beginCapture()`, call `_engine.setPlaying(false)` first. This sets `_noteOffNeeded = true`. The Note Off will be dispatched on the next `processBlock()` before drawing completes.
 
 **Fix C — MIDI Panic Button** (new feature)
 Add a "Panic" button to the UI (or expose it as a long-press on Clear). When triggered:
-1. Set an atomic `_panicNeeded` flag in `DrawnCurveProcessor`
+1. Set an atomic `_panicNeeded` flag in `DrawnQurveProcessor`
 2. On next `processBlock()`, emit:
    - `0xB0 | ch, 0x7B, 0x00` = All Notes Off (CC 123) on every active channel
    - As a belt: iterate all 128 note numbers and emit `0x80 | ch, note, 0` for completeness
@@ -148,13 +148,13 @@ Shared (master) APVTS parameters (unchanged):
 - `syncBeats`
 
 **Processor Changes**
-- `DrawnCurveProcessor` holds `std::array<LaneData, kMaxLanes>` (kMaxLanes = 4 is a good start)
+- `DrawnQurveProcessor` holds `std::array<LaneData, kMaxLanes>` (kMaxLanes = 4 is a good start)
 - A `_activeLaneCount` atomic (1 by default) controls how many lanes are active
 - `processBlock()` iterates active lanes, calling each lane's `engine.processBlock()`
 - All lanes receive the same `speedRatio` and `direction` (from master params) — but see Pattern Length section
 
 **UI Changes**
-- `DrawnCurveEditor` shows a scrollable list of `LaneStrip` components
+- `DrawnQurveEditor` shows a scrollable list of `LaneStrip` components
 - Each `LaneStrip` contains: a compact `CurveDisplay` + per-lane controls (message type, channel, CC#/Vel, range, smooth, direction)
 - "Add Lane" button (+ icon) adds a new lane
 - Default: **1 lane, Note mode** (see Issue 6)

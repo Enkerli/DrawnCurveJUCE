@@ -19,7 +19,7 @@
 </style>
 
     <rect class="bg" x="0" y="0" width="1440" height="1024"/>
-    <text class="text title" x="56" y="64">DrawnCurve / Circular Time</text>
+    <text class="text title" x="56" y="64">DrawnQurve / Circular Time</text>
     <text class="muted subtitle" x="56" y="92">Performance-first. Gesture capture around a polar loop with minimal visible tooling.</text>
     
 <rect class="panel" x="56" y="124" width="1328" height="844" rx="22"/>

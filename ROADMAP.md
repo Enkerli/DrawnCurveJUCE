@@ -1,4 +1,4 @@
-# DrawnCurve — Feature Roadmap
+# DrawnQurve — Feature Roadmap
 
 *Last updated: 2026-03-22*
 
@@ -29,19 +29,19 @@ A consolidated feature inventory merging all planned work, backlog items, and ex
 
 The codebase at its core is a **gesture engine**: it captures touch/Pencil paths, converts them to a lookup table, and plays them back as MIDI or audio-rate output. This engine is general enough to power several distinct plugins, each with its own creative identity.
 
-**DrawnCurve** (this plugin) is the MIDI expression tool: draw curves, loop them, route them to synth parameters.
+**DrawnQurve** (this plugin) is the MIDI expression tool: draw curves, loop them, route them to synth parameters.
 
 Some ideas require enough architectural divergence that they are better maintained as separate plugin targets sharing the core engine library, rather than as modes inside this plugin.
 
 | Plugin | Identity | What changes from this plugin |
 |--------|----------|-------------------------------|
-| **DrawnCurve** (this) | MIDI effect: draw curves, loop, route | — |
-| **DrawnCurve XY** | Two CCs from one gesture | X and Y axes as independent outputs; CurveDisplay becomes an X–Y plane |
-| **DrawnCurve Audio** | Audio-rate LFO / CV source | Plugin type → audio output; same curve engine, different output path |
-| **DrawnCurve FX** | Audio effect prewired to receive curves | Audio I/O; the "receiving" counterpart to this plugin |
-| **DrawnCurve Morph** *(v2 candidate)* | 3D morphable curve tables | Multiple curves per lane forming a morph dimension; possible wavetable export |
+| **DrawnQurve** (this) | MIDI effect: draw curves, loop, route | — |
+| **DrawnQurve XY** | Two CCs from one gesture | X and Y axes as independent outputs; CurveDisplay becomes an X–Y plane |
+| **DrawnQurve Audio** | Audio-rate LFO / CV source | Plugin type → audio output; same curve engine, different output path |
+| **DrawnQurve FX** | Audio effect prewired to receive curves | Audio I/O; the "receiving" counterpart to this plugin |
+| **DrawnQurve Morph** *(v2 candidate)* | 3D morphable curve tables | Multiple curves per lane forming a morph dimension; possible wavetable export |
 
-XY gestures and audio-rate output are different enough in architecture (and in the user's mental model) that keeping them as siblings rather than modes is cleaner. The Transform mode previously discussed (remap incoming CC through the drawn curve as a transfer function) maps most naturally onto **DrawnCurve FX** rather than a mode here.
+XY gestures and audio-rate output are different enough in architecture (and in the user's mental model) that keeping them as siblings rather than modes is cleaner. The Transform mode previously discussed (remap incoming CC through the drawn curve as a transfer function) maps most naturally onto **DrawnQurve FX** rather than a mode here.
 
 ---
 
@@ -66,7 +66,7 @@ Spends time creating, refining, and organising curves, then performs by selectin
 ### 3 — The Harmony Navigator
 *"I'm improvising over chord changes — the scale quantizer is the point."*
 
-Uses DrawnCurve to constrain gesture output to the right notes at the right moment. Chord progressions, NCT handling (notes that are in the scale but outside the chord), per-lane scale differences for counterpoint, and tuning system support are central. The lattice is the primary UI element; it needs to be legible and expressive.
+Uses DrawnQurve to constrain gesture output to the right notes at the right moment. Chord progressions, NCT handling (notes that are in the scale but outside the chord), per-lane scale differences for counterpoint, and tuning system support are central. The lattice is the primary UI element; it needs to be legible and expressive.
 
 **Priority features:** chord progressions, NCT distinction, MTS-ESP, per-lane scale, scale lattice size (bigger bitmask UI).
 
@@ -87,7 +87,7 @@ Exploratory, low-commitment sessions. Snake/physics brush makes drawing feel ali
 ### 6 — The System Builder
 *"This needs to talk to everything else in my setup."*
 
-Integrates DrawnCurve with modular, DAW automation, OSC tools, and hardware. Wants OSC output, MIDI-triggered capture, MIDI 2.0/MIDI-CI (when the ecosystem is ready), and MTS-ESP for microtonal rigs. All buttons as exposed/automatable parameters is essential.
+Integrates DrawnQurve with modular, DAW automation, OSC tools, and hardware. Wants OSC output, MIDI-triggered capture, MIDI 2.0/MIDI-CI (when the ecosystem is ready), and MTS-ESP for microtonal rigs. All buttons as exposed/automatable parameters is essential.
 
 **Priority features:** OSC, MIDI-CI readiness, all buttons as MIDI-triggerable parameters, MTS-ESP, MIDI panic, export.
 
@@ -150,7 +150,7 @@ Active bugs not yet resolved.
 | C5 | **Timing quantize** | M | Post-capture pass: redistribute the time axis of raw input points to a rhythmic grid (8th, 16th, triplet, etc.). Makes wobbly human gestures mechanical. A "humanize" inverse adds controlled irregularity to an otherwise regular curve. |
 | C6 | **Groove / rhythm template** | L | A secondary lookup table (16–32 points) warps the curve's phase during playback: phase advances non-uniformly, mimicking a groove template. Concept: identical to Ableton's groove system, applied to the playhead rather than MIDI clip events. |
 | C7 | **Phase offset per lane** | S | A 0–100% parameter that offsets each lane's playhead start position within the loop cycle. Small engine change; high value for polyrhythmic layering between lanes. |
-| C8 | **Curve morphing (2D)** | XL | Each lane holds two snapshots (A / B). A `morph` parameter interpolates between them sample-by-sample in `sampleCurve`. Morph can be MIDI-controlled or driven by another lane's output. Foundation for the DrawnCurve Morph sibling (3D table). |
+| C8 | **Curve morphing (2D)** | XL | Each lane holds two snapshots (A / B). A `morph` parameter interpolates between them sample-by-sample in `sampleCurve`. Morph can be MIDI-controlled or driven by another lane's output. Foundation for the DrawnQurve Morph sibling (3D table). |
 | C9 | **Output steps / stairs quantize** | S | Snap continuous output to N equal steps (1–128). Per lane. Creates vintage sequencer / sample-and-hold texture without Note mode. |
 | C10 | **Humanize / jitter** | S | Per-lane random offset added to output each block. Disabled automatically in Note mode to prevent spurious note-ons. |
 | C11 | **Apple Pencil pressure and tilt** | M | Pressure is already captured in `addCapturePoint`. Tilt (azimuth/altitude) is accessible via `UITouch.azimuthAngle` and `altitudeAngle` on iPadOS. Map tilt to a secondary parameter (e.g. velocity scaling, smoothing amount) during recording. |
@@ -167,7 +167,7 @@ Active bugs not yet resolved.
 | M4 | **Theremin mode (Note + PitchBend)** | M (after per-lane) | Two linked lanes: Lane A sends scale-quantized notes; Lane B sends PitchBend offsets for a continuous pitch voice. Combined: smooth gliding line that still resolves to scale roots. Requires a "link to lane N" parameter so Lane B knows which channel/note to bend. |
 | M5 | **Chord progressions / leadsheet** | XL | Time-varying chord sequence over the curve's timeline. At each chord boundary, the note quantization target changes. Needs a mini chord-sequence editor (chord symbol + beat duration). This is a direct bridge to MIDIcurator's domain; a shared chord format would enable importing progressions. The Harmony Navigator persona makes this a centrepiece feature. |
 | M5a | **Non-Chord Tones (NCTs)** | M (after M5) | Within chord-progression mode: notes that fall in the current scale but outside the chord (suspensions, passing tones, neighbour tones, added tensions) are not snapped to chord degrees — they pass through, or are handled by a dedicated policy (approach from above/below, hold, resolve). Visually distinguished in the curve display (different colour or marker style) so the player can see where NCT territory lies in their gesture. |
-| M6 | **Tuning systems / MTS-ESP** | L (after M2 + M4) | Once note + PitchBend and MPE are in place, note quantization can target non-12-TET pitches by using PitchBend offsets (or MPE per-note bend) to reach microtonal scale degrees. MTS-ESP (MIDI Tuning Standard, Extended Precision) is the de-facto plugin standard for tuning tables; it is the kind of support used to select commercial instruments. Supporting it in the note output path makes DrawnCurve a first-class microtonal performance tool. |
+| M6 | **Tuning systems / MTS-ESP** | L (after M2 + M4) | Once note + PitchBend and MPE are in place, note quantization can target non-12-TET pitches by using PitchBend offsets (or MPE per-note bend) to reach microtonal scale degrees. MTS-ESP (MIDI Tuning Standard, Extended Precision) is the de-facto plugin standard for tuning tables; it is the kind of support used to select commercial instruments. Supporting it in the note output path makes DrawnQurve a first-class microtonal performance tool. |
 | M7 | **MPE output** | L | Multi-channel note output with per-note pitch bend, pressure, and slide (MIDI Polyphonic Expression). Each Note lane gets its own MPE zone channel. Pairs with Legato (M2) and Theremin (M4); prerequisite for full MTS-ESP integration (M6). |
 
 ---
@@ -178,7 +178,7 @@ Active bugs not yet resolved.
 |---|------|--------|-------|
 | R1 | **Predefined MIDI maps** | M | A bundled database of common synth CC assignments (Moog Grandmother, Korg Prologue, DX7, Virus TI, etc.). Selecting a synth pre-fills CC#/channel for each lane. Stored as JSON/XML alongside the plugin bundle; users can add their own entries. |
 | R2 | **Routing/mapping library** | M (overlaps R1) | User-editable named configurations ("My Korg Prologue rig"). Save/load independently of curve presets. File-system-based; same library browser pattern as curve library (D3). |
-| R3 | **OSC output** | L | Parallel to MIDI output — the same ranged float value sent as an OSC message to a configurable IP:port. Uses the JUCE OSC module. Connects DrawnCurve to Max/MSP, TouchDesigner, Pd, and similar tools without a MIDI bridge. |
+| R3 | **OSC output** | L | Parallel to MIDI output — the same ranged float value sent as an OSC message to a configurable IP:port. Uses the JUCE OSC module. Connects DrawnQurve to Max/MSP, TouchDesigner, Pd, and similar tools without a MIDI bridge. |
 
 ---
 
@@ -230,7 +230,7 @@ These share the gesture engine and curve infrastructure but are distinct plugin 
 
 ---
 
-### DrawnCurve XY
+### DrawnQurve XY
 *Two CCs from one gesture.*
 
 The drawn path's X and Y positions independently map to two CC values simultaneously. Time is implicit — the curve is traversed in drawing order. `CurveDisplay` becomes an X–Y plane. Natural use cases: filter cutoff + resonance, pan + send level, any two-dimensional modulation target.
@@ -239,7 +239,7 @@ Key differences from this plugin: a second output CC parameter per lane; a new "
 
 ---
 
-### DrawnCurve Audio
+### DrawnQurve Audio
 *Audio-rate LFO / CV source.*
 
 Same curve engine; plugin type changes from MIDI effect to audio source (`isMidiEffect = false`, audio output channels declared). The curve table is read at sample rate to produce an audio signal — an LFO waveform, oscillator shape, or modulation source for a CV-capable audio interface.
@@ -248,16 +248,16 @@ Meaningful table resolution increases to 2048+ points (see I2). Fundamentally di
 
 ---
 
-### DrawnCurve FX
+### DrawnQurve FX
 *Audio effect prewired to receive curve data.*
 
-The "receiving" counterpart. An audio processing plugin (filter, tremolo, pitch shift, EQ tilt, saturation…) whose key parameter is controlled by a curve received from DrawnCurve via AUv3 parameter sharing or Inter-App Audio, or drawn directly within the plugin itself. "Prewired" means the routing setup that currently requires external configuration is built in.
+The "receiving" counterpart. An audio processing plugin (filter, tremolo, pitch shift, EQ tilt, saturation…) whose key parameter is controlled by a curve received from DrawnQurve via AUv3 parameter sharing or Inter-App Audio, or drawn directly within the plugin itself. "Prewired" means the routing setup that currently requires external configuration is built in.
 
 Also covers the "modulation transformation" concept discussed in planning: incoming MIDI CC is remapped through a drawn curve acting as a transfer function (draw an exponential curve → linear CC becomes exponential response). The receiving/transform use case fits naturally here rather than as a mode in this plugin.
 
 ---
 
-### DrawnCurve Morph *(or DrawnCurve v2)*
+### DrawnQurve Morph *(or DrawnQurve v2)*
 *3D morphable curve tables.*
 
 Multiple curves per lane form a morph dimension — an array of `LaneSnapshot` tables indexed by a `morph` parameter (0–1). Sweeping through the morph axis interpolates between curve shapes. Natural extension of C8 (2D curve morphing) into a full 3D wavetable-style structure.

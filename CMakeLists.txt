@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
 # ── JUCE ─────────────────────────────────────────────────────────────────────
 # Point JUCE_PATH at your local JUCE copy, OR symlink it here:
-#   ln -s /path/to/JUCE /Users/alex/Documents/ClaudeCode/DrawnCurveJUCE/JUCE
+#   ln -s /path/to/JUCE /Users/alex/Documents/ClaudeCode/DrawnQurve/JUCE
 #
 # To configure for iOS from the command line:
 #   cmake -B build-ios -G Xcode \

@@ -22,7 +22,7 @@
 
 
     <rect class="bg" x="0" y="0" width="1440" height="1024"/>
-    <text class="text title" x="56" y="64">DrawnCurve / Utility Panel</text>
+    <text class="text title" x="56" y="64">DrawnQurve / Utility Panel</text>
     <text class="muted subtitle" x="56" y="92">Baseline desktop-like layout. Safe, reviewable, implementation-friendly.</text>
     
 <rect class="panel" x="56" y="124" width="1328" height="844" rx="22"/>
@@ -81,7 +81,7 @@
 
 
     <rect class="bg" x="0" y="0" width="1440" height="1024"/>
-    <text class="text title" x="56" y="64">DrawnCurve / Circular Time</text>
+    <text class="text title" x="56" y="64">DrawnQurve / Circular Time</text>
     <text class="muted subtitle" x="56" y="92">Performance-first. Gesture capture around a polar loop with minimal visible tooling.</text>
     
 <rect class="panel" x="56" y="124" width="1328" height="844" rx="22"/>
@@ -124,7 +124,7 @@
 
 
     <rect class="bg" x="0" y="0" width="1440" height="1024"/>
-    <text class="text title" x="56" y="64">DrawnCurve / Timeline Clip</text>
+    <text class="text title" x="56" y="64">DrawnQurve / Timeline Clip</text>
     <text class="muted subtitle" x="56" y="92">Scalable lane-based view. Better for later multi-lane expansion than for immediate performance.</text>
     
 <rect class="panel" x="56" y="124" width="1328" height="844" rx="22"/>
@@ -157,7 +157,7 @@
 
 
     <rect class="bg" x="0" y="0" width="1440" height="1024"/>
-    <text class="text title" x="56" y="64">DrawnCurve / Scientific Plot</text>
+    <text class="text title" x="56" y="64">DrawnQurve / Scientific Plot</text>
     <text class="muted subtitle" x="56" y="92">Precision-forward graphing view. Clear for review, debugging, and algorithmic discussion.</text>
     
 <rect class="panel" x="56" y="124" width="1328" height="844" rx="22"/>

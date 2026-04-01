@@ -1,6 +1,6 @@
-# DrawnCurve
+# DrawnQurve
 
-**DrawnCurve** is an iOS AUv3 MIDI effect plugin built with JUCE.
+**DrawnQurve** is an iOS AUv3 MIDI effect plugin built with JUCE.
 Draw a curve with your finger or Apple Pencil — it loops continuously, converting your gesture into MIDI messages of your choice. Up to three independent lanes let you simultaneously control multiple synth parameters from a single plugin instance.
 
 ---
@@ -45,8 +45,8 @@ It produces MIDI output only — no audio I/O.
 
 ```bash
 # 1. Clone with submodules
-git clone --recurse-submodules https://github.com/Enkerli/DrawnCurveJUCE.git
-cd DrawnCurveJUCE
+git clone --recurse-submodules https://github.com/Enkerli/DrawnQurve.git
+cd DrawnQurve
 
 # 2. Configure for iOS (device or simulator)
 cmake -S . -B build-ios \
