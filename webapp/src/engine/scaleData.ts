@@ -105,7 +105,17 @@ export const SCALE_FAMILIES: ScaleFamily[] = [
   },
 ]
 
-export const NOTE_NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B']
+export const NOTE_NAMES       = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B']
+export const NOTE_NAMES_FLAT  = ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B']
+
+export function noteNames(useFlats = false): readonly string[] {
+  return useFlats ? NOTE_NAMES_FLAT : NOTE_NAMES
+}
+
+export function midiNoteName(note: number, useFlats = false): string {
+  const n = Math.max(0, Math.min(127, note | 0))
+  return noteNames(useFlats)[n % 12] + (Math.floor(n / 12) - 1)
+}
 
 /** Quick presets shown in the UI above the lattice. */
 export const QUICK_PRESETS: { name: string; mask: number }[] = [

@@ -23,6 +23,7 @@ function makeDefaultLanes(): LaneParams[] {
 
 export function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  const [useFlats, setUseFlats] = useState(false)
   const [focusedLane, setFocusedLane] = useState(0)
   const [laneParams, setLaneParams] = useState<LaneParams[]>(makeDefaultLanes)
   const [snapshots, setSnapshots] = useState<(LaneSnapshot | null)[]>(new Array(NUM_LANES).fill(null))
@@ -184,9 +185,9 @@ export function App() {
         height: '100dvh',
         display: 'flex',
         flexDirection: 'column',
-        background: dark ? '#1a1a1a' : '#f0f0f0',
-        color: dark ? '#e0e0e0' : '#1a1a1a',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        background: dark ? '#1a1a1a' : 'var(--paper-bg)',
+        color: dark ? '#e0e0e0' : 'var(--paper-ink)',
+        fontFamily: 'var(--font-sans)',
         overflow: 'hidden',
       }}
     >
@@ -196,6 +197,7 @@ export function App() {
         direction={direction}
         isPlaying={isPlaying}
         theme={theme}
+        useFlats={useFlats}
         midiPorts={midiPorts}
         midiEnabled={midiEnabled}
         selectedMidiPort={selectedMidiPort}
@@ -209,6 +211,7 @@ export function App() {
           directionRef.current = dir
         }}
         onThemeToggle={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
+        onAccidentalToggle={() => setUseFlats(f => !f)}
         onPlayPause={handlePlayPause}
         onClearAll={handleClearAll}
         onPanic={handlePanic}
@@ -236,7 +239,7 @@ export function App() {
             gap: 8,
           }}
         >
-          {/* Hint text when no curves are drawn */}
+          {/* Hint text when no curves are drawn — v2 Studio Caveat hand */}
           {hasSnapshot.every(h => !h) && (
             <div
               style={{
@@ -249,9 +252,27 @@ export function App() {
                 zIndex: 1,
               }}
             >
-              <div style={{ fontSize: 32, opacity: 0.15, marginBottom: 8 }}>✏</div>
-              <div style={{ fontSize: 14, opacity: 0.25, lineHeight: 1.6 }}>
-                Draw a curve to start looping
+              <div
+                style={{
+                  fontFamily: 'var(--font-hand)',
+                  fontSize: 36,
+                  color: dark ? 'rgba(255,255,255,0.25)' : 'var(--paper-ink30)',
+                  letterSpacing: 0.5,
+                  lineHeight: 1.2,
+                }}
+              >
+                draw a curve →
+              </div>
+              <div
+                style={{
+                  fontFamily: 'var(--font-serif)',
+                  fontStyle: 'italic',
+                  fontSize: 13,
+                  marginTop: 6,
+                  color: dark ? 'rgba(255,255,255,0.30)' : 'var(--paper-ink50)',
+                }}
+              >
+                it loops as MIDI
               </div>
             </div>
           )}
@@ -260,6 +281,7 @@ export function App() {
             laneParams={laneParams}
             focusedLane={focusedLane}
             theme={theme}
+            useFlats={useFlats}
             engineRef={engineRef}
             onCurveDrawn={handleCurveDrawn}
             onUpdateParams={handleUpdateParams}
@@ -271,7 +293,8 @@ export function App() {
           style={{
             width: 300,
             flexShrink: 0,
-            borderLeft: `1px solid ${dark ? '#2a2a2a' : '#ddd'}`,
+            borderLeft: `1px solid ${dark ? '#2a2a2a' : 'var(--paper-rule)'}`,
+            background: dark ? 'transparent' : 'var(--paper-card)',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
@@ -282,6 +305,7 @@ export function App() {
             focusedLane={focusedLane}
             hasSnapshot={hasSnapshot}
             theme={theme}
+            useFlats={useFlats}
             onFocusLane={lane => {
               setFocusedLane(lane)
               engineRef.current.setLaneEnabled(lane, laneParams[lane].enabled)
@@ -296,16 +320,26 @@ export function App() {
       <div
         style={{
           padding: '4px 16px',
-          borderTop: `1px solid ${dark ? '#2a2a2a' : '#e0e0e0'}`,
+          borderTop: `1px solid ${dark ? '#2a2a2a' : 'var(--paper-rule)'}`,
           fontSize: 11,
-          color: dark ? '#555' : '#aaa',
+          color: dark ? '#666' : 'var(--paper-ink50)',
           display: 'flex',
           gap: 16,
           flexShrink: 0,
+          alignItems: 'baseline',
         }}
       >
-        <span>Draw on the canvas to capture a curve → it loops as MIDI</span>
-        <span style={{ marginLeft: 'auto' }}>
+        <span style={{ fontStyle: 'italic', fontFamily: 'var(--font-serif)' }}>
+          draw on the canvas to capture a curve — it loops as MIDI
+        </span>
+        <span
+          style={{
+            marginLeft: 'auto',
+            fontFamily: 'var(--font-serif)',
+            fontStyle: 'italic',
+            fontSize: 12,
+          }}
+        >
           {hasSnapshot.filter(Boolean).length} / {NUM_LANES} lanes active
         </span>
       </div>

@@ -104,6 +104,12 @@ export class GestureEngine {
     return this.lanePhases[lane] ?? 0
   }
 
+  /** Last MIDI value emitted on this lane (-1 = nothing). For Note: MIDI note
+   *  number; for CC/AT: 0–127; for PB: 0–16383. UI reads this for the cursor. */
+  getLastSentValue(lane: number): number {
+    return this.runtimes[lane]?.lastSentValue ?? -1
+  }
+
   hasSnapshot(lane: number): boolean {
     return !!(this.snapshots[lane]?.valid)
   }

@@ -14,6 +14,7 @@ interface ToolbarProps {
   direction: PlaybackDirection
   isPlaying: boolean
   theme: 'light' | 'dark'
+  useFlats: boolean
   midiPorts: MidiPort[]
   midiEnabled: boolean
   selectedMidiPort: string | null
@@ -22,6 +23,7 @@ interface ToolbarProps {
   onDirectionChange: (dir: PlaybackDirection) => void
   onPlayPause: () => void
   onThemeToggle: () => void
+  onAccidentalToggle: () => void
   onClearAll: () => void
   onPanic: () => void
   onRequestMidi: () => void
@@ -33,6 +35,7 @@ export function Toolbar({
   direction,
   isPlaying,
   theme,
+  useFlats,
   midiPorts,
   midiEnabled,
   selectedMidiPort,
@@ -41,19 +44,21 @@ export function Toolbar({
   onDirectionChange,
   onPlayPause,
   onThemeToggle,
+  onAccidentalToggle,
   onClearAll,
   onPanic,
   onRequestMidi,
   onSelectMidiPort,
 }: ToolbarProps) {
   const dark = theme === 'dark'
+  const accent = dark ? '#4a90e2' : 'var(--paper-amber)'
 
   const btnBase: React.CSSProperties = {
     padding: '5px 10px',
-    borderRadius: 5,
-    border: `1px solid ${dark ? '#444' : '#ccc'}`,
+    borderRadius: 4,
+    border: `1px solid ${dark ? '#444' : 'var(--paper-rule)'}`,
     background: 'transparent',
-    color: dark ? '#ccc' : '#555',
+    color: dark ? '#ccc' : 'var(--paper-ink70)',
     cursor: 'pointer',
     fontSize: 12,
     fontWeight: 500,
@@ -61,32 +66,37 @@ export function Toolbar({
     display: 'flex',
     alignItems: 'center',
     gap: 4,
+    fontFamily: 'var(--font-sans)',
   }
 
-  const activeBtnStyle = (active: boolean, accent?: string): React.CSSProperties => ({
-    ...btnBase,
-    border: `1px solid ${active ? (accent ?? (dark ? '#4a90e2' : '#1a60c8')) : (dark ? '#444' : '#ccc')}`,
-    background: active
-      ? dark ? 'rgba(74,144,226,0.2)' : 'rgba(26,96,200,0.1)'
-      : 'transparent',
-    color: active ? (accent ?? (dark ? '#4a90e2' : '#1a60c8')) : (dark ? '#ccc' : '#555'),
-    fontWeight: active ? 700 : 500,
-  })
+  const activeBtnStyle = (active: boolean, accentOverride?: string): React.CSSProperties => {
+    const a = accentOverride ?? accent
+    return {
+      ...btnBase,
+      border: `1px solid ${active ? a : (dark ? '#444' : 'var(--paper-rule)')}`,
+      background: active
+        ? dark ? 'rgba(74,144,226,0.2)' : 'rgba(203,152,57,0.18)'
+        : 'transparent',
+      color: active ? a : (dark ? '#ccc' : 'var(--paper-ink70)'),
+      fontWeight: active ? 700 : 500,
+    }
+  }
 
   const selectStyle: React.CSSProperties = {
-    background: dark ? '#2a2a2a' : '#fff',
-    color: dark ? '#e0e0e0' : '#1a1a1a',
-    border: `1px solid ${dark ? '#444' : '#ccc'}`,
-    borderRadius: 5,
+    background: dark ? '#2a2a2a' : 'var(--paper-card)',
+    color: dark ? '#e0e0e0' : 'var(--paper-ink)',
+    border: `1px solid ${dark ? '#444' : 'var(--paper-rule)'}`,
+    borderRadius: 4,
     padding: '5px 8px',
     fontSize: 12,
     cursor: 'pointer',
+    fontFamily: 'var(--font-sans)',
   }
 
   const dividerStyle: React.CSSProperties = {
     width: 1,
     height: 24,
-    background: dark ? '#333' : '#ddd',
+    background: dark ? '#333' : 'var(--paper-rule)',
     flexShrink: 0,
   }
 
@@ -97,30 +107,61 @@ export function Toolbar({
         alignItems: 'center',
         gap: 8,
         padding: '8px 16px',
-        borderBottom: `1px solid ${dark ? '#2a2a2a' : '#e0e0e0'}`,
+        borderBottom: `1px solid ${dark ? '#2a2a2a' : 'var(--paper-rule)'}`,
+        background: dark ? 'transparent' : 'var(--paper-card)',
         flexWrap: 'wrap',
         flexShrink: 0,
       }}
     >
-      {/* Logo */}
+      {/* Wordmark — Domine italic, v2 Studio */}
       <span
         style={{
-          fontWeight: 700,
-          fontSize: 15,
-          letterSpacing: '-0.5px',
-          color: dark ? '#e0e0e0' : '#1a1a1a',
+          display: 'inline-flex',
+          alignItems: 'baseline',
+          gap: 8,
           marginRight: 4,
-          fontStyle: 'italic',
         }}
       >
-        DrawnQurve
+        <span
+          style={{
+            fontFamily: 'var(--font-serif)',
+            fontWeight: 600,
+            fontStyle: 'italic',
+            fontSize: 22,
+            letterSpacing: '-0.3px',
+            color: dark ? '#e0e0e0' : 'var(--paper-ink)',
+            lineHeight: 1,
+          }}
+        >
+          DrawnQurve
+        </span>
+        <span
+          style={{
+            fontFamily: 'var(--font-sans)',
+            fontSize: 9,
+            letterSpacing: 2,
+            textTransform: 'uppercase',
+            color: dark ? '#666' : 'var(--paper-ink50)',
+          }}
+        >
+          Studio
+        </span>
       </span>
 
       <div style={dividerStyle} />
 
       {/* Speed */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <span style={{ fontSize: 11, color: dark ? '#888' : '#888' }}>Speed</span>
+        <span
+          style={{
+            fontFamily: 'var(--font-serif)',
+            fontStyle: 'italic',
+            fontSize: 13,
+            color: dark ? '#999' : 'var(--paper-ink50)',
+          }}
+        >
+          Speed
+        </span>
         {SPEED_OPTIONS.map(opt => (
           <button
             key={opt.value}
@@ -136,7 +177,16 @@ export function Toolbar({
 
       {/* Direction */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <span style={{ fontSize: 11, color: dark ? '#888' : '#888' }}>Dir</span>
+        <span
+          style={{
+            fontFamily: 'var(--font-serif)',
+            fontStyle: 'italic',
+            fontSize: 13,
+            color: dark ? '#999' : 'var(--paper-ink50)',
+          }}
+        >
+          Dir
+        </span>
         <button
           onClick={() => onDirectionChange(PlaybackDirection.Reverse)}
           style={activeBtnStyle(direction === PlaybackDirection.Reverse)}
@@ -179,7 +229,7 @@ export function Toolbar({
       </button>
       <button
         onClick={onPanic}
-        style={{ ...btnBase, color: '#e0593a', borderColor: dark ? '#444' : '#ccc' }}
+        style={{ ...btnBase, color: '#c45f43', borderColor: dark ? '#444' : 'var(--paper-rule)' }}
         title="All Notes Off"
       >
         Panic
@@ -190,14 +240,33 @@ export function Toolbar({
       {/* MIDI output */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {!midiSupported ? (
-          <span style={{ fontSize: 11, color: '#e0593a' }} title="Web MIDI requires Chrome, Edge, or Opera">No Web MIDI (use Chrome)</span>
+          <span
+            style={{
+              fontFamily: 'var(--font-serif)',
+              fontStyle: 'italic',
+              fontSize: 12,
+              color: '#c45f43',
+            }}
+            title="Web MIDI requires Chrome, Edge, or Opera"
+          >
+            No Web MIDI (use Chrome)
+          </span>
         ) : !midiEnabled ? (
           <button onClick={onRequestMidi} style={btnBase}>
             🎹 Enable MIDI
           </button>
         ) : (
           <>
-            <span style={{ fontSize: 11, color: dark ? '#888' : '#888' }}>MIDI Out</span>
+            <span
+              style={{
+                fontFamily: 'var(--font-serif)',
+                fontStyle: 'italic',
+                fontSize: 13,
+                color: dark ? '#999' : 'var(--paper-ink50)',
+              }}
+            >
+              MIDI Out
+            </span>
             <select
               value={selectedMidiPort ?? ''}
               onChange={e => onSelectMidiPort(e.target.value || null)}
@@ -215,13 +284,30 @@ export function Toolbar({
             width: 8,
             height: 8,
             borderRadius: '50%',
-            background: selectedMidiPort ? '#5cb85c' : (dark ? '#333' : '#ccc'),
+            background: selectedMidiPort ? '#5b8a64' : (dark ? '#333' : 'var(--paper-rule)'),
             flexShrink: 0,
           }}
         />
       </div>
 
       <div style={dividerStyle} />
+
+      {/* Accidentals (♯/♭) */}
+      <button
+        onClick={onAccidentalToggle}
+        style={{
+          ...btnBase,
+          fontFamily: 'var(--font-serif)',
+          fontStyle: 'italic',
+          fontSize: 14,
+          padding: '3px 9px',
+          minWidth: 30,
+          justifyContent: 'center',
+        }}
+        title={useFlats ? 'Flats — tap to switch to sharps' : 'Sharps — tap to switch to flats'}
+      >
+        {useFlats ? '♭' : '♯'}
+      </button>
 
       {/* Theme toggle */}
       <button onClick={onThemeToggle} style={btnBase} title="Toggle theme">

@@ -2,26 +2,38 @@ import { useRef, useEffect, useCallback } from 'react'
 import { CaptureSession } from '../engine/captureSession'
 import { GestureEngine } from '../engine/gestureEngine'
 import { type LaneSnapshot, type LaneParams, type ScaleConfig, MessageType } from '../engine/types'
-import { NOTE_NAMES } from '../engine/scaleData'
+import { midiNoteName } from '../engine/scaleData'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const LANE_COLORS_DARK  = ['#4a90e2', '#e8a838', '#5cb85c']
-const LANE_COLORS_LIGHT = ['#1a60c8', '#c87010', '#228b22']
+// v2 Studio harmonious trio — ink-blue, terracotta, moss
+const LANE_COLORS_LIGHT = ['#3a4866', '#c45f43', '#5b8a64']
+// Per-lane stroke textures, mirrors the AUv3 (solid / long-dash / dot-dash).
+// Empty array = solid stroke. Patterns are scaled lightly with line width.
+const LANE_DASH: number[][] = [[], [10, 5], [2, 4, 10, 4]]
 const GRID_COLOR_DARK   = 'rgba(255,255,255,0.07)'
-const GRID_COLOR_LIGHT  = 'rgba(0,0,0,0.08)'
+const GRID_COLOR_LIGHT  = 'rgba(44,39,35,0.10)'
 
-// Plot area margins (CSS px) — left/bottom reserve space for axis labels
+// Paper palette mirrors --paper-* CSS vars (used inside Canvas where vars don't apply).
+const PAPER = {
+  bg:        '#f3eee3',
+  bgDeep:    '#e8e1d1',
+  card:      '#faf6eb',
+  margin:    '#ebe5d4',
+  rule:      'rgba(44,39,35,0.18)',
+  ink70:     'rgba(44,39,35,0.55)',
+  ink50:     'rgba(44,39,35,0.40)',
+}
+
+// Plot area margins (CSS px) — left/bottom reserve space for axis labels.
+// These are constants: range/min/max changes never alter plot dimensions.
 const PL = 34   // left   — Y labels
 const PT = 2    // top
 const PR = 2    // right
 const PB = 16   // bottom — X labels
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function midiNoteName(note: number): string {
-  return NOTE_NAMES[note % 12] + (Math.floor(note / 12) - 1)
-}
 
 /** Snap a normalised value [0,1] to the nearest of yDiv equally-spaced levels. */
 function snapToYGrid(val: number, yDiv: number): number {
@@ -53,6 +65,7 @@ interface CurveDisplayProps {
   laneParams: LaneParams[]
   focusedLane: number
   theme: 'light' | 'dark'
+  useFlats: boolean
   engineRef: React.RefObject<GestureEngine>
   onCurveDrawn: (lane: number, snapshot: LaneSnapshot) => void
   onUpdateParams: (lane: number, partial: Partial<LaneParams>) => void
@@ -65,6 +78,7 @@ export function CurveDisplay({
   laneParams,
   focusedLane,
   theme,
+  useFlats,
   engineRef,
   onCurveDrawn,
   onUpdateParams,
@@ -81,10 +95,12 @@ export function CurveDisplay({
   const focusedRef     = useRef(focusedLane)
   const themeRef       = useRef(theme)
   const paramsRef      = useRef(laneParams)
+  const useFlatsRef    = useRef(useFlats)
   snapshotsRef.current = snapshots
   focusedRef.current   = focusedLane
   themeRef.current     = theme
   paramsRef.current    = laneParams
+  useFlatsRef.current  = useFlats
 
   const params = laneParams[focusedLane]
   const colors = dark ? LANE_COLORS_DARK : LANE_COLORS_LIGHT
@@ -123,11 +139,10 @@ export function CurveDisplay({
     const yQ         = fp.yQuantize
     const fColor     = laneColors[focusedRef.current]
 
-    // ── Background ────────────────────────────────────────────────────────
-    ctx.fillStyle = dark ? '#111' : '#f8f8f8'
+    // ── Background — paper card; tinted margin for labels ─────────────────
+    ctx.fillStyle = dark ? '#111' : PAPER.card
     ctx.fillRect(0, 0, W, H)
-    // Darker margins for labels
-    ctx.fillStyle = dark ? '#0c0c0c' : '#ebebeb'
+    ctx.fillStyle = dark ? '#0c0c0c' : PAPER.margin
     ctx.fillRect(0, 0, plotX, H)
     ctx.fillRect(0, plotY + plotH, W, PB)
 
@@ -151,9 +166,10 @@ export function CurveDisplay({
           const halfDn = i + 1 < bands.length  ? (bands[i + 1].y - noteY)    * 0.5 : (plotY + plotH - noteY)  * 0.5
           const bandH  = halfUp + halfDn
           if (bandH < 0.5) continue
+          // Warm rose tint on paper, cool ink tint on dark
           ctx.fillStyle = (i & 1)
-            ? (dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)')
-            : (dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.07)')
+            ? (dark ? 'rgba(255,255,255,0.04)' : 'rgba(196,95,67,0.05)')
+            : (dark ? 'rgba(255,255,255,0.10)' : 'rgba(196,95,67,0.12)')
           ctx.fillRect(plotX, noteY - halfUp, plotW, bandH)
         }
       }
@@ -161,13 +177,14 @@ export function CurveDisplay({
 
     // ── Grid lines ───────────────────────────────────────────────────────
     ctx.lineWidth = 1
+    const strongGrid = dark ? 'rgba(255,255,255,0.20)' : 'rgba(44,39,35,0.22)'
     for (let i = 1; i < gx; i++) {
-      ctx.strokeStyle = xQ ? (dark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.16)') : gridColor
+      ctx.strokeStyle = xQ ? strongGrid : gridColor
       const x = plotX + (i / gx) * plotW
       ctx.beginPath(); ctx.moveTo(x, plotY); ctx.lineTo(x, plotY + plotH); ctx.stroke()
     }
     for (let i = 1; i < gy; i++) {
-      ctx.strokeStyle = yQ ? (dark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.16)') : gridColor
+      ctx.strokeStyle = yQ ? strongGrid : gridColor
       const y = plotY + (i / gy) * plotH
       ctx.beginPath(); ctx.moveTo(plotX, y); ctx.lineTo(plotX + plotW, y); ctx.stroke()
     }
@@ -191,20 +208,24 @@ export function CurveDisplay({
     }
 
     // ── Plot area border ─────────────────────────────────────────────────
-    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'
+    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.15)' : PAPER.rule
     ctx.lineWidth = 1
     ctx.strokeRect(plotX + 0.5, plotY + 0.5, plotW - 1, plotH - 1)
 
     // ── Raw curves ────────────────────────────────────────────────────────
+    // Curve always uses the FULL plot area: x∈[plotX,plotX+plotW], y∈[plotY,plotY+plotH].
+    // The lane's range (minOut/maxOut) governs MIDI mapping only — never the visual area.
     for (let lane = 0; lane < 3; lane++) {
       const snap = snaps[lane]
       if (!snap?.valid) continue
       const focused = lane === focusedRef.current
       ctx.save()
-      ctx.globalAlpha  = focused ? 1 : 0.3
+      ctx.globalAlpha  = focused ? 1 : 0.35
       ctx.strokeStyle  = laneColors[lane]
-      ctx.lineWidth    = focused ? 2.5 : 1.5
+      ctx.lineWidth    = focused ? 2.75 : 1.75
       ctx.lineJoin     = 'round'
+      ctx.lineCap      = LANE_DASH[lane].length === 0 ? 'round' : 'butt'
+      ctx.setLineDash(LANE_DASH[lane])
       ctx.beginPath()
       for (let i = 0; i < 256; i++) {
         const x = plotX + (i / 255) * plotW
@@ -218,10 +239,13 @@ export function CurveDisplay({
     // ── In-progress gesture ───────────────────────────────────────────────
     if (isDrawingRef.current && drawingPtsRef.current.length >= 2) {
       ctx.save()
-      ctx.strokeStyle = laneColors[focusedRef.current]
-      ctx.lineWidth   = 2.5
-      ctx.globalAlpha = 0.7
+      const drawLane = focusedRef.current
+      ctx.strokeStyle = laneColors[drawLane]
+      ctx.lineWidth   = 2.75
+      ctx.globalAlpha = 0.75
       ctx.lineJoin    = 'round'
+      ctx.lineCap     = LANE_DASH[drawLane].length === 0 ? 'round' : 'butt'
+      ctx.setLineDash(LANE_DASH[drawLane])
       ctx.beginPath()
       const pts = drawingPtsRef.current
       for (let i = 0; i < pts.length; i++) {
@@ -255,6 +279,7 @@ export function CurveDisplay({
       ctx.lineWidth   = isFocused ? 2.5 : 1.8
       ctx.globalAlpha = isFocused ? 0.75 : 0.45
       ctx.lineJoin    = 'round'
+      ctx.setLineDash(LANE_DASH[stairLane])
       ctx.beginPath()
 
       if (sxQ) {
@@ -294,10 +319,11 @@ export function CurveDisplay({
         const phase = phases[lane]
         const x     = plotX + phase * plotW
         const clr   = laneColors[lane]
+        const isFocused = lane === focusedRef.current
         ctx.save()
         ctx.strokeStyle = clr
         ctx.lineWidth   = 1.5
-        ctx.globalAlpha = lane === focusedRef.current ? 0.9 : 0.4
+        ctx.globalAlpha = isFocused ? 0.9 : 0.4
         ctx.setLineDash([4, 4])
         ctx.beginPath(); ctx.moveTo(x, plotY); ctx.lineTo(x, plotY + plotH); ctx.stroke()
         ctx.setLineDash([])
@@ -305,25 +331,84 @@ export function CurveDisplay({
         if (snap) {
           const idx = Math.round(phase * 255) & 255
           const y   = plotY + (1 - snap.table[idx]) * plotH
-          ctx.globalAlpha = lane === focusedRef.current ? 1 : 0.5
+          ctx.globalAlpha = isFocused ? 1 : 0.5
           ctx.fillStyle   = clr
           ctx.beginPath()
-          ctx.arc(x, y, lane === focusedRef.current ? 5 : 3.5, 0, Math.PI * 2)
+          ctx.arc(x, y, isFocused ? 5 : 3.5, 0, Math.PI * 2)
           ctx.fill()
-          ctx.strokeStyle = dark ? '#111' : '#fff'
-          ctx.lineWidth   = 1.5
+          ctx.strokeStyle = dark ? '#111' : PAPER.bg
+          ctx.lineWidth   = 1.75
           ctx.globalAlpha = 1
           ctx.stroke()
+
+          // Cursor readout — italic Domine, rendered only for the focused lane
+          // to keep the canvas calm. Falls back to the table value pre-emit.
+          if (isFocused) {
+            const sent = engine.getLastSentValue(lane)
+            let label: string | null = null
+            switch (snap.messageType) {
+              case MessageType.Note:
+                if (sent >= 0) label = midiNoteName(sent, useFlatsRef.current)
+                break
+              case MessageType.PitchBend: {
+                const v = sent >= 0 ? sent : Math.round(snap.minOut * 16383)
+                label = String(v - 8192)
+                break
+              }
+              case MessageType.ChannelPressure:
+              case MessageType.CC:
+              default: {
+                const v = sent >= 0
+                  ? sent
+                  : Math.round((snap.minOut + snap.table[idx] * (snap.maxOut - snap.minOut)) * 127)
+                label = String(v)
+                break
+              }
+            }
+            if (label) {
+              ctx.font          = 'italic 600 12px Domine, Georgia, serif'
+              ctx.textBaseline  = 'middle'
+              const padX = 5
+              const padY = 2
+              const metrics = ctx.measureText(label)
+              const w = metrics.width + padX * 2
+              const h = 16
+              // Place to the right of the nib; flip left if it would clip.
+              let bx = x + 9
+              if (bx + w > plotX + plotW - 2) bx = x - 9 - w
+              const by = Math.max(plotY + 2, Math.min(plotY + plotH - h - 2, y - h / 2))
+              ctx.globalAlpha = 0.95
+              ctx.fillStyle   = dark ? 'rgba(20,20,20,0.85)' : 'rgba(250,246,235,0.92)'
+              ctx.strokeStyle = clr
+              ctx.lineWidth   = 1
+              const r = 3
+              ctx.beginPath()
+              ctx.moveTo(bx + r, by)
+              ctx.lineTo(bx + w - r, by)
+              ctx.quadraticCurveTo(bx + w, by, bx + w, by + r)
+              ctx.lineTo(bx + w, by + h - r)
+              ctx.quadraticCurveTo(bx + w, by + h, bx + w - r, by + h)
+              ctx.lineTo(bx + r, by + h)
+              ctx.quadraticCurveTo(bx, by + h, bx, by + h - r)
+              ctx.lineTo(bx, by + r)
+              ctx.quadraticCurveTo(bx, by, bx + r, by)
+              ctx.fill()
+              ctx.stroke()
+              ctx.fillStyle   = clr
+              ctx.textAlign   = 'left'
+              ctx.fillText(label, bx + padX, by + h / 2 + padY * 0.25)
+            }
+          }
         }
         ctx.restore()
       }
     }
 
-    // ── Y-axis labels (left margin) ───────────────────────────────────────
-    ctx.font          = '9px -apple-system, BlinkMacSystemFont, sans-serif'
+    // ── Y-axis labels (left margin) — Domine italic, paper ink ─────────────
+    ctx.font          = 'italic 10px Domine, Georgia, serif'
     ctx.textAlign     = 'right'
     ctx.textBaseline  = 'middle'
-    ctx.fillStyle     = dark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.38)'
+    ctx.fillStyle     = dark ? 'rgba(255,255,255,0.55)' : PAPER.ink70
 
     if (bands.length >= 2) {
       // Note + scale: one label per visible scale note
@@ -331,7 +416,7 @@ export function CurveDisplay({
       for (const { note, y } of bands) {
         const ly = Math.max(plotY + 1, Math.min(plotY + plotH - 5, y))
         if (ly < lastY + 10) continue
-        ctx.fillText(midiNoteName(note), plotX - 3, ly)
+        ctx.fillText(midiNoteName(note, useFlatsRef.current), plotX - 3, ly)
         lastY = ly
       }
     } else {
@@ -346,7 +431,7 @@ export function CurveDisplay({
         let label    = ''
         switch (fp.messageType) {
           case MessageType.Note:
-            label = midiNoteName(Math.max(0, Math.min(127, Math.round(ranged * 127))))
+            label = midiNoteName(Math.max(0, Math.min(127, Math.round(ranged * 127))), useFlatsRef.current)
             break
           case MessageType.PitchBend: {
             const pb = Math.round((ranged - 0.5) * 200)
@@ -361,10 +446,11 @@ export function CurveDisplay({
       }
     }
 
-    // ── X-axis labels (bottom margin) ─────────────────────────────────────
+    // ── X-axis labels (bottom margin) — Domine italic ──────────────────────
+    ctx.font         = 'italic 10px Domine, Georgia, serif'
     ctx.textAlign    = 'center'
     ctx.textBaseline = 'top'
-    ctx.fillStyle    = dark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.30)'
+    ctx.fillStyle    = dark ? 'rgba(255,255,255,0.45)' : PAPER.ink50
     for (let i = 1; i < gx; i++) {
       const x   = plotX + (i / gx) * plotW
       const pct = Math.round((i / gx) * 100)
@@ -451,24 +537,32 @@ export function CurveDisplay({
   const axisBtn: React.CSSProperties = {
     width: 22, height: 18, padding: 0, fontSize: 13, lineHeight: '18px',
     borderRadius: 3,
-    border: `1px solid ${dark ? '#444' : '#ccc'}`,
+    border: `1px solid ${dark ? '#444' : 'var(--paper-rule)'}`,
     background: 'transparent',
-    color: dark ? '#888' : '#999',
+    color: dark ? '#888' : 'var(--paper-ink50)',
     cursor: 'pointer', flexShrink: 0,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontFamily: 'var(--font-sans)',
   }
 
   const lockBtnStyle = (active: boolean): React.CSSProperties => ({
     ...axisBtn,
-    border:     `1px solid ${active ? color : (dark ? '#444' : '#ccc')}`,
-    color:      active ? color : (dark ? '#555' : '#c0c0c0'),
+    border:     `1px solid ${active ? color : (dark ? '#444' : 'var(--paper-rule)')}`,
+    color:      active ? color : (dark ? '#555' : 'var(--paper-ink30)'),
     fontWeight: active ? 700 : 400,
     fontSize:   11,
   })
 
   const countStyle: React.CSSProperties = {
-    fontSize: 10, fontWeight: 600, textAlign: 'center',
-    color: dark ? '#ccc' : '#555', minWidth: 16, userSelect: 'none',
+    fontFamily: 'var(--font-serif)',
+    fontStyle: 'italic',
+    fontSize: 12,
+    fontVariantNumeric: 'tabular-nums',
+    fontWeight: 500,
+    textAlign: 'center',
+    color: dark ? '#ccc' : 'var(--paper-ink70)',
+    minWidth: 16,
+    userSelect: 'none',
   }
 
   const bothLocked = params.xQuantize && params.yQuantize
