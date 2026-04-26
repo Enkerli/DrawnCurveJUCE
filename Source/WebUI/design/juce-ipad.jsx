@@ -66,8 +66,19 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
   const [scaleOpen, setScaleOpen] = React.useState(false);
   const SCALE_H = scaleOpen ? 310 : 0;
 
-  const [gridX, setGridX] = React.useState(16);
-  const [gridY, setGridY] = React.useState(10);
+  // Grid density and quantize toggles are per-lane — they live on focusLane
+  // and are mirrored to APVTS via eng.updateLane (the patched engine in
+  // main.jsx forwards every patch through sendParam).  The local helpers
+  // below clamp to the engine-side ranges (2..32 / 2..24) and accept either
+  // a value or an updater function.
+  const gridX = focusLane?.xDivisions ?? 4;
+  const gridY = focusLane?.yDivisions ?? 4;
+  const setGridX = (v) => focusLane && eng.updateLane(focusLane.id, {
+    xDivisions: Math.max(2, Math.min(32, typeof v === 'function' ? v(gridX) : v)),
+  });
+  const setGridY = (v) => focusLane && eng.updateLane(focusLane.id, {
+    yDivisions: Math.max(2, Math.min(24, typeof v === 'function' ? v(gridY) : v)),
+  });
 
   // Scale discovery moment — fires once when Note mode first selected
   const [discoveryVisible, setDiscoveryVisible] = React.useState(false);
@@ -137,6 +148,8 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
               showScaleBanding={focusLane?.target === 'Note'}
               showAxisNotes={focusLane?.target === 'Note'}
               paper={paper} gridX={gridX} gridY={gridY}
+              quantizeX={!!focusLane?.quantizeX}
+              quantizeY={!!focusLane?.quantizeY}
             />
 
             {/* MIDI ghost overlay */}
@@ -228,7 +241,7 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
       </div>
 
       {/* ── Bottom bar ── */}
-      <JuceBottomBar eng={eng} paper={paper} h={BOTTOM_H} leftOpen={leftOpen} setLeftOpen={setLeftOpen} />
+      <JuceBottomBar eng={eng} paper={paper} h={BOTTOM_H} />
     </div>
   );
 }
@@ -639,7 +652,8 @@ function CanvasCornerControls({ eng, paper, shelfOpen, setShelfOpen, scaleOpen, 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <GridBtn axis="Y" denser={true}  onClick={() => setGridY(g => Math.min(20, g + 2))} />
           <GridBtn axis="Y" denser={false} onClick={() => setGridY(g => Math.max(2, g - 2))} />
-          <LockBtn axis="Y" active={eng.quantizeY} onClick={() => eng.setQuantizeY(!eng.quantizeY)} />
+          <LockBtn axis="Y" active={!!focusLane?.quantizeY}
+            onClick={() => focusLane && eng.updateLane(focusLane.id, { quantizeY: !focusLane.quantizeY })} />
         </div>
         <div style={{ width: 1, height: 20, background: paper.rule, margin: '0 2px' }} />
         {/* X axis — density + lock + optional sync presets */}
@@ -647,9 +661,10 @@ function CanvasCornerControls({ eng, paper, shelfOpen, setShelfOpen, scaleOpen, 
           <div style={{ display: 'flex', gap: 3 }}>
             <GridBtn axis="X" denser={false} onClick={() => setGridX(g => Math.max(2, g - 2))} />
             <GridBtn axis="X" denser={true}  onClick={() => setGridX(g => Math.min(32, g + 2))} />
-            <LockBtn axis="X" active={eng.quantizeX} onClick={() => eng.setQuantizeX(!eng.quantizeX)} />
+            <LockBtn axis="X" active={!!focusLane?.quantizeX}
+              onClick={() => focusLane && eng.updateLane(focusLane.id, { quantizeX: !focusLane.quantizeX })} />
           </div>
-          {eng.syncOn && eng.quantizeX && (
+          {eng.syncOn && focusLane?.quantizeX && (
             <div style={{ display: 'flex', gap: 3 }}>
               {syncPresets.map(p => (
                 <button key={p.label} onClick={() => setGridX(p.cols)} style={{
@@ -872,7 +887,7 @@ function QurveShelf({ eng, paper, focusLane }) {
 }
 
 // ── Bottom bar — contextual summary, no mode switcher ────────
-function JuceBottomBar({ eng, paper, h, leftOpen, setLeftOpen }) {
+function JuceBottomBar({ eng, paper, h }) {
   const focusLane = eng.lanes.find(l => l.id === eng.focus);
   if (!focusLane) return null;
 
@@ -916,21 +931,6 @@ function JuceBottomBar({ eng, paper, h, leftOpen, setLeftOpen }) {
       <span style={{ fontFamily: 'Inter Tight', fontSize: 11, color: paper.ink70 }}>
         smooth {focusLane.smooth.toFixed(2)}
       </span>
-
-      <div style={{ flex: 1 }} />
-
-      {/* Single progressive disclosure toggle */}
-      <button onClick={() => setLeftOpen(!leftOpen)} style={{
-        padding: '4px 12px', height: h - 12,
-        border: `1px solid ${leftOpen ? paper.ink : paper.rule}`,
-        background: leftOpen ? paper.ink : 'transparent',
-        color: leftOpen ? paper.bg : paper.ink70,
-        borderRadius: 2, cursor: 'pointer',
-        fontFamily: 'Inter Tight', fontSize: 11, letterSpacing: 0.5,
-        display: 'flex', alignItems: 'center', gap: 5,
-      }}>
-        {leftOpen ? '◂ less' : 'configure ▸'}
-      </button>
     </div>
   );
 }

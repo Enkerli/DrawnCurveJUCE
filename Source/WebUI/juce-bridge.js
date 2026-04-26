@@ -85,12 +85,36 @@ const LANE_MAP = [
   ['rangeMin',    'minOutput',   v => v,                      v => v],           // raw: 0-1
   ['rangeMax',    'maxOutput',   v => v,                      v => v],           // raw: 0-1
   ['velocity',    'noteVelocity',v => Math.round(v),          v => v / 127],    // raw: 1-127
-  // scaleRoot / scaleMask are GLOBAL params — not in per-lane APVTS IDs.
-  // They appear here so updateLane() can display them; setParam calls are no-ops
-  // (getParameter("l0_scaleRoot") returns null and is silently skipped).
-  ['scaleRoot',   'scaleRoot',   v => Math.round(v),          v => v / 11],     // raw: 0-11
-  ['scaleMask',   'scaleMask',   v => Math.round(v),          v => v / 4095],   // raw: 0-4095
+  // Quantization — per-lane bool/int params used by the audio engine.
+  ['quantizeX',   'xQuantize',   v => v > 0.5,                v => v ? 1.0 : 0.0],   // raw: 0/1
+  ['quantizeY',   'yQuantize',   v => v > 0.5,                v => v ? 1.0 : 0.0],   // raw: 0/1
+  ['xDivisions',  'xDivisions',  v => Math.round(v),          v => (v - 2) / 30],    // raw: 2-32
+  ['yDivisions',  'yDivisions',  v => Math.round(v),          v => (v - 2) / 22],    // raw: 2-24
+  // (scaleRoot / scaleMask handled separately — see GLOBAL_PARAM_MAP below.)
 ];
+
+// ── Global APVTS params ───────────────────────────────────────────────────────
+// Some fields the UI tracks PER-LANE (e.g. lane.scaleRoot) actually map to a
+// SINGLE shared APVTS parameter on the C++ side.  When the UI dispatches a
+// change for such a field we ignore the lane index and write to the global
+// parameter id instead.  reactToRaw is the same shape as in LANE_MAP.
+//
+// IMPORTANT — keep in sync with the per-lane vs shared classification in
+// PluginProcessor.cpp / ParamID:: declarations.  Treating a global as per-lane
+// causes silent no-ops (getParameter("l0_scaleRoot") → null); treating a
+// per-lane as global makes lane 0 stomp every other lane.
+const GLOBAL_PARAM_MAP = [
+  // [reactField, paramId, rawToReact, reactToRaw]
+  ['scaleRoot', 'scaleRoot', v => Math.round(v),         v => v / 11],     // raw: 0-11
+  ['scaleMask', 'scaleMask', v => Math.round(v),         v => v / 4095],   // raw: 0-4095
+];
+
+function findGlobal(field) {
+  return GLOBAL_PARAM_MAP.find(([f]) => f === field) || null;
+}
+function findGlobalById(paramId) {
+  return GLOBAL_PARAM_MAP.find(([, id]) => id === paramId) || null;
+}
 
 // ── Main initialiser ──────────────────────────────────────────────────────────
 // Call once from inside the patched useDrawnQurveEngine hook.
@@ -148,12 +172,33 @@ export function initJuceBridge(onEvent) {
 // ── JS → C++ senders (call from UI event handlers) ───────────────────────────
 
 export function sendParam(lane, field, value) {
+  // Global APVTS params (scaleRoot/scaleMask) — ignore lane index, write once.
+  const g = findGlobal(field);
+  if (g) {
+    const [, paramId, , toRaw] = g;
+    juceEmit('setParam', { id: paramId, value: toRaw(value) });
+    return;
+  }
   for (const [f, suffix, , toRaw] of LANE_MAP) {
     if (f === field) {
       juceEmit('setParam', { id: laneParamId(lane, suffix), value: toRaw(value) });
       return;
     }
   }
+}
+
+// Broadcast a single field to every lane id in the given list.  Used by the
+// UI's "global" quantize / grid toggles, which the C++ engine actually stores
+// per-lane — so the UI mirror writes the same value to every active lane.
+export function broadcastParam(laneIds, field, value) {
+  for (const id of laneIds) sendParam(id, field, value);
+}
+
+// Resolve a global APVTS paramId (e.g. "scaleRoot") into the engine field name
+// the UI uses.  Returns null for per-lane params or unknown ids.
+export function globalFieldForParamId(paramId) {
+  const g = findGlobalById(paramId);
+  return g ? { field: g[0], rawToReact: g[2] } : null;
 }
 
 export function sendEnabled(lane, enabled) {

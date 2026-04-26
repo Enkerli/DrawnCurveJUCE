@@ -19,6 +19,11 @@ function useDrawnQurveEngine(initial = {}) {
       scaleRoot: 0,
       scaleMask: 0b101011010101,
       velocity: 100,
+      // Per-lane quantization — mirrors C++ APVTS xQuantize/yQuantize/xDivisions/yDivisions
+      quantizeX: false,
+      quantizeY: false,
+      xDivisions: 4,
+      yDivisions: 4,
     },
     {
       id: 1,
@@ -36,6 +41,10 @@ function useDrawnQurveEngine(initial = {}) {
       scaleRoot: 9, // A
       scaleMask: 0b100101010010,
       velocity: 96,
+      quantizeX: false,
+      quantizeY: false,
+      xDivisions: 4,
+      yDivisions: 4,
     },
     {
       id: 2,
@@ -53,6 +62,10 @@ function useDrawnQurveEngine(initial = {}) {
       scaleRoot: 0,
       scaleMask: 0b111111111111,
       velocity: 100,
+      quantizeX: false,
+      quantizeY: false,
+      xDivisions: 4,
+      yDivisions: 4,
     },
   ]);
   const [focus, setFocus] = React.useState(0);   // focused lane id
@@ -64,8 +77,9 @@ function useDrawnQurveEngine(initial = {}) {
   const [phase, setPhase] = React.useState(0);   // 0..1
   const [ppForward, setPpForward] = React.useState(true);
   const [mode, setMode] = React.useState(initial.mode || 'standard');
-  const [quantizeY, setQuantizeY] = React.useState(false);
-  const [quantizeX, setQuantizeX] = React.useState(false);
+  // Note: quantizeX/Y are PER-LANE (on each lane object), not global, so the
+  // C++ engine can quantize lanes independently.  The UI surfaces them via the
+  // currently-focused lane in juce-ipad.jsx.
 
   // playhead animator
   React.useEffect(() => {
@@ -104,7 +118,6 @@ function useDrawnQurveEngine(initial = {}) {
     playing, setPlaying, direction, setDirection,
     syncOn, setSyncOn, speed, setSpeed, beats, setBeats, phase,
     mode, setMode,
-    quantizeY, setQuantizeY, quantizeX, setQuantizeX,
   };
 }
 

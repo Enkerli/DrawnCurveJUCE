@@ -14,6 +14,7 @@ import './design/scale-editor.jsx';
 // ── JUCE bridge ───────────────────────────────────────────────────────────────
 import { initJuceBridge, sendCurve, sendParam, sendFocus,
          sendPlaying, sendDirection, sendEnabled,
+         globalFieldForParamId,
          sendClearLane, sendAddLane, sendRemoveLane } from './juce-bridge.js';
 
 // ── Patch useDrawnQurveEngine ─────────────────────────────────────────────────
@@ -68,15 +69,25 @@ import { initJuceBridge, sendCurve, sendParam, sendFocus,
               l.id === action.lane ? { ...l, curve: action.curve } : l));
             break;
           case 'paramChange': {
-            // Dispatch single-param changes into the correct lane
             const { id, value } = action;
+
+            // Global APVTS params (no l<n>_ prefix) — apply to every lane so
+            // any UI surface that reads lane.scaleRoot/scaleMask sees the
+            // shared value.  Mapping is owned by GLOBAL_PARAM_MAP in the bridge.
+            const globalMap = globalFieldForParamId(id);
+            if (globalMap) {
+              const v = globalMap.rawToReact(value);
+              demo.setLanes(prev => prev.map(l => ({ ...l, [globalMap.field]: v })));
+              break;
+            }
+
+            // Per-lane params — match l<n>_ prefix and dispatch into that lane.
             demo.setLanes(prev => {
               const next = [...prev];
               for (let L = 0; L < next.length; L++) {
                 const prefix = `l${L}_`;
                 if (!id.startsWith(prefix)) continue;
                 const suffix = id.slice(prefix.length);
-                // Build partial patch for this lane
                 const patch = {};
                 // value is the ACTUAL parameter value (not 0-1 normalised):
                 //   AudioParameterChoice → index   AudioParameterInt → integer
@@ -88,6 +99,10 @@ import { initJuceBridge, sendCurve, sendParam, sendFocus,
                 if (suffix === 'minOutput')    patch.rangeMin    = value;                     // 0-1
                 if (suffix === 'maxOutput')    patch.rangeMax    = value;                     // 0-1
                 if (suffix === 'noteVelocity') patch.velocity    = Math.round(value);         // 1-127
+                if (suffix === 'xQuantize')    patch.quantizeX   = value > 0.5;
+                if (suffix === 'yQuantize')    patch.quantizeY   = value > 0.5;
+                if (suffix === 'xDivisions')   patch.xDivisions  = Math.round(value);     // 2-32
+                if (suffix === 'yDivisions')   patch.yDivisions  = Math.round(value);     // 2-24
                 if (Object.keys(patch).length) {
                   next[L] = { ...next[L], ...patch };
                   return next;

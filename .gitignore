@@ -32,3 +32,8 @@ cmake_install.cmake
 
 # Large mockup binaries (design references, not source)
 mockups/*.heic
+
+# Claude/Anthropic design-bundle drops — inputs to redesign work, not source
+DrawnQurve-*.html
+DrawnQurve-*.zip
+DrawnQurve-*/

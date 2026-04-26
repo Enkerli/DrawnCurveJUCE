@@ -238,6 +238,29 @@ void WebCurveEditor::parameterChanged (const juce::String& paramID, float newVal
             return;
         webView.emitEventIfBrowserIsVisible ("paramChange",
             makeObj ({ { "id", paramID }, { "value", newValue } }));
+
+        // Rebuild the engine snapshot for the affected lane.  setValueNotifyingHost
+        // updates the APVTS atomic but the audio thread reads from a separate
+        // LaneSnapshot struct that's only refreshed when updateLaneSnapshot()
+        // is called explicitly.  Without this hop, every per-lane parameter
+        // change (quantize, divisions, range, smoothing, msgType, etc.)
+        // updates the UI and the APVTS, but the actual MIDI output keeps
+        // using the previous snapshot — which is exactly the symptom the
+        // user reported with the quantization buttons.
+        //
+        // The native editor (PluginEditor.cpp) called updateLaneSnapshot()
+        // from its slider attachments; the WebUI editor needs the equivalent
+        // here, since its only parameter-change pipeline is the bridge.
+        if (paramID.startsWith ("l"))
+        {
+            const int sep = paramID.indexOfChar ('_');
+            if (sep > 1)
+            {
+                const int lane = paramID.substring (1, sep).getIntValue();
+                if (lane >= 0 && lane < kMaxLanes)
+                    proc.updateLaneSnapshot (lane);
+            }
+        }
     });
 }
 
@@ -289,6 +312,11 @@ void WebCurveEditor::sendStateSnapshot()
         lane->setProperty ("rangeMax",     raw ("maxOutput"));                     // 0-1
         lane->setProperty ("velocity",     static_cast<int> (raw ("noteVelocity")));// 1-127
         lane->setProperty ("enabled",      raw ("enabled") > 0.5f);
+        // Per-lane quantization (mirrors xQuantize/yQuantize/xDivisions/yDivisions APVTS).
+        lane->setProperty ("quantizeX",    raw ("xQuantize") > 0.5f);
+        lane->setProperty ("quantizeY",    raw ("yQuantize") > 0.5f);
+        lane->setProperty ("xDivisions",   static_cast<int> (raw ("xDivisions")));   // 2-32
+        lane->setProperty ("yDivisions",   static_cast<int> (raw ("yDivisions")));   // 2-24
         lane->setProperty ("scaleRoot",    static_cast<int> (globalRaw (ParamID::scaleRoot)));  // 0-11
         lane->setProperty ("scaleMask",    static_cast<int> (globalRaw (ParamID::scaleMask)));  // 0-4095
         lane->setProperty ("scaleId",      "chromatic");   // TODO: derive from mask

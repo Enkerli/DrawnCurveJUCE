@@ -104,8 +104,9 @@ function CurveCanvas({
           const y1 = height * (1 - hi), y2 = height * (1 - lo);
           return (
             <>
-              {/* Use fillOpacity, not 8-digit hex — WKWebView's SVG fill parser
-                  drops the alpha pair and renders #RRGGBB12 as opaque. */}
+              {/* WKWebView's SVG fill parser drops the alpha pair from 8-digit
+                  hex (#RRGGBBAA) and renders the rect opaque — so split fill +
+                  fillOpacity here.  Browser-only previews would tolerate either. */}
               <rect x={0} y={y1} width={width} height={y2 - y1}
                 fill={focusLane.color} fillOpacity={0.07} />
               <line x1={0} x2={width} y1={y1} y2={y1}
