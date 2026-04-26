@@ -181,7 +181,7 @@ public:
 
         for (int i = 0; i < n; ++i)
         {
-            const auto sb     = juce::Rectangle<float> (b.getX() + segW * i, b.getY(),
+            const auto sb     = juce::Rectangle<float> (b.getX() + segW * static_cast<float> (i), b.getY(),
                                                         segW, b.getHeight());
             const bool active = (i == _selected);
 
@@ -229,7 +229,7 @@ public:
         if (n == 0) return;
 
         const int  idx       = juce::jlimit (0, n - 1,
-                                             (int) ((float) e.x / (float) getWidth() * n));
+                                             (int) ((float) e.x / (float) getWidth() * static_cast<float> (n)));
         const bool wasAlready = (idx == _selected);
         setSelectedIndex (idx);   // fires onChange only if changed
         if (onTap) onTap (idx, wasAlready);

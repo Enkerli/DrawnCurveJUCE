@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>DrawnQurve</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #F5F0E8; }
+    #root { width: 100%; height: 100%; }
+    /* Disable iOS long-press callouts and selection on UI elements */
+    button, [role=button], canvas { -webkit-user-select: none; user-select: none; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="bundle.js"></script>
+</body>
+</html>

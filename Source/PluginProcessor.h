@@ -175,6 +175,10 @@ public:
     /// existing snapshot table without requiring a redraw.  No-op if no curve exists.
     void updateLaneSnapshot (int lane);
 
+    /// Install a curve directly from a float array (called by the WebView bridge).
+    /// Reads current APVTS values for CC#, channel, smoothing, etc.
+    void setSnapshotFromArray (int lane, const float* data, int size);
+
     /// Clear the curve for one lane and stop it from playing.
     void clearSnapshot (int lane);
 

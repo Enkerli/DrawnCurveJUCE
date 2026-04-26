@@ -173,6 +173,7 @@ private:
 };
 
 //==============================================================================
+juce::JUCEApplicationBase* juce_CreateApplication();  // forward declaration (satisfies -Wmissing-prototypes)
 juce::JUCEApplicationBase* juce_CreateApplication()
 {
     return new DrawnQurveStandaloneApp();

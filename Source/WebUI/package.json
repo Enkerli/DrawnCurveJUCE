@@ -1,0 +1,14 @@
+{
+  "name": "drawnqurve-webui",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "esbuild main.jsx --bundle --inject:react-globals.js --outfile=dist/bundle.js && cp index.html dist/index.html",
+    "watch": "esbuild main.jsx --bundle --inject:react-globals.js --outfile=dist/bundle.js --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  }
+}

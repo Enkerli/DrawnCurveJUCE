@@ -145,10 +145,60 @@ juce_add_binary_data(DrawnCurveFonts SOURCES
 )
 target_link_libraries(DrawnCurve PRIVATE DrawnCurveFonts)
 
+# ── WebUI bundle (esbuild → BinaryData) ──────────────────────────────────────
+# esbuild is invoked by npm/npx and must be installed in Source/WebUI:
+#   cd Source/WebUI && npm install
+# The dist/ files are checked in so a clean CMake configure works without Node.
+# Run 'npm run build' in Source/WebUI to regenerate after editing JS/JSX files.
+
+set(WEBUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source/WebUI")
+set(WEBUI_DIST "${WEBUI_DIR}/dist")
+
+find_program(NPXCMD npx)
+if(NPXCMD)
+    add_custom_command(
+        OUTPUT  "${WEBUI_DIST}/bundle.js" "${WEBUI_DIST}/index.html"
+        COMMAND "${NPXCMD}" esbuild "${WEBUI_DIR}/main.jsx"
+                    --bundle
+                    "--inject:${WEBUI_DIR}/react-globals.js"
+                    "--outfile=${WEBUI_DIST}/bundle.js"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                    "${WEBUI_DIR}/index.html"
+                    "${WEBUI_DIST}/index.html"
+        DEPENDS "${WEBUI_DIR}/main.jsx"
+                "${WEBUI_DIR}/juce-bridge.js"
+                "${WEBUI_DIR}/react-globals.js"
+                "${WEBUI_DIR}/index.html"
+                "${WEBUI_DIR}/design/tokens.jsx"
+                "${WEBUI_DIR}/design/engine.jsx"
+                "${WEBUI_DIR}/design/ui-primitives.jsx"
+                "${WEBUI_DIR}/design/curve-canvas.jsx"
+                "${WEBUI_DIR}/design/scale-editor.jsx"
+                "${WEBUI_DIR}/design/juce-ipad.jsx"
+        WORKING_DIRECTORY "${WEBUI_DIR}"
+        COMMENT "Bundling WebUI with esbuild"
+        VERBATIM
+    )
+    add_custom_target(DrawnCurveWebUIBundle DEPENDS "${WEBUI_DIST}/bundle.js" "${WEBUI_DIST}/index.html")
+endif()
+
+juce_add_binary_data(DrawnCurveWebUI
+    HEADER_NAME BinaryDataWebUI.h
+    NAMESPACE   BinaryData
+    SOURCES
+        "${WEBUI_DIST}/index.html"
+        "${WEBUI_DIST}/bundle.js"
+)
+if(NPXCMD)
+    add_dependencies(DrawnCurveWebUI DrawnCurveWebUIBundle)
+endif()
+target_link_libraries(DrawnCurve PRIVATE DrawnCurveWebUI)
+
 # ── Sources ───────────────────────────────────────────────────────────────────
 target_sources(DrawnCurve PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
+    Source/WebUI/WebCurveEditor.cpp
     Source/Engine/GestureEngine.cpp
     Source/Engine/GestureCaptureSession.cpp
     Source/StandaloneApp.cpp
@@ -160,7 +210,7 @@ target_sources(DrawnCurve PRIVATE
     Source/ScaleLattice.h
 )
 
-target_include_directories(DrawnCurve PRIVATE Source/Engine Source Source/UI)
+target_include_directories(DrawnCurve PRIVATE Source/Engine Source Source/UI Source/WebUI)
 
 # ── iOS code signing ──────────────────────────────────────────────────────────
 # Embed signing identity so cmake regeneration preserves it.
@@ -207,7 +257,7 @@ endif()
 
 target_compile_definitions(DrawnCurve
     PUBLIC
-        JUCE_WEB_BROWSER=0
+        JUCE_WEB_BROWSER=1
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
         JUCE_DISPLAY_SPLASH_SCREEN=0

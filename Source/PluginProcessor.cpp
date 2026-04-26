@@ -18,6 +18,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "WebUI/WebCurveEditor.h"
 
 // Helper: create a 2-byte MIDI message for channel pressure; 3-byte for everything else.
 static juce::MidiMessage makeMidiMessage (uint8_t status, uint8_t d1, uint8_t d2)
@@ -764,6 +765,39 @@ void DrawnCurveProcessor::clearSnapshot (int lane)
     _laneSnaps[static_cast<size_t>(lane)] = nullptr;
 }
 
+void DrawnCurveProcessor::setSnapshotFromArray (int lane, const float* data, int size)
+{
+    if (lane < 0 || lane >= kMaxLanes || data == nullptr || size <= 0) return;
+
+    // Read current APVTS values so the snapshot reflects the live param state.
+    const auto raw = [&] (const juce::String& suffix) {
+        return apvts.getRawParameterValue (laneParam (lane, suffix))->load();
+    };
+
+    auto* snap            = new LaneSnapshot();
+    snap->valid           = true;
+    snap->ccNumber        = static_cast<uint8_t> (juce::jlimit (0, 127, static_cast<int> (raw (ParamID::ccNumber))));
+    snap->midiChannel     = static_cast<uint8_t> (juce::jlimit (0, 15, static_cast<int> (raw (ParamID::midiChannel)) - 1));
+    snap->smoothing       = raw (ParamID::smoothing);
+    snap->minOut          = raw (ParamID::minOutput);
+    snap->maxOut          = raw (ParamID::maxOutput);
+    snap->messageType     = static_cast<MessageType> (juce::jlimit (0, 3, static_cast<int> (raw (ParamID::msgType))));
+    snap->noteVelocity    = static_cast<uint8_t> (juce::jlimit (1, 127, static_cast<int> (raw (ParamID::noteVelocity))));
+    snap->durationSeconds = 1.0f;   // JS curves don't carry duration; default to 1 bar at 1× speed
+
+    const int n = juce::jmin (size, 256);
+    for (int i = 0; i < n; ++i)
+        snap->table[static_cast<std::size_t> (i)] = juce::jlimit (0.0f, 1.0f, data[i]);
+
+    _laneSnaps[static_cast<size_t> (lane)] = snap;
+
+    {
+        juce::SpinLock::ScopedLockType lock (_engineLock);
+        _engine.setSnapshot (lane, snap);
+        _engine.resetLane (lane);
+    }
+}
+
 void DrawnCurveProcessor::clearAllSnapshots()
 {
     {
@@ -1091,7 +1125,7 @@ void DrawnCurveProcessor::setStateInformation (const void* data, int sizeInBytes
 //==============================================================================
 juce::AudioProcessorEditor* DrawnCurveProcessor::createEditor()
 {
-    return new DrawnCurveEditor (*this);
+    return new WebCurveEditor (*this);
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

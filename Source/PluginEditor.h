@@ -732,7 +732,7 @@ private:
             g.setColour (col);
             for (int i = 0; i < n; ++i)
             {
-                const float t = (i + 0.5f) / static_cast<float> (n);
+                const float t = (static_cast<float> (i) + 0.5f) / static_cast<float> (n);
                 if (!isX) { const float y = b.getY() + b.getHeight() * t;
                             g.drawLine (b.getX(), y, b.getRight(), y, 1.3f); }
                 else       { const float x = b.getX() + b.getWidth() * t;
@@ -837,6 +837,12 @@ private:
     /// Transparent hit-area buttons drawn over lane colour dots in the matrix.
     /// Click → setFocusedLane(L).
     std::array<juce::TextButton, kMaxLanes> laneSelectBtn;
+
+    /// "LANES" header label at the top of the right lane panel.
+    juce::Label lanesHeaderLabel;
+
+    /// ON/OFF enabled-state toggle, one per lane; visible only in the focused lane row.
+    std::array<juce::TextButton, kMaxLanes> laneOnBtn;
 
     /// "+" button that appears below the last active lane row when more lanes are available.
     juce::TextButton addLaneBtn;
@@ -1014,7 +1020,7 @@ private:
     juce::Rectangle<int> _musicalPanel;
     /// Top-left of first matrix row (used by paint() to draw lane colour dots).
     juce::Point<int>     _matrixRowOrigin;
-    int                  _matrixRowStride { 35 };  ///< px per matrix row (matRowH=32 + 3 gap)
+    int                  _matrixRowStride { 80 };  ///< px per lane-panel row (≥80 pt, set in resized())
 
     // Legacy aliases still referenced by parameterChanged / updateScaleVisibility.
     juce::Rectangle<int>& _secTransport   = _globalPanel;
@@ -1108,6 +1114,7 @@ private:
     void updateMsgTypeButtons();      // kept for backward compat, delegates to lane row
     void updateLaneRow      (int lane);   ///< Refresh target/detail/channel display for one lane
     void updateAllLaneRows  ();           ///< Refresh all active lane rows
+    void updateBottomContextLabel();      ///< Rebuild bottomContextLabel text for the focused lane
 
     /// Rebuild laneFocusCtrl segments to match proc.activeLaneCount.
     void updateLaneFocusCtrl();
