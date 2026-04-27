@@ -41,6 +41,14 @@ function CurveCanvas({
   };
 
   const onPointerDown = (e) => {
+    // Only treat the gesture as a drawing stroke when it actually originates
+    // on the canvas surface — not on an overlay control (corner buttons,
+    // shape-well tab, etc.) that happens to be a descendant of an absolute-
+    // positioned sibling.  Without this guard, fast re-renders during
+    // playback can occasionally route a button-targeted pointerdown through
+    // the canvas's listener and cause setPointerCapture to swallow the
+    // subsequent click on the button.
+    if (e.target !== ref.current) return;
     e.preventDefault();
     ref.current.setPointerCapture(e.pointerId);
     setDrawing(true);

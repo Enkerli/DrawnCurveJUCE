@@ -577,48 +577,67 @@ function laneChip(paper, active) {
 }
 
 // ── Canvas corner controls ────────────────────────────────────
-function CanvasCornerControls({ eng, paper, shelfOpen, setShelfOpen, scaleOpen, setScaleOpen, focusLane, gridX, setGridX, gridY, setGridY }) {
-  // Mini grid icon — shows the axis getting denser or sparser
-  const GridIcon = ({ axis, denser }) => {
-    const w = 22, h = 18;
-    const lines = denser ? [0.25, 0.5, 0.75] : [0.5];
-    return (
-      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: 'block' }}>
-        <rect x={1} y={1} width={w-2} height={h-2} rx={1}
-          fill="none" stroke="currentColor" strokeWidth={0.8} opacity={0.4} />
-        {axis === 'Y'
-          ? lines.map((f, i) => (
-              <line key={i} x1={2} x2={w-2} y1={f * h} y2={f * h}
-                stroke="currentColor" strokeWidth={denser ? 0.8 : 1.2}
-                opacity={denser ? 0.9 : 0.6} />
-            ))
-          : lines.map((f, i) => (
-              <line key={i} x1={f * w} x2={f * w} y1={2} y2={h-2}
-                stroke="currentColor" strokeWidth={denser ? 0.8 : 1.2}
-                opacity={denser ? 0.9 : 0.6} />
-            ))
-        }
-        <text x={denser ? w-5 : 4} y={denser ? 6 : h-3}
-          style={{ fontSize: 5, fontFamily: 'Inter Tight', fontWeight: 600 }}
-          fill="currentColor" opacity={0.5}>{axis}</text>
-      </svg>
-    );
-  };
+//
+// IMPORTANT: every helper below is defined at MODULE scope, not inside
+// CanvasCornerControls.  Defining them inside meant a fresh function
+// reference on every render — and the JUCE phase heartbeat re-renders this
+// tree at 30 Hz during playback.  React treats a "different function
+// reference" as a different component type, so it unmounted the old button
+// and mounted a new one between every frame.  When the user pressed a
+// button mid-frame, `pointerdown` arrived on the live element but the
+// next re-render destroyed it before `pointerup` could fire — so the
+// browser never dispatched the `click`.  This was the entire reason the
+// quantize / density buttons appeared to "only work while paused".
 
-  const GridBtn = ({ axis, denser, onClick }) => (
-    <button onClick={onClick} title={`${axis} grid ${denser ? 'denser' : 'sparser'}`} style={{
+function GridIcon({ axis, denser }) {
+  const w = 22, h = 18;
+  const lines = denser ? [0.25, 0.5, 0.75] : [0.5];
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: 'block' }}>
+      <rect x={1} y={1} width={w-2} height={h-2} rx={1}
+        fill="none" stroke="currentColor" strokeWidth={0.8} opacity={0.4} />
+      {axis === 'Y'
+        ? lines.map((f, i) => (
+            <line key={i} x1={2} x2={w-2} y1={f * h} y2={f * h}
+              stroke="currentColor" strokeWidth={denser ? 0.8 : 1.2}
+              opacity={denser ? 0.9 : 0.6} />
+          ))
+        : lines.map((f, i) => (
+            <line key={i} x1={f * w} x2={f * w} y1={2} y2={h-2}
+              stroke="currentColor" strokeWidth={denser ? 0.8 : 1.2}
+              opacity={denser ? 0.9 : 0.6} />
+          ))
+      }
+      <text x={denser ? w-5 : 4} y={denser ? 6 : h-3}
+        style={{ fontSize: 5, fontFamily: 'Inter Tight', fontWeight: 600 }}
+        fill="currentColor" opacity={0.5}>{axis}</text>
+    </svg>
+  );
+}
+
+function GridBtn({ axis, denser, onClick, paper }) {
+  return (
+    <button
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); if (onClick) onClick(e); }}
+      title={`${axis} grid ${denser ? 'denser' : 'sparser'}`} style={{
       width: 32, height: 28, border: `1px solid ${paper.rule}`,
       background: paper.card, borderRadius: 2,
       color: paper.ink70, cursor: 'pointer', padding: 2,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
+      position: 'relative', zIndex: 5,
     }}>
       <GridIcon axis={axis} denser={denser} />
     </button>
   );
+}
 
-  // Lock button — toggles quantization for an axis
-  const LockBtn = ({ axis, active, onClick }) => (
-    <button onClick={onClick} title={`${axis} quantize ${active ? 'on' : 'off'}`} style={{
+function LockBtn({ axis, active, onClick, paper }) {
+  return (
+    <button
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); if (onClick) onClick(e); }}
+      title={`${axis} quantize ${active ? 'on' : 'off'}`} style={{
       width: 32, height: 28, border: `1px solid ${active ? paper.amberInk : paper.rule}`,
       background: active ? paper.amberInk : 'transparent',
       color: active ? paper.bg : paper.ink50,
@@ -626,6 +645,9 @@ function CanvasCornerControls({ eng, paper, shelfOpen, setShelfOpen, scaleOpen, 
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 0.5,
       gap: 2,
+      // Own stacking context above the canvas div so spatial overlap doesn't
+      // create unexpected hit-test outcomes.
+      position: 'relative', zIndex: 5,
     }}>
       <svg width={10} height={12} viewBox="0 0 10 12">
         <rect x={2} y={5} width={6} height={7} rx={1} fill="currentColor" opacity={0.9}/>
@@ -634,7 +656,9 @@ function CanvasCornerControls({ eng, paper, shelfOpen, setShelfOpen, scaleOpen, 
       <span>{axis}</span>
     </button>
   );
+}
 
+function CanvasCornerControls({ eng, paper, shelfOpen, setShelfOpen, scaleOpen, setScaleOpen, focusLane, gridX, setGridX, gridY, setGridY }) {
   // X sync presets (shown when syncOn)
   const syncPresets = [
     { label: '1/4',  cols: 4  },
@@ -652,18 +676,18 @@ function CanvasCornerControls({ eng, paper, shelfOpen, setShelfOpen, scaleOpen, 
       }}>
         {/* Y axis — vertical stack of density + lock */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <GridBtn axis="Y" denser={true}  onClick={() => setGridY(g => Math.min(20, g + 2))} />
-          <GridBtn axis="Y" denser={false} onClick={() => setGridY(g => Math.max(2, g - 2))} />
-          <LockBtn axis="Y" active={!!focusLane?.quantizeY}
+          <GridBtn axis="Y" denser={true}  paper={paper} onClick={() => setGridY(g => Math.min(20, g + 2))} />
+          <GridBtn axis="Y" denser={false} paper={paper} onClick={() => setGridY(g => Math.max(2, g - 2))} />
+          <LockBtn axis="Y" active={!!focusLane?.quantizeY} paper={paper}
             onClick={() => focusLane && eng.updateLane(focusLane.id, { quantizeY: !focusLane.quantizeY })} />
         </div>
         <div style={{ width: 1, height: 20, background: paper.rule, margin: '0 2px' }} />
         {/* X axis — density + lock + optional sync presets */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>
           <div style={{ display: 'flex', gap: 3 }}>
-            <GridBtn axis="X" denser={false} onClick={() => setGridX(g => Math.max(2, g - 2))} />
-            <GridBtn axis="X" denser={true}  onClick={() => setGridX(g => Math.min(32, g + 2))} />
-            <LockBtn axis="X" active={!!focusLane?.quantizeX}
+            <GridBtn axis="X" denser={false} paper={paper} onClick={() => setGridX(g => Math.max(2, g - 2))} />
+            <GridBtn axis="X" denser={true}  paper={paper} onClick={() => setGridX(g => Math.min(32, g + 2))} />
+            <LockBtn axis="X" active={!!focusLane?.quantizeX} paper={paper}
               onClick={() => focusLane && eng.updateLane(focusLane.id, { quantizeX: !focusLane.quantizeX })} />
           </div>
           {eng.syncOn && focusLane?.quantizeX && (

@@ -24221,6 +24221,7 @@
       return { x, y };
     };
     const onPointerDown = (e) => {
+      if (e.target !== ref.current) return;
       e.preventDefault();
       ref.current.setPointerCapture(e.pointerId);
       setDrawing(true);
@@ -25432,89 +25433,124 @@
       cursor: "pointer"
     };
   }
-  function CanvasCornerControls({ eng, paper, shelfOpen, setShelfOpen, scaleOpen, setScaleOpen, focusLane, gridX, setGridX, gridY, setGridY }) {
-    const GridIcon = ({ axis, denser }) => {
-      const w = 22, h = 18;
-      const lines = denser ? [0.25, 0.5, 0.75] : [0.5];
-      return /* @__PURE__ */ React.createElement("svg", { width: w, height: h, viewBox: `0 0 ${w} ${h}`, style: { display: "block" } }, /* @__PURE__ */ React.createElement(
-        "rect",
-        {
-          x: 1,
-          y: 1,
-          width: w - 2,
-          height: h - 2,
-          rx: 1,
-          fill: "none",
-          stroke: "currentColor",
-          strokeWidth: 0.8,
-          opacity: 0.4
-        }
-      ), axis === "Y" ? lines.map((f, i) => /* @__PURE__ */ React.createElement(
-        "line",
-        {
-          key: i,
-          x1: 2,
-          x2: w - 2,
-          y1: f * h,
-          y2: f * h,
-          stroke: "currentColor",
-          strokeWidth: denser ? 0.8 : 1.2,
-          opacity: denser ? 0.9 : 0.6
-        }
-      )) : lines.map((f, i) => /* @__PURE__ */ React.createElement(
-        "line",
-        {
-          key: i,
-          x1: f * w,
-          x2: f * w,
-          y1: 2,
-          y2: h - 2,
-          stroke: "currentColor",
-          strokeWidth: denser ? 0.8 : 1.2,
-          opacity: denser ? 0.9 : 0.6
-        }
-      )), /* @__PURE__ */ React.createElement(
-        "text",
-        {
-          x: denser ? w - 5 : 4,
-          y: denser ? 6 : h - 3,
-          style: { fontSize: 5, fontFamily: "Inter Tight", fontWeight: 600 },
-          fill: "currentColor",
-          opacity: 0.5
+  function GridIcon({ axis, denser }) {
+    const w = 22, h = 18;
+    const lines = denser ? [0.25, 0.5, 0.75] : [0.5];
+    return /* @__PURE__ */ React.createElement("svg", { width: w, height: h, viewBox: `0 0 ${w} ${h}`, style: { display: "block" } }, /* @__PURE__ */ React.createElement(
+      "rect",
+      {
+        x: 1,
+        y: 1,
+        width: w - 2,
+        height: h - 2,
+        rx: 1,
+        fill: "none",
+        stroke: "currentColor",
+        strokeWidth: 0.8,
+        opacity: 0.4
+      }
+    ), axis === "Y" ? lines.map((f, i) => /* @__PURE__ */ React.createElement(
+      "line",
+      {
+        key: i,
+        x1: 2,
+        x2: w - 2,
+        y1: f * h,
+        y2: f * h,
+        stroke: "currentColor",
+        strokeWidth: denser ? 0.8 : 1.2,
+        opacity: denser ? 0.9 : 0.6
+      }
+    )) : lines.map((f, i) => /* @__PURE__ */ React.createElement(
+      "line",
+      {
+        key: i,
+        x1: f * w,
+        x2: f * w,
+        y1: 2,
+        y2: h - 2,
+        stroke: "currentColor",
+        strokeWidth: denser ? 0.8 : 1.2,
+        opacity: denser ? 0.9 : 0.6
+      }
+    )), /* @__PURE__ */ React.createElement(
+      "text",
+      {
+        x: denser ? w - 5 : 4,
+        y: denser ? 6 : h - 3,
+        style: { fontSize: 5, fontFamily: "Inter Tight", fontWeight: 600 },
+        fill: "currentColor",
+        opacity: 0.5
+      },
+      axis
+    ));
+  }
+  function GridBtn({ axis, denser, onClick, paper }) {
+    return /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onPointerDown: (e) => e.stopPropagation(),
+        onClick: (e) => {
+          e.stopPropagation();
+          if (onClick) onClick(e);
         },
-        axis
-      ));
-    };
-    const GridBtn = ({ axis, denser, onClick }) => /* @__PURE__ */ React.createElement("button", { onClick, title: `${axis} grid ${denser ? "denser" : "sparser"}`, style: {
-      width: 32,
-      height: 28,
-      border: `1px solid ${paper.rule}`,
-      background: paper.card,
-      borderRadius: 2,
-      color: paper.ink70,
-      cursor: "pointer",
-      padding: 2,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center"
-    } }, /* @__PURE__ */ React.createElement(GridIcon, { axis, denser }));
-    const LockBtn = ({ axis, active, onClick }) => /* @__PURE__ */ React.createElement("button", { onClick, title: `${axis} quantize ${active ? "on" : "off"}`, style: {
-      width: 32,
-      height: 28,
-      border: `1px solid ${active ? paper.amberInk : paper.rule}`,
-      background: active ? paper.amberInk : "transparent",
-      color: active ? paper.bg : paper.ink50,
-      borderRadius: 2,
-      cursor: "pointer",
-      padding: 0,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontFamily: "Inter Tight",
-      fontSize: 10,
-      letterSpacing: 0.5,
-      gap: 2
-    } }, /* @__PURE__ */ React.createElement("svg", { width: 10, height: 12, viewBox: "0 0 10 12" }, /* @__PURE__ */ React.createElement("rect", { x: 2, y: 5, width: 6, height: 7, rx: 1, fill: "currentColor", opacity: 0.9 }), /* @__PURE__ */ React.createElement("path", { d: `M2.5 5V3.5a2.5 2.5 0 015 0V5`, fill: "none", stroke: "currentColor", strokeWidth: 1.4, strokeLinecap: "round" })), /* @__PURE__ */ React.createElement("span", null, axis));
+        title: `${axis} grid ${denser ? "denser" : "sparser"}`,
+        style: {
+          width: 32,
+          height: 28,
+          border: `1px solid ${paper.rule}`,
+          background: paper.card,
+          borderRadius: 2,
+          color: paper.ink70,
+          cursor: "pointer",
+          padding: 2,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          position: "relative",
+          zIndex: 5
+        }
+      },
+      /* @__PURE__ */ React.createElement(GridIcon, { axis, denser })
+    );
+  }
+  function LockBtn({ axis, active, onClick, paper }) {
+    return /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onPointerDown: (e) => e.stopPropagation(),
+        onClick: (e) => {
+          e.stopPropagation();
+          if (onClick) onClick(e);
+        },
+        title: `${axis} quantize ${active ? "on" : "off"}`,
+        style: {
+          width: 32,
+          height: 28,
+          border: `1px solid ${active ? paper.amberInk : paper.rule}`,
+          background: active ? paper.amberInk : "transparent",
+          color: active ? paper.bg : paper.ink50,
+          borderRadius: 2,
+          cursor: "pointer",
+          padding: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "Inter Tight",
+          fontSize: 10,
+          letterSpacing: 0.5,
+          gap: 2,
+          // Own stacking context above the canvas div so spatial overlap doesn't
+          // create unexpected hit-test outcomes.
+          position: "relative",
+          zIndex: 5
+        }
+      },
+      /* @__PURE__ */ React.createElement("svg", { width: 10, height: 12, viewBox: "0 0 10 12" }, /* @__PURE__ */ React.createElement("rect", { x: 2, y: 5, width: 6, height: 7, rx: 1, fill: "currentColor", opacity: 0.9 }), /* @__PURE__ */ React.createElement("path", { d: `M2.5 5V3.5a2.5 2.5 0 015 0V5`, fill: "none", stroke: "currentColor", strokeWidth: 1.4, strokeLinecap: "round" })),
+      /* @__PURE__ */ React.createElement("span", null, axis)
+    );
+  }
+  function CanvasCornerControls({ eng, paper, shelfOpen, setShelfOpen, scaleOpen, setScaleOpen, focusLane, gridX, setGridX, gridY, setGridY }) {
     const syncPresets = [
       { label: "1/4", cols: 4 },
       { label: "1/8", cols: 8 },
@@ -25528,18 +25564,20 @@
       display: "flex",
       alignItems: "flex-end",
       gap: 4
-    } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 3 } }, /* @__PURE__ */ React.createElement(GridBtn, { axis: "Y", denser: true, onClick: () => setGridY((g) => Math.min(20, g + 2)) }), /* @__PURE__ */ React.createElement(GridBtn, { axis: "Y", denser: false, onClick: () => setGridY((g) => Math.max(2, g - 2)) }), /* @__PURE__ */ React.createElement(
+    } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 3 } }, /* @__PURE__ */ React.createElement(GridBtn, { axis: "Y", denser: true, paper, onClick: () => setGridY((g) => Math.min(20, g + 2)) }), /* @__PURE__ */ React.createElement(GridBtn, { axis: "Y", denser: false, paper, onClick: () => setGridY((g) => Math.max(2, g - 2)) }), /* @__PURE__ */ React.createElement(
       LockBtn,
       {
         axis: "Y",
         active: !!focusLane?.quantizeY,
+        paper,
         onClick: () => focusLane && eng.updateLane(focusLane.id, { quantizeY: !focusLane.quantizeY })
       }
-    )), /* @__PURE__ */ React.createElement("div", { style: { width: 1, height: 20, background: paper.rule, margin: "0 2px" } }), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 3 } }, /* @__PURE__ */ React.createElement(GridBtn, { axis: "X", denser: false, onClick: () => setGridX((g) => Math.max(2, g - 2)) }), /* @__PURE__ */ React.createElement(GridBtn, { axis: "X", denser: true, onClick: () => setGridX((g) => Math.min(32, g + 2)) }), /* @__PURE__ */ React.createElement(
+    )), /* @__PURE__ */ React.createElement("div", { style: { width: 1, height: 20, background: paper.rule, margin: "0 2px" } }), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 3 } }, /* @__PURE__ */ React.createElement(GridBtn, { axis: "X", denser: false, paper, onClick: () => setGridX((g) => Math.max(2, g - 2)) }), /* @__PURE__ */ React.createElement(GridBtn, { axis: "X", denser: true, paper, onClick: () => setGridX((g) => Math.min(32, g + 2)) }), /* @__PURE__ */ React.createElement(
       LockBtn,
       {
         axis: "X",
         active: !!focusLane?.quantizeX,
+        paper,
         onClick: () => focusLane && eng.updateLane(focusLane.id, { quantizeX: !focusLane.quantizeX })
       }
     )), eng.syncOn && focusLane?.quantizeX && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 3 } }, syncPresets.map((p) => /* @__PURE__ */ React.createElement("button", { key: p.label, onClick: () => setGridX(p.cols), style: {
@@ -25938,19 +25976,10 @@
         sendGlobalActual("playbackSpeed", next);
       }, [demo.setSpeed, demo.speed]);
       const updateLane = React.useCallback((id, patch) => {
-        const keys = Object.keys(patch);
-        if (keys.some((k) => k === "quantizeX" || k === "quantizeY" || k === "xDivisions" || k === "yDivisions")) {
-          console.log(
-            "[click\u2192updateLane]",
-            "lane=" + id,
-            "patch=" + JSON.stringify(patch),
-            "playing=" + (demo.playing ? "1" : "0")
-          );
-        }
         demo.updateLane(id, patch);
         if ("enabled" in patch) sendEnabled(id, patch.enabled);
         Object.entries(patch).forEach(([field, value]) => sendParam(id, field, value));
-      }, [demo.updateLane, demo.playing]);
+      }, [demo.updateLane]);
       const clearLane = React.useCallback((id) => {
         demo.clearLane(id);
         sendClearLane(id);

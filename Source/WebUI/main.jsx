@@ -163,20 +163,10 @@ import { initJuceBridge, sendCurve, sendParam, sendFocus,
     }, [demo.setSpeed, demo.speed]);
 
     const updateLane = React.useCallback((id, patch) => {
-      // Diagnostic — log only quantize-related patches so the live MIDI test
-      // can confirm whether clicks reach the bridge during playback.
-      const keys = Object.keys(patch);
-      if (keys.some(k => k === 'quantizeX' || k === 'quantizeY'
-                       || k === 'xDivisions' || k === 'yDivisions')) {
-        console.log('[click→updateLane]',
-          'lane=' + id,
-          'patch=' + JSON.stringify(patch),
-          'playing=' + (demo.playing ? '1' : '0'));
-      }
       demo.updateLane(id, patch);
       if ('enabled' in patch) sendEnabled(id, patch.enabled);
       Object.entries(patch).forEach(([field, value]) => sendParam(id, field, value));
-    }, [demo.updateLane, demo.playing]);
+    }, [demo.updateLane]);
 
     const clearLane = React.useCallback((id) => {
       demo.clearLane(id);

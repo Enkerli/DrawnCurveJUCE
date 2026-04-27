@@ -743,13 +743,6 @@ void DrawnCurveProcessor::updateLaneSnapshot (int lane)
         snap->durationSeconds = syncOn ? juce::jmax (0.05f, beats * 60.0f / fakeBpm) : 1.0f;
     }
 
-    // Diagnostic — trace the message-thread snapshot rebuild so we can correlate
-    // a JS click with the moment the audio thread sees the new state.
-    std::fprintf (stderr, "[updateLaneSnapshot] lane=%d xQ=%d yQ=%d xDiv=%d yDiv=%d engine_playing=%d\n",
-                  lane, (int) xQuant, (int) yQuant, (int) xDiv, (int) yDiv,
-                  _engine.getPlaying() ? 1 : 0);
-    std::fflush (stderr);
-
 #if JUCE_DEBUG
     ++gSnapshotReplacements;
 #endif
