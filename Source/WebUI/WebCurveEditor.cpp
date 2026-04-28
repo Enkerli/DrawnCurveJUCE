@@ -82,6 +82,22 @@ juce::WebBrowserComponent::Options WebCurveEditor::buildOptions (WebCurveEditor*
             owner->pageReady = true;
             juce::MessageManager::callAsync ([owner]
             {
+                // Force every lane into "follow global transport" mode.  The
+                // WebUI exposes only the global direction / speed sliders,
+                // and the saved APVTS state may carry useGlobalPlayback=false
+                // from a previous run (or from the native editor) — which
+                // would silently shadow the global controls.  Setting this
+                // here on every page-load makes the WebUI's "global only"
+                // model the source of truth.
+               #if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+                for (int L = 0; L < kMaxLanes; ++L)
+                {
+                    if (auto* p = dynamic_cast<juce::AudioParameterBool*> (
+                                      owner->proc.apvts.getParameter (
+                                          laneParam (L, ParamID::useGlobalPlayback))))
+                        *p = true;
+                }
+               #endif
                 owner->sendStateSnapshot();
                 // Start the engine playing.  Without this, a fresh plugin
                 // instance has _isPlaying=false → processLane returns early

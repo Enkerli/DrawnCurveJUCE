@@ -23575,39 +23575,137 @@
     { id: 2, name: "Three", color: PAPER.laneMoss, tint: "oklch(91% 0.03 145)" }
   ];
   var SCALES2 = [
-    // Diatonic modes
-    { id: "major", name: "Major (Ionian)", mask: 2773, family: "Diatonic" },
+    // Diatonic — 7 modes of the major scale
+    { id: "ionian", name: "Ionian", mask: 2773, family: "Diatonic" },
+    // 0 2 4 5 7 9 11  (Major)
     { id: "dorian", name: "Dorian", mask: 2902, family: "Diatonic" },
+    // 0 2 3 5 7 9 10
     { id: "phrygian", name: "Phrygian", mask: 3418, family: "Diatonic" },
+    // 0 1 3 5 7 8 10
     { id: "lydian", name: "Lydian", mask: 2741, family: "Diatonic" },
+    // 0 2 4 6 7 9 11
     { id: "mixolydian", name: "Mixolydian", mask: 2774, family: "Diatonic" },
-    { id: "minor", name: "Aeolian (Nat. Minor)", mask: 2906, family: "Diatonic" },
+    // 0 2 4 5 7 9 10
+    { id: "aeolian", name: "Aeolian", mask: 2906, family: "Diatonic" },
+    // 0 2 3 5 7 8 10  (Nat. Minor)
     { id: "locrian", name: "Locrian", mask: 3434, family: "Diatonic" },
-    // Pentatonic
+    // 0 1 3 5 6 8 10
+    // Pentatonic — 5 rotations of the major pentatonic
     { id: "pentMaj", name: "Major", mask: 2708, family: "Pentatonic" },
+    // 0 2 4 7 9
+    { id: "suspended", name: "Suspended", mask: 2642, family: "Pentatonic" },
+    // 0 2 5 7 10  (Egyptian)
+    { id: "manGong", name: "Man Gong", mask: 2378, family: "Pentatonic" },
+    // 0 3 5 8 10
+    { id: "ritusen", name: "Ritusen", mask: 2644, family: "Pentatonic" },
+    // 0 2 5 7 9
     { id: "pentMin", name: "Minor", mask: 2386, family: "Pentatonic" },
-    { id: "egyptian", name: "Egyptian", mask: 2642, family: "Pentatonic" },
-    { id: "blues", name: "Blues", mask: 2418, family: "Pentatonic" },
-    // Symmetric
+    // 0 3 5 7 10
+    // Jazz Minor — 7 modes of melodic minor (ascending)
+    { id: "jazzMinor", name: "Jazz Minor", mask: 2901, family: "Jazz Minor" },
+    // 0 2 3 5 7 9 11
+    { id: "dorianFlat2", name: "Dorian \u266D2", mask: 3414, family: "Jazz Minor" },
+    // 0 1 3 5 7 9 10
+    { id: "lydianAug", name: "Lydian Aug.", mask: 2733, family: "Jazz Minor" },
+    // 0 2 4 6 8 9 11
+    { id: "lydianDom", name: "Lydian Dom.", mask: 2742, family: "Jazz Minor" },
+    // 0 2 4 6 7 9 10
+    { id: "mixoFlat6", name: "Mixo. \u266D6", mask: 2778, family: "Jazz Minor" },
+    // 0 2 4 5 7 8 10
+    { id: "halfDim", name: "Half-Dim.", mask: 2922, family: "Jazz Minor" },
+    // 0 2 3 5 6 8 10
+    { id: "altered", name: "Altered", mask: 3498, family: "Jazz Minor" },
+    // 0 1 3 4 6 8 10
+    // Harm. Minor — 7 modes of harmonic minor
+    { id: "harmMinor", name: "Harmonic Minor", mask: 2905, family: "Harm. Minor" },
+    // 0 2 3 5 7 8 11
+    { id: "locrianNat6", name: "Locrian \u266E6", mask: 3430, family: "Harm. Minor" },
+    // 0 1 3 5 6 9 10
+    { id: "ionianSharp5", name: "Ionian \u266F5", mask: 2765, family: "Harm. Minor" },
+    // 0 2 4 5 8 9 11
+    { id: "ukrainianDor", name: "Ukrainian Dor.", mask: 2870, family: "Harm. Minor" },
+    // 0 2 3 6 7 9 10
+    { id: "phrygianDom", name: "Phrygian Dom.", mask: 3290, family: "Harm. Minor" },
+    // 0 1 4 5 7 8 10
+    { id: "lydianSharp2", name: "Lydian \u266F2", mask: 2485, family: "Harm. Minor" },
+    // 0 3 4 6 7 9 11
+    { id: "ultraLocrian", name: "Ultra Locrian", mask: 3500, family: "Harm. Minor" },
+    // 0 1 3 4 6 8 9
+    // Symmetric — equal-step / interval-pattern scales
     { id: "chromatic", name: "Chromatic", mask: 4095, family: "Symmetric" },
+    // all 12
     { id: "wholeTone", name: "Whole Tone", mask: 2730, family: "Symmetric" },
-    { id: "dimHW", name: "Diminished (h-w)", mask: 3510, family: "Symmetric" },
-    { id: "dimWH", name: "Diminished (w-h)", mask: 2925, family: "Symmetric" },
+    // 0 2 4 6 8 10
+    { id: "dimWH", name: "Dim. WH", mask: 2925, family: "Symmetric" },
+    // 0 2 3 5 6 8 9 11
+    { id: "dimHW", name: "Dim. HW", mask: 3510, family: "Symmetric" },
+    // 0 1 3 4 6 7 9 10
     { id: "augmented", name: "Augmented", mask: 2457, family: "Symmetric" },
-    // Harmonic
-    { id: "harmMinor", name: "Harmonic Minor", mask: 2905, family: "Harmonic" },
-    { id: "melMinor", name: "Melodic Minor", mask: 2901, family: "Harmonic" },
-    { id: "hungarianMin", name: "Hungarian Minor", mask: 2873, family: "Harmonic" }
+    // 0 3 4 7 8 11
+    // Bebop — 8-note diatonic + chromatic passing tone
+    { id: "bebopDom", name: "Dominant", mask: 2775, family: "Bebop" },
+    // 0 2 4 5 7 9 10 11
+    { id: "bebopMaj", name: "Major", mask: 2781, family: "Bebop" },
+    // 0 2 4 5 7 8 9 11
+    { id: "bebopMin", name: "Minor", mask: 2907, family: "Bebop" },
+    // 0 2 3 5 7 8 10 11
+    { id: "bebopMelMin", name: "Mel. Minor", mask: 2903, family: "Bebop" },
+    // 0 2 3 5 7 9 10 11
+    // Blues
+    { id: "blues", name: "Blues", mask: 2418, family: "Blues" },
+    // 0 3 5 6 7 10
+    { id: "majBlues", name: "Major Blues", mask: 2964, family: "Blues" },
+    // 0 2 3 4 7 9
+    // Chordal — triads & 7th chords as degenerate scales for chord-tone
+    // quantization / "glorified arp" workflows
+    { id: "chordMaj", name: "Major", mask: 2192, family: "Chordal" },
+    // 0 4 7
+    { id: "chordMin", name: "Minor", mask: 2320, family: "Chordal" },
+    // 0 3 7
+    { id: "chordDim", name: "Diminished", mask: 2336, family: "Chordal" },
+    // 0 3 6
+    { id: "chordAug", name: "Augmented", mask: 2184, family: "Chordal" },
+    // 0 4 8
+    { id: "chordSus2", name: "Sus 2", mask: 2576, family: "Chordal" },
+    // 0 2 7
+    { id: "chordSus4", name: "Sus 4", mask: 2128, family: "Chordal" },
+    // 0 5 7
+    { id: "chordMaj7", name: "Maj 7", mask: 2193, family: "Chordal" },
+    // 0 4 7 11
+    { id: "chordMin7", name: "Min 7", mask: 2322, family: "Chordal" },
+    // 0 3 7 10
+    { id: "chordDom7", name: "Dom 7", mask: 2194, family: "Chordal" },
+    // 0 4 7 10
+    { id: "chordHalfDim7", name: "Half-Dim 7", mask: 2338, family: "Chordal" },
+    // 0 3 6 10
+    { id: "chordDim7", name: "Dim 7", mask: 2340, family: "Chordal" }
+    // 0 3 6 9
   ];
-  var PITCH_NAMES = ["C", "C\u266F", "D", "D\u266F", "E", "F", "F\u266F", "G", "G\u266F", "A", "A\u266F", "B"];
-  var PITCH_SHORT2 = ["C", "C\u266F", "D", "E\u266D", "E", "F", "F\u266F", "G", "A\u266D", "A", "B\u266D", "B"];
+  var PITCH_SHARP = ["C", "C\u266F", "D", "D\u266F", "E", "F", "F\u266F", "G", "G\u266F", "A", "A\u266F", "B"];
+  var PITCH_FLAT = ["C", "D\u266D", "D", "E\u266D", "E", "F", "G\u266D", "G", "A\u266D", "A", "B\u266D", "B"];
+  var PITCH_NAMES = PITCH_SHARP;
+  var PITCH_SHORT = PITCH_SHARP;
+  function pitchName(pc, useFlats) {
+    return (useFlats ? PITCH_FLAT : PITCH_SHARP)[(pc % 12 + 12) % 12];
+  }
   function pcActive2(mask, pc) {
     return mask >> 11 - pc & 1;
   }
   function togglePc2(mask, pc) {
     return mask ^ 1 << 11 - pc;
   }
-  Object.assign(window, { PAPER, LANES, SCALES: SCALES2, PITCH_NAMES, PITCH_SHORT: PITCH_SHORT2, pcActive: pcActive2, togglePc: togglePc2 });
+  Object.assign(window, {
+    PAPER,
+    LANES,
+    SCALES: SCALES2,
+    PITCH_NAMES,
+    PITCH_SHORT,
+    PITCH_SHARP,
+    PITCH_FLAT,
+    pitchName,
+    pcActive: pcActive2,
+    togglePc: togglePc2
+  });
 
   // design/engine.jsx
   init_react_globals();
@@ -23690,6 +23788,7 @@
     const [phase, setPhase] = React.useState(0);
     const [ppForward, setPpForward] = React.useState(true);
     const [mode, setMode] = React.useState(initial.mode || "standard");
+    const [useFlats, setUseFlats] = React.useState(false);
     React.useEffect(() => {
       if (!playing) return;
       let raf, last = performance.now();
@@ -23746,7 +23845,9 @@
       setBeats,
       phase,
       mode,
-      setMode
+      setMode,
+      useFlats,
+      setUseFlats
     };
   }
   function sampleCurve(curve, phase) {
@@ -23777,11 +23878,9 @@
     const { rangeMin, rangeMax, target, scaleMask, scaleRoot } = lane;
     const ranged = rangeMin + raw * (rangeMax - rangeMin);
     if (target === "Note") {
-      const semiRange = 24;
-      const base = 60;
-      let semi = Math.round(ranged * semiRange);
+      let semi = Math.round(ranged * 127);
       const snapped = snapSemitone(semi, scaleMask, scaleRoot);
-      return { value: ranged, semitone: base + snapped };
+      return { value: ranged, semitone: snapped };
     }
     return { value: ranged, semitone: null };
   }
@@ -24205,7 +24304,8 @@
     paper = window.PAPER,
     onDraw,
     quantizeY = false,
-    quantizeX = false
+    quantizeX = false,
+    useFlats = false
   }) {
     const ref = React.useRef(null);
     const [drawing, setDrawing] = React.useState(false);
@@ -24248,11 +24348,14 @@
     const scaleBands = React.useMemo(() => {
       if (!showScaleBanding || !focusLane || focusLane.target !== "Note") return null;
       const mask = focusLane.scaleMask, root = focusLane.scaleRoot;
+      const lo = Math.round((focusLane.rangeMin ?? 0) * 127);
+      const hi = Math.round((focusLane.rangeMax ?? 1) * 127);
+      const span = Math.max(1, hi - lo);
       const bands = [];
-      for (let s = 0; s <= 24; s++) {
+      for (let s = lo; s <= hi; s++) {
         const rel = ((s - root) % 12 + 12) % 12;
         const active = pcActive(mask, rel);
-        const y = s / 24;
+        const y = (s - lo) / span;
         bands.push({ semi: s, y, active, pc: rel });
       }
       return bands;
@@ -24380,6 +24483,32 @@
           return /* @__PURE__ */ React.createElement(CurvePath2, { key: "g" + l.id, curve: l.curve, w: width, h: height, stroke: l.color, opacity: 0.25, width: 1.5 });
         }),
         focusLane?.curve && /* @__PURE__ */ React.createElement(CurvePath2, { curve: focusLane.curve, w: width, h: height, stroke: focusLane.color, opacity: 0.95, width: 2.5 }),
+        focusLane?.curve && (focusLane.quantizeX || focusLane.quantizeY) && (() => {
+          const xDiv = focusLane.quantizeX && focusLane.xDivisions >= 2 ? focusLane.xDivisions : null;
+          const N = xDiv ?? 256;
+          let d = "";
+          for (let i = 0; i < N; i++) {
+            const p0 = i / N;
+            const p1 = (i + 1) / N;
+            const v = sampleLaneQuantized(focusLane, p0);
+            const x0 = p0 * width;
+            const x1 = p1 * width;
+            const y = (1 - v) * height;
+            d += i === 0 ? `M${x0.toFixed(1)},${y.toFixed(1)}` : `L${x0.toFixed(1)},${y.toFixed(1)}`;
+            d += `L${x1.toFixed(1)},${y.toFixed(1)}`;
+          }
+          return /* @__PURE__ */ React.createElement(
+            "path",
+            {
+              d,
+              fill: "none",
+              stroke: focusLane.color,
+              strokeWidth: 1.6,
+              strokeOpacity: 0.85,
+              strokeDasharray: "5 3"
+            }
+          );
+        })(),
         liveStroke && liveStroke.length > 1 && /* @__PURE__ */ React.createElement(
           "polyline",
           {
@@ -24406,25 +24535,38 @@
           return /* @__PURE__ */ React.createElement("g", { key: "p" + l.id }, isFocus && /* @__PURE__ */ React.createElement("line", { x1: x, x2: x, y1: 0, y2: height, stroke: l.color, strokeWidth: 1, strokeDasharray: "3 3", opacity: 0.5 }), /* @__PURE__ */ React.createElement("circle", { cx: x, cy: y, r: isFocus ? 6 : 4, fill: l.color, stroke: paper.bg, strokeWidth: 2 }));
         })
       ),
-      showAxisNotes && focusLane?.target === "Note" && scaleBands && /* @__PURE__ */ React.createElement("div", { style: {
-        position: "absolute",
-        left: 0,
-        top: 0,
-        bottom: 0,
-        width: 36,
-        pointerEvents: "none"
-      } }, scaleBands.filter((b) => b.active).map((b) => {
-        const y = height * (1 - b.y);
-        return /* @__PURE__ */ React.createElement("div", { key: b.semi, style: {
+      showAxisNotes && focusLane?.target === "Note" && scaleBands && (() => {
+        const minSpacing = 14;
+        const active = scaleBands.filter((b) => b.active);
+        const ordered = [...active].sort((a, b) => b.semi - a.semi);
+        const kept = [];
+        let lastY = -Infinity;
+        for (const b of ordered) {
+          const y = height * (1 - b.y);
+          const isRoot = b.pc === focusLane.scaleRoot;
+          if (isRoot || y - lastY >= minSpacing) {
+            kept.push({ ...b, y });
+            lastY = y;
+          }
+        }
+        return /* @__PURE__ */ React.createElement("div", { style: {
+          position: "absolute",
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 36,
+          pointerEvents: "none"
+        } }, kept.map((b) => /* @__PURE__ */ React.createElement("div", { key: b.semi, style: {
           position: "absolute",
           left: 4,
-          top: y - 7,
+          top: b.y - 7,
           fontFamily: '"Instrument Serif", Georgia, serif',
           fontSize: 12,
           fontStyle: "italic",
-          color: paper.ink70
-        } }, PITCH_SHORT[b.pc]);
-      })),
+          color: b.pc === focusLane.scaleRoot ? paper.amberInk : paper.ink70,
+          fontWeight: b.pc === focusLane.scaleRoot ? 600 : 400
+        } }, window.pitchName(b.pc, useFlats))));
+      })(),
       !focusLane?.curve && !liveStroke && /* @__PURE__ */ React.createElement("div", { style: {
         position: "absolute",
         inset: 0,
@@ -24453,7 +24595,7 @@
 
   // design/scale-editor.jsx
   init_react_globals();
-  function PianoScaleRow({ lane, updateLane, paper = window.PAPER }) {
+  function PianoScaleRow({ lane, updateLane, paper = window.PAPER, useFlats = false }) {
     const { scaleMask, scaleRoot, scaleId } = lane;
     const white = [0, 2, 4, 5, 7, 9, 11];
     const black = [1, 3, 6, 8, 10];
@@ -24492,7 +24634,7 @@
             transition: "background 120ms"
           }
         },
-        active && /* @__PURE__ */ React.createElement(React.Fragment, null, PITCH_SHORT[pc], isRoot && /* @__PURE__ */ React.createElement("div", { style: {
+        active && /* @__PURE__ */ React.createElement(React.Fragment, null, window.pitchName(pc, useFlats), isRoot && /* @__PURE__ */ React.createElement("div", { style: {
           position: "absolute",
           top: 6,
           left: "50%",
@@ -24538,7 +24680,7 @@
       letterSpacing: 0.2
     } }, /* @__PURE__ */ React.createElement("span", null, "double-tap a key \u2192 set root"), /* @__PURE__ */ React.createElement("span", null, "\u2022"), /* @__PURE__ */ React.createElement("span", null, "tap \u2192 toggle")));
   }
-  function ChromaticWheel2({ lane, updateLane, paper = window.PAPER, size = 240 }) {
+  function ChromaticWheel2({ lane, updateLane, paper = window.PAPER, size = 240, useFlats = false }) {
     const { scaleMask, scaleRoot, scaleId } = lane;
     const r = size / 2;
     const inner = r * 0.45;
@@ -24567,7 +24709,15 @@
       const p = pos(pc, mid);
       return (i === 0 ? "M" : "L") + p.x.toFixed(1) + "," + p.y.toFixed(1);
     }).join(" ") + " Z" : null;
-    const families = ["Diatonic", "Pentatonic", "Symmetric", "Harmonic"];
+    const families = React.useMemo(() => {
+      const seen = /* @__PURE__ */ new Set();
+      const out = [];
+      for (const s of SCALES) if (!seen.has(s.family)) {
+        seen.add(s.family);
+        out.push(s.family);
+      }
+      return out;
+    }, []);
     const currentScale = SCALES.find((s) => s.id === scaleId);
     const [selectedFamily, setSelectedFamily] = React.useState(
       () => currentScale?.family || "Diatonic"
@@ -24659,7 +24809,7 @@
             fill: active ? paper.ink : paper.ink30
           }
         },
-        PITCH_SHORT[pc]
+        window.pitchName(pc, useFlats)
       );
     }), /* @__PURE__ */ React.createElement("text", { x: r, y: r - 4, textAnchor: "middle", style: {
       fontFamily: '"Instrument Serif", Georgia, serif',
@@ -24671,7 +24821,7 @@
       fontSize: 10,
       fill: paper.ink50,
       letterSpacing: 1.2
-    } }, PITCH_SHORT[scaleRoot], " ROOT")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8, flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 4, flexWrap: "wrap" } }, families.map((f) => /* @__PURE__ */ React.createElement(
+    } }, window.pitchName(scaleRoot, useFlats), " ROOT")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8, flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 4, flexWrap: "wrap" } }, families.map((f) => /* @__PURE__ */ React.createElement(
       "button",
       {
         key: f,
@@ -24879,39 +25029,43 @@
   function sendClearLane(lane) {
     juceEmit("clearLane", { lane });
   }
+  function sendAddLane() {
+    juceEmit("addLane", {});
+  }
+  function sendRemoveLane(lane) {
+    juceEmit("removeLane", { lane });
+  }
 
   // design/juce-ipad.jsx
   init_react_globals();
-  function formatRange(lane) {
+  function formatRange(lane, useFlats) {
     const { rangeMin: lo, rangeMax: hi, target } = lane;
     if (target === "CC" || target === "Aftertouch") {
       return `${Math.round(lo * 127)} \u2013 ${Math.round(hi * 127)}`;
     }
     if (target === "PitchBend") {
-      const scale = 8192;
-      return `${Math.round((lo - 0.5) * 2 * scale)} \u2013 ${Math.round((hi - 0.5) * 2 * scale)}`;
+      return `${Math.round(lo * 16383)} \u2013 ${Math.round(hi * 16383)}`;
     }
     if (target === "Note") {
-      const base = 60, semiRange = 24;
       const noteName = (midi) => {
         const pc = (midi % 12 + 12) % 12;
         const oct = Math.floor(midi / 12) - 1;
-        return (window.PITCH_SHORT || ["C", "C\u266F", "D", "E\u266D", "E", "F", "F\u266F", "G", "A\u266D", "A", "B\u266D", "B"])[pc] + oct;
+        return window.pitchName(pc, useFlats) + oct;
       };
-      return `${noteName(base + Math.round(lo * semiRange))} \u2013 ${noteName(base + Math.round(hi * semiRange))}`;
+      return `${noteName(Math.round(lo * 127))} \u2013 ${noteName(Math.round(hi * 127))}`;
     }
     return `${Math.round(lo * 127)} \u2013 ${Math.round(hi * 127)}`;
   }
-  function formatCenter(lane) {
+  function formatCenter(lane, useFlats) {
     const mid = (lane.rangeMin + lane.rangeMax) / 2;
     if (lane.target === "CC" || lane.target === "Aftertouch")
       return Math.round(mid * 127);
     if (lane.target === "PitchBend")
-      return Math.round((mid - 0.5) * 2 * 8192);
+      return Math.round(mid * 16383);
     if (lane.target === "Note") {
-      const midi = 60 + Math.round(mid * 24);
+      const midi = Math.round(mid * 127);
       const pc = (midi % 12 + 12) % 12;
-      return (window.PITCH_SHORT || ["C", "C\u266F", "D", "E\u266D", "E", "F", "F\u266F", "G", "A\u266D", "A", "B\u266D", "B"])[pc] + (Math.floor(midi / 12) - 1);
+      return window.pitchName(pc, useFlats) + (Math.floor(midi / 12) - 1);
     }
     return Math.round(mid * 127);
   }
@@ -24920,9 +25074,9 @@
     if (lane.target === "CC" || lane.target === "Aftertouch")
       return "\xB1" + Math.round(span * 127 / 2);
     if (lane.target === "PitchBend")
-      return "\xB1" + Math.round(span * 8192);
+      return "\xB1" + Math.round(span * 16383 / 2);
     if (lane.target === "Note")
-      return Math.round(span * 24) + " semi";
+      return Math.round(span * 127) + " semi";
     return "\xB1" + Math.round(span * 127 / 2);
   }
   function JuceIPadStudio({ width = 1024, height = 768 }) {
@@ -24957,8 +25111,10 @@
     }, [focusLane?.target]);
     const [midiGhostOn, setMidiGhostOn] = React.useState(false);
     const [pluginSync, setPluginSync] = React.useState(false);
-    const canvasW = width - LEFT_W - RIGHT_W;
-    const canvasH = height - TOP_H - BOTTOM_H - SHELF_H - SCALE_H;
+    const Y_GUTTER_W = 56;
+    const X_GUTTER_H = 40;
+    const canvasW = width - LEFT_W - RIGHT_W - Y_GUTTER_W;
+    const canvasH = height - TOP_H - BOTTOM_H - SHELF_H - SCALE_H - X_GUTTER_H;
     const containerRef = React.useRef(null);
     const [canvasSize, setCanvasSize] = React.useState({ w: canvasW, h: canvasH });
     React.useLayoutEffect(() => {
@@ -24999,7 +25155,17 @@
         focusLane,
         width: LEFT_W
       }
-    ), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, position: "relative", overflow: "hidden" } }, /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", minHeight: 0 } }, /* @__PURE__ */ React.createElement(
+      YAxisGutter,
+      {
+        eng,
+        paper,
+        focusLane,
+        gridY,
+        setGridY,
+        width: Y_GUTTER_W
+      }
+    ), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, position: "relative", overflow: "hidden" } }, /* @__PURE__ */ React.createElement(
       CurveCanvas,
       {
         width: canvasSize.w,
@@ -25015,7 +25181,8 @@
         gridX,
         gridY,
         quantizeX: !!focusLane?.quantizeX,
-        quantizeY: !!focusLane?.quantizeY
+        quantizeY: !!focusLane?.quantizeY,
+        useFlats: eng.useFlats
       }
     ), midiGhostOn && /* @__PURE__ */ React.createElement(MidiGhostOverlay, { w: canvasSize.w, h: canvasSize.h, paper }), /* @__PURE__ */ React.createElement(
       TypoReadout,
@@ -25024,30 +25191,40 @@
         phase: eng.phase,
         canvasW: canvasSize.w,
         canvasH: canvasSize.h,
-        paper
+        paper,
+        useFlats: eng.useFlats
       }
-    ), discoveryVisible && /* @__PURE__ */ React.createElement(DiscoveryChip, { paper, onOpen: () => setScaleOpen(true) }), /* @__PURE__ */ React.createElement(
-      CanvasCornerControls,
+    ), discoveryVisible && /* @__PURE__ */ React.createElement(DiscoveryChip, { paper, onOpen: () => setScaleOpen(true) }))), /* @__PURE__ */ React.createElement(
+      XAxisGutter,
       {
         eng,
         paper,
-        shelfOpen,
-        setShelfOpen,
-        scaleOpen,
-        setScaleOpen,
         focusLane,
         gridX,
         setGridX,
-        gridY,
-        setGridY
+        height: X_GUTTER_H,
+        cornerW: Y_GUTTER_W,
+        shelfOpen,
+        setShelfOpen,
+        scaleOpen,
+        setScaleOpen
       }
-    )), /* @__PURE__ */ React.createElement("div", { style: {
+    ), /* @__PURE__ */ React.createElement("div", { style: {
       height: SCALE_H,
       overflow: "hidden",
       transition: "height 260ms ease-out",
       background: paper.card,
       borderTop: `1px solid ${paper.rule}`
-    } }, SCALE_H > 0 && focusLane?.target === "Note" && /* @__PURE__ */ React.createElement("div", { style: { padding: "14px 18px", display: "flex", gap: 24, alignItems: "flex-start", height: "100%" } }, /* @__PURE__ */ React.createElement(ChromaticWheel, { lane: focusLane, updateLane: eng.updateLane, paper, size: 220 }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, borderLeft: `1px dashed ${paper.rule}`, paddingLeft: 20 } }, /* @__PURE__ */ React.createElement("div", { style: {
+    } }, SCALE_H > 0 && focusLane?.target === "Note" && /* @__PURE__ */ React.createElement("div", { style: { padding: "14px 18px", display: "flex", gap: 24, alignItems: "flex-start", height: "100%" } }, /* @__PURE__ */ React.createElement(
+      ChromaticWheel,
+      {
+        lane: focusLane,
+        updateLane: eng.updateLane,
+        paper,
+        size: 220,
+        useFlats: eng.useFlats
+      }
+    ), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, borderLeft: `1px dashed ${paper.rule}`, paddingLeft: 20 } }, /* @__PURE__ */ React.createElement("div", { style: {
       fontFamily: '"Instrument Serif", Georgia, serif',
       fontStyle: "italic",
       fontSize: 20,
@@ -25151,7 +25328,30 @@
       letterSpacing: 0.8,
       textTransform: "uppercase",
       cursor: "pointer"
-    } }, "plugin sync"), /* @__PURE__ */ React.createElement("div", { style: { width: 1, height: 20, background: paper.rule } }), /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: eng.clearAll }, "Clear"), /* @__PURE__ */ React.createElement(IconBtn, { paper, size: 32, title: "Panic" }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13 } }, "!")), /* @__PURE__ */ React.createElement(IconBtn, { paper, size: 32, title: "Help" }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13 } }, "?")));
+    } }, "plugin sync"), /* @__PURE__ */ React.createElement("div", { style: { width: 1, height: 20, background: paper.rule } }), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: () => eng.setUseFlats(!eng.useFlats),
+        title: eng.useFlats ? "Show sharps" : "Show flats",
+        style: {
+          width: 32,
+          height: 28,
+          padding: 0,
+          background: paper.card,
+          border: `1px solid ${paper.rule}`,
+          borderRadius: 2,
+          cursor: "pointer",
+          fontFamily: '"Instrument Serif", Georgia, serif',
+          fontSize: 16,
+          fontStyle: "italic",
+          color: paper.ink,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center"
+        }
+      },
+      eng.useFlats ? "\u266D" : "\u266F"
+    ), /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: eng.clearAll }, "Clear"), /* @__PURE__ */ React.createElement(IconBtn, { paper, size: 32, title: "Panic" }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13 } }, "!")), /* @__PURE__ */ React.createElement(IconBtn, { paper, size: 32, title: "Help" }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13 } }, "?")));
   }
   function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
     return /* @__PURE__ */ React.createElement("div", { style: {
@@ -25253,7 +25453,7 @@
       fontSize: 16,
       fontStyle: "italic",
       color: paper.ink
-    } }, formatRange(focusLane))), /* @__PURE__ */ React.createElement("div", { style: {
+    } }, formatRange(focusLane, eng.useFlats))), /* @__PURE__ */ React.createElement("div", { style: {
       marginTop: 3,
       display: "flex",
       gap: 12,
@@ -25261,7 +25461,7 @@
       fontSize: 10,
       color: paper.ink50,
       letterSpacing: 0.5
-    } }, /* @__PURE__ */ React.createElement("span", null, "center ", formatCenter(focusLane)), /* @__PURE__ */ React.createElement("span", null, "depth ", formatDepth(focusLane))), /* @__PURE__ */ React.createElement("div", { style: {
+    } }, /* @__PURE__ */ React.createElement("span", null, "center ", formatCenter(focusLane, eng.useFlats)), /* @__PURE__ */ React.createElement("span", null, "depth ", formatDepth(focusLane))), /* @__PURE__ */ React.createElement("div", { style: {
       marginTop: 5,
       fontSize: 10,
       color: paper.ink30,
@@ -25301,6 +25501,8 @@
     } }, open ? "\u25C2" : "\u25B8 shape"));
   }
   function JuceLanePanel({ eng, paper, width, height }) {
+    const MAX_LANES = 4;
+    const canAdd = eng.lanes.length < MAX_LANES;
     return /* @__PURE__ */ React.createElement("div", { style: {
       width,
       height,
@@ -25312,12 +25514,44 @@
       overflowY: "auto"
     } }, /* @__PURE__ */ React.createElement("div", { style: {
       padding: "10px 10px 6px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
       fontFamily: "Inter Tight",
       fontSize: 10,
       letterSpacing: 1.5,
       color: paper.ink50,
       textTransform: "uppercase"
-    } }, "Lanes"), eng.lanes.map((l) => {
+    } }, /* @__PURE__ */ React.createElement("span", null, "Lanes"), canAdd && /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onPointerDown: (e) => e.stopPropagation(),
+        onClick: (e) => {
+          e.stopPropagation();
+          eng.addLane?.();
+        },
+        title: "Add lane",
+        style: {
+          width: 22,
+          height: 22,
+          padding: 0,
+          border: `1px solid ${paper.rule}`,
+          background: paper.bg,
+          borderRadius: 2,
+          color: paper.ink70,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "Inter Tight",
+          fontSize: 14,
+          lineHeight: 1,
+          position: "relative",
+          zIndex: 5
+        }
+      },
+      "+"
+    )), eng.lanes.map((l) => {
       const focused = eng.focus === l.id;
       return /* @__PURE__ */ React.createElement(
         "div",
@@ -25399,7 +25633,9 @@
       let val;
       if (l.target === "Note" && semitone != null) {
         const pc = (semitone % 12 + 12) % 12;
-        val = PITCH_SHORT[pc] + Math.floor(semitone / 12 - 1);
+        val = window.pitchName(pc, eng.useFlats) + Math.floor(semitone / 12 - 1);
+      } else if (l.target === "PitchBend") {
+        val = Math.round(value * 16383);
       } else {
         val = Math.round(value * 127);
       }
@@ -25514,6 +25750,84 @@
       /* @__PURE__ */ React.createElement(GridIcon, { axis, denser })
     );
   }
+  function BothBtn({ active, onClick, paper }) {
+    return /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onPointerDown: (e) => e.stopPropagation(),
+        onClick: (e) => {
+          e.stopPropagation();
+          if (onClick) onClick(e);
+        },
+        title: "Lock both axes",
+        style: {
+          width: 32,
+          height: 28,
+          border: `1px solid ${active ? paper.amberInk : paper.rule}`,
+          background: active ? paper.amberInk : paper.card,
+          color: active ? paper.bg : paper.ink70,
+          borderRadius: 2,
+          cursor: "pointer",
+          padding: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "Inter Tight",
+          fontSize: 13,
+          fontWeight: 700,
+          position: "relative",
+          zIndex: 5
+        }
+      },
+      "#"
+    );
+  }
+  function CountPill({ value, paper }) {
+    return /* @__PURE__ */ React.createElement("div", { style: {
+      minWidth: 24,
+      height: 22,
+      padding: "0 6px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontFamily: '"Instrument Serif", Georgia, serif',
+      fontStyle: "italic",
+      fontSize: 13,
+      color: paper.ink70,
+      background: "transparent",
+      borderTop: `1px solid ${paper.ruleFaint}`,
+      borderBottom: `1px solid ${paper.ruleFaint}`,
+      fontVariantNumeric: "tabular-nums",
+      userSelect: "none"
+    } }, value);
+  }
+  function PresetBtn({ label, active, onClick, paper }) {
+    return /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onPointerDown: (e) => e.stopPropagation(),
+        onClick: (e) => {
+          e.stopPropagation();
+          if (onClick) onClick(e);
+        },
+        style: {
+          padding: "2px 6px",
+          height: 22,
+          border: `1px solid ${active ? paper.amberInk : paper.rule}`,
+          background: active ? paper.amberInk : paper.card,
+          color: active ? paper.bg : paper.ink50,
+          borderRadius: 2,
+          cursor: "pointer",
+          fontFamily: '"Instrument Serif", Georgia, serif',
+          fontStyle: "italic",
+          fontSize: 12,
+          position: "relative",
+          zIndex: 5
+        }
+      },
+      label
+    );
+  }
   function LockBtn({ axis, active, onClick, paper }) {
     return /* @__PURE__ */ React.createElement(
       "button",
@@ -25550,75 +25864,156 @@
       /* @__PURE__ */ React.createElement("span", null, axis)
     );
   }
-  function CanvasCornerControls({ eng, paper, shelfOpen, setShelfOpen, scaleOpen, setScaleOpen, focusLane, gridX, setGridX, gridY, setGridY }) {
-    const syncPresets = [
+  function YAxisGutter({ eng, paper, focusLane, gridY, setGridY, width, height }) {
+    const noteSpan = focusLane ? Math.max(1, Math.round(((focusLane.rangeMax ?? 1) - (focusLane.rangeMin ?? 0)) * 127)) : 24;
+    const yNotePresets = [
+      { label: "chr", div: Math.min(127, noteSpan) },
+      { label: "oct", div: Math.max(2, Math.round(noteSpan / 12)) },
+      { label: "5th", div: Math.max(2, Math.round(noteSpan / 7)) },
+      { label: "3rd", div: Math.max(2, Math.round(noteSpan / 4)) }
+    ];
+    const yValuePresets = [
+      { label: "2", div: 2 },
+      { label: "4", div: 4 },
+      { label: "8", div: 8 },
+      { label: "16", div: 16 },
+      { label: "24", div: 24 }
+    ];
+    const showPresets = !!focusLane?.quantizeY;
+    const presets = focusLane?.target === "Note" ? yNotePresets : yValuePresets;
+    const toggleY = () => focusLane && eng.updateLane(focusLane.id, { quantizeY: !focusLane.quantizeY });
+    return /* @__PURE__ */ React.createElement("div", { style: {
+      width,
+      height,
+      flexShrink: 0,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "flex-end",
+      gap: 3,
+      padding: "6px 0",
+      background: paper.card,
+      borderRight: `1px solid ${paper.rule}`,
+      // Sit above the canvas content.  z-index isn't strictly necessary as
+      // a sibling gutter, but it documents intent.
+      position: "relative",
+      zIndex: 4
+    } }, showPresets && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 2, marginBottom: 4 } }, presets.map((p) => /* @__PURE__ */ React.createElement(
+      PresetBtn,
+      {
+        key: p.label,
+        label: p.label,
+        paper,
+        active: gridY === p.div,
+        onClick: () => setGridY(p.div)
+      }
+    ))), /* @__PURE__ */ React.createElement(GridBtn, { axis: "Y", denser: true, paper, onClick: () => setGridY((g) => Math.min(24, g + 2)) }), /* @__PURE__ */ React.createElement(CountPill, { value: gridY, paper }), /* @__PURE__ */ React.createElement(GridBtn, { axis: "Y", denser: false, paper, onClick: () => setGridY((g) => Math.max(2, g - 2)) }), /* @__PURE__ */ React.createElement(LockBtn, { axis: "Y", active: !!focusLane?.quantizeY, paper, onClick: toggleY }));
+  }
+  function XAxisGutter({
+    eng,
+    paper,
+    focusLane,
+    gridX,
+    setGridX,
+    height,
+    cornerW,
+    shelfOpen,
+    setShelfOpen,
+    scaleOpen,
+    setScaleOpen
+  }) {
+    const xSyncPresets = [
       { label: "1/4", cols: 4 },
       { label: "1/8", cols: 8 },
       { label: "1/16", cols: 16 },
       { label: "1/32", cols: 32 }
     ];
-    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: {
-      position: "absolute",
-      bottom: 10,
-      left: 10,
+    const toggleX = () => focusLane && eng.updateLane(focusLane.id, { quantizeX: !focusLane.quantizeX });
+    const toggleBoth = () => {
+      if (!focusLane) return;
+      const both = focusLane.quantizeX && focusLane.quantizeY;
+      eng.updateLane(focusLane.id, { quantizeX: !both, quantizeY: !both });
+    };
+    const bothActive = !!(focusLane?.quantizeX && focusLane?.quantizeY);
+    return /* @__PURE__ */ React.createElement("div", { style: {
+      height,
       display: "flex",
-      alignItems: "flex-end",
-      gap: 4
-    } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 3 } }, /* @__PURE__ */ React.createElement(GridBtn, { axis: "Y", denser: true, paper, onClick: () => setGridY((g) => Math.min(20, g + 2)) }), /* @__PURE__ */ React.createElement(GridBtn, { axis: "Y", denser: false, paper, onClick: () => setGridY((g) => Math.max(2, g - 2)) }), /* @__PURE__ */ React.createElement(
-      LockBtn,
-      {
-        axis: "Y",
-        active: !!focusLane?.quantizeY,
-        paper,
-        onClick: () => focusLane && eng.updateLane(focusLane.id, { quantizeY: !focusLane.quantizeY })
-      }
-    )), /* @__PURE__ */ React.createElement("div", { style: { width: 1, height: 20, background: paper.rule, margin: "0 2px" } }), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 3 } }, /* @__PURE__ */ React.createElement(GridBtn, { axis: "X", denser: false, paper, onClick: () => setGridX((g) => Math.max(2, g - 2)) }), /* @__PURE__ */ React.createElement(GridBtn, { axis: "X", denser: true, paper, onClick: () => setGridX((g) => Math.min(32, g + 2)) }), /* @__PURE__ */ React.createElement(
-      LockBtn,
-      {
-        axis: "X",
-        active: !!focusLane?.quantizeX,
-        paper,
-        onClick: () => focusLane && eng.updateLane(focusLane.id, { quantizeX: !focusLane.quantizeX })
-      }
-    )), eng.syncOn && focusLane?.quantizeX && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 3 } }, syncPresets.map((p) => /* @__PURE__ */ React.createElement("button", { key: p.label, onClick: () => setGridX(p.cols), style: {
-      padding: "2px 6px",
-      height: 22,
-      border: `1px solid ${gridX === p.cols ? paper.amberInk : paper.rule}`,
-      background: gridX === p.cols ? paper.amberInk : paper.card,
-      color: gridX === p.cols ? paper.bg : paper.ink50,
-      borderRadius: 2,
-      cursor: "pointer",
-      fontFamily: '"Instrument Serif", Georgia, serif',
-      fontStyle: "italic",
-      fontSize: 12
-    } }, p.label)))), /* @__PURE__ */ React.createElement("div", { style: { width: 1, height: 20, background: paper.rule, margin: "0 4px" } }), /* @__PURE__ */ React.createElement("button", { onClick: () => setShelfOpen(!shelfOpen), style: {
-      padding: "4px 10px",
-      minHeight: 28,
+      alignItems: "center",
+      flexShrink: 0,
+      borderTop: `1px solid ${paper.rule}`,
       background: paper.card,
-      border: `1px solid ${paper.rule}`,
-      borderRadius: 2,
-      cursor: "pointer",
-      fontFamily: "Inter Tight",
-      fontSize: 10,
-      letterSpacing: 1,
-      color: paper.ink50,
-      textTransform: "uppercase"
-    } }, shelfOpen ? "\u25BE qurves" : "\u25B8 qurves")), focusLane?.target === "Note" && /* @__PURE__ */ React.createElement("button", { onClick: () => setScaleOpen(!scaleOpen), style: {
-      position: "absolute",
-      bottom: 10,
-      right: 10,
-      padding: "5px 12px",
-      minHeight: 32,
-      background: scaleOpen ? paper.ink : paper.card,
-      color: scaleOpen ? paper.bg : paper.ink50,
-      border: `1px solid ${scaleOpen ? paper.ink : paper.rule}`,
-      borderRadius: 2,
-      cursor: "pointer",
-      fontFamily: "Inter Tight",
-      fontSize: 10,
-      letterSpacing: 1,
-      textTransform: "uppercase"
-    } }, scaleOpen ? "\u25BE scale" : "\u25B4 scale"));
+      position: "relative",
+      zIndex: 4
+    } }, /* @__PURE__ */ React.createElement("div", { style: {
+      width: cornerW,
+      height: "100%",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      borderRight: `1px solid ${paper.rule}`,
+      flexShrink: 0
+    } }, /* @__PURE__ */ React.createElement(BothBtn, { paper, active: bothActive, onClick: toggleBoth })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 3, padding: "0 8px" } }, /* @__PURE__ */ React.createElement(LockBtn, { axis: "X", active: !!focusLane?.quantizeX, paper, onClick: toggleX }), /* @__PURE__ */ React.createElement(GridBtn, { axis: "X", denser: false, paper, onClick: () => setGridX((g) => Math.max(2, g - 2)) }), /* @__PURE__ */ React.createElement(CountPill, { value: gridX, paper }), /* @__PURE__ */ React.createElement(GridBtn, { axis: "X", denser: true, paper, onClick: () => setGridX((g) => Math.min(32, g + 2)) }), eng.syncOn && focusLane?.quantizeX && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 3, marginLeft: 6 } }, xSyncPresets.map((p) => /* @__PURE__ */ React.createElement(
+      PresetBtn,
+      {
+        key: p.label,
+        label: p.label,
+        paper,
+        active: gridX === p.cols,
+        onClick: () => setGridX(p.cols)
+      }
+    )))), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onPointerDown: (e) => e.stopPropagation(),
+        onClick: (e) => {
+          e.stopPropagation();
+          setShelfOpen(!shelfOpen);
+        },
+        style: {
+          padding: "4px 10px",
+          height: 28,
+          marginRight: 6,
+          background: paper.card,
+          border: `1px solid ${paper.rule}`,
+          borderRadius: 2,
+          cursor: "pointer",
+          fontFamily: "Inter Tight",
+          fontSize: 10,
+          letterSpacing: 1,
+          color: paper.ink50,
+          textTransform: "uppercase",
+          position: "relative",
+          zIndex: 5
+        }
+      },
+      shelfOpen ? "\u25BE qurves" : "\u25B8 qurves"
+    ), focusLane?.target === "Note" && /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onPointerDown: (e) => e.stopPropagation(),
+        onClick: (e) => {
+          e.stopPropagation();
+          setScaleOpen(!scaleOpen);
+        },
+        style: {
+          padding: "4px 12px",
+          height: 28,
+          marginRight: 8,
+          background: scaleOpen ? paper.ink : paper.card,
+          color: scaleOpen ? paper.bg : paper.ink50,
+          border: `1px solid ${scaleOpen ? paper.ink : paper.rule}`,
+          borderRadius: 2,
+          cursor: "pointer",
+          fontFamily: "Inter Tight",
+          fontSize: 10,
+          letterSpacing: 1,
+          textTransform: "uppercase",
+          position: "relative",
+          zIndex: 5
+        }
+      },
+      scaleOpen ? "\u25BE scale" : "\u25B4 scale"
+    ));
   }
   function DiscoveryChip({ paper, onOpen }) {
     return /* @__PURE__ */ React.createElement("div", { style: {
@@ -25660,7 +26055,7 @@
       cursor: "pointer"
     } }, "explore \u2192"));
   }
-  function TypoReadout({ focusLane, phase, canvasW, canvasH, paper }) {
+  function TypoReadout({ focusLane, phase, canvasW, canvasH, paper, useFlats }) {
     if (!focusLane?.curve || !focusLane.enabled) return null;
     const raw = sampleLaneQuantized(focusLane, phase);
     const { value, semitone } = applyLane(focusLane, raw);
@@ -25670,13 +26065,13 @@
     if (focusLane.target === "Note" && semitone != null) {
       const pc = (semitone % 12 + 12) % 12;
       const oct = Math.floor(semitone / 12) - 1;
-      primary = PITCH_SHORT[pc] + oct;
+      primary = window.pitchName(pc, useFlats) + oct;
       units = "note";
     } else if (focusLane.target === "CC") {
       primary = Math.round(value * 127);
       units = "cc " + focusLane.targetDetail;
     } else if (focusLane.target === "PitchBend") {
-      primary = ((value - 0.5) * 200).toFixed(0);
+      primary = Math.round(value * 16383);
       units = "pb";
     } else {
       primary = Math.round(value * 127);
@@ -25834,7 +26229,7 @@
       CC: `CC ${focusLane.targetDetail}`,
       Aftertouch: "Aftertouch",
       PitchBend: "Pitch Bend",
-      Note: `Notes \xB7 ${(SCALES.find((s) => s.id === focusLane.scaleId) || { name: "Custom" }).name} / ${PITCH_SHORT[focusLane.scaleRoot]}`
+      Note: `Notes \xB7 ${(SCALES.find((s) => s.id === focusLane.scaleId) || { name: "Custom" }).name} / ${window.pitchName(focusLane.scaleRoot, eng.useFlats)}`
     }[focusLane.target] || focusLane.target;
     const Dot = ({ color, label }) => /* @__PURE__ */ React.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ React.createElement("span", { style: { width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 } }), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: '"Instrument Serif", Georgia, serif', fontStyle: "italic", fontSize: 14, color: paper.ink } }, label));
     const Sep = () => /* @__PURE__ */ React.createElement("span", { style: { width: 1, height: 14, background: paper.rule, flexShrink: 0, display: "inline-block" } });
@@ -25847,7 +26242,7 @@
       borderTop: `1px solid ${paper.rule}`,
       background: paper.card,
       flexShrink: 0
-    } }, /* @__PURE__ */ React.createElement(Dot, { color: focusLane.color, label: `Lane ${focusLane.id + 1}` }), /* @__PURE__ */ React.createElement(Sep, null), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "Inter Tight", fontSize: 11, color: paper.ink70 } }, targetLabel), /* @__PURE__ */ React.createElement(Sep, null), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "Inter Tight", fontSize: 11, color: paper.ink70 } }, "ch ", focusLane.channel), /* @__PURE__ */ React.createElement(Sep, null), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "Inter Tight", fontSize: 11, color: paper.ink70 } }, formatRange(focusLane), " \xB7 ", /* @__PURE__ */ React.createElement("span", { style: { color: paper.ink50 } }, "\xB1", formatDepth(focusLane))), /* @__PURE__ */ React.createElement(Sep, null), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "Inter Tight", fontSize: 11, color: paper.ink70 } }, "smooth ", focusLane.smooth.toFixed(2)));
+    } }, /* @__PURE__ */ React.createElement(Dot, { color: focusLane.color, label: `Lane ${focusLane.id + 1}` }), /* @__PURE__ */ React.createElement(Sep, null), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "Inter Tight", fontSize: 11, color: paper.ink70 } }, targetLabel), /* @__PURE__ */ React.createElement(Sep, null), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "Inter Tight", fontSize: 11, color: paper.ink70 } }, "ch ", focusLane.channel), /* @__PURE__ */ React.createElement(Sep, null), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "Inter Tight", fontSize: 11, color: paper.ink70 } }, formatRange(focusLane, eng.useFlats), " \xB7 ", /* @__PURE__ */ React.createElement("span", { style: { color: paper.ink50 } }, "\xB1", formatDepth(focusLane))), /* @__PURE__ */ React.createElement(Sep, null), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "Inter Tight", fontSize: 11, color: paper.ink70 } }, "smooth ", focusLane.smooth.toFixed(2)));
   }
   function Label({ children, paper = window.PAPER }) {
     return /* @__PURE__ */ React.createElement("div", { style: {
@@ -25984,6 +26379,12 @@
         demo.clearLane(id);
         sendClearLane(id);
       }, [demo.clearLane]);
+      const addLane = React.useCallback(() => {
+        sendAddLane();
+      }, []);
+      const removeLane = React.useCallback((id) => {
+        sendRemoveLane(id);
+      }, []);
       const clearAll = React.useCallback(() => {
         demo.clearAll();
         demo.lanes.forEach((l) => sendClearLane(l.id));
@@ -26000,7 +26401,9 @@
         setSpeed,
         updateLane,
         clearLane,
-        clearAll
+        clearAll,
+        addLane,
+        removeLane
       };
     };
   })();

@@ -17,6 +17,7 @@ function CurveCanvas({
   onDraw,
   quantizeY = false,
   quantizeX = false,
+  useFlats = false,
 }) {
   const ref = React.useRef(null);
   const [drawing, setDrawing] = React.useState(false);
@@ -73,15 +74,25 @@ function CurveCanvas({
     setLiveStroke(null);
   };
 
-  // Scale banding for v2 Note mode
+  // Scale banding for v2 Note mode.
+  //
+  // The canvas Y axis maps 0..1 to value 0..1, which the engine multiplies by
+  // 127 for Note mode (full MIDI range C-1..G9).  Bands are drawn for every
+  // semitone over the lane's *active* output range — not the whole MIDI
+  // range — so the visible band density tracks what the user has remapped
+  // to.  When the lane's range is narrow (e.g. 2 octaves) the bands are
+  // legible; when wide they get dense, which is the honest view.
   const scaleBands = React.useMemo(() => {
     if (!showScaleBanding || !focusLane || focusLane.target !== 'Note') return null;
     const mask = focusLane.scaleMask, root = focusLane.scaleRoot;
+    const lo = Math.round((focusLane.rangeMin ?? 0)   * 127);
+    const hi = Math.round((focusLane.rangeMax ?? 1)   * 127);
+    const span = Math.max(1, hi - lo);
     const bands = [];
-    for (let s = 0; s <= 24; s++) {
+    for (let s = lo; s <= hi; s++) {
       const rel = ((s - root) % 12 + 12) % 12;
       const active = pcActive(mask, rel);
-      const y = s / 24;  // full canvas height — range is output mapping, not display constraint
+      const y = (s - lo) / span;  // bottom = rangeMin, top = rangeMax
       bands.push({ semi: s, y, active, pc: rel });
     }
     return bands;
@@ -178,10 +189,41 @@ function CurveCanvas({
           return <CurvePath key={'g' + l.id} curve={l.curve} w={width} h={height} stroke={l.color} opacity={0.25} width={1.5} />;
         })}
 
-        {/* Focused lane curve */}
+        {/* Focused lane curve — original drawn shape, kept visible underneath
+            the quantized staircase as a "source" reference. */}
         {focusLane?.curve && (
           <CurvePath curve={focusLane.curve} w={width} h={height} stroke={focusLane.color} opacity={0.95} width={2.5} />
         )}
+
+        {/* Staircase overlay — shows the *actual* emitted playback curve when
+            either axis is quantize-locked.  Step function: phase steps in
+            xDivisions chunks, value steps in yDivisions levels.  This is the
+            visible analogue of the C++ engine's S&H output. */}
+        {focusLane?.curve && (focusLane.quantizeX || focusLane.quantizeY) && (() => {
+          const xDiv = (focusLane.quantizeX && focusLane.xDivisions >= 2) ? focusLane.xDivisions : null;
+          const N = xDiv ?? 256;            // when xQ off, draw at curve resolution
+          let d = '';
+          for (let i = 0; i < N; i++) {
+            const p0 = i / N;
+            const p1 = (i + 1) / N;
+            // Sample at the start of the tick (the held value across [p0, p1])
+            // through the lane's full quantize logic so yQuantize is honoured.
+            const v = sampleLaneQuantized(focusLane, p0);
+            const x0 = p0 * width;
+            const x1 = p1 * width;
+            const y  = (1 - v) * height;
+            d += (i === 0 ? `M${x0.toFixed(1)},${y.toFixed(1)}` : `L${x0.toFixed(1)},${y.toFixed(1)}`);
+            d += `L${x1.toFixed(1)},${y.toFixed(1)}`;
+          }
+          return (
+            <path d={d} fill="none"
+              stroke={focusLane.color}
+              strokeWidth={1.6}
+              strokeOpacity={0.85}
+              strokeDasharray="5 3"
+            />
+          );
+        })()}
 
         {/* Live stroke while drawing */}
         {liveStroke && liveStroke.length > 1 && (
@@ -221,27 +263,47 @@ function CurveCanvas({
         })}
       </svg>
 
-      {/* Axis labels (note names on Y when showAxisNotes + Note mode) */}
-      {showAxisNotes && focusLane?.target === 'Note' && scaleBands && (
-        <div style={{
-          position: 'absolute', left: 0, top: 0, bottom: 0, width: 36,
-          pointerEvents: 'none',
-        }}>
-          {scaleBands.filter(b => b.active).map(b => {
-            const y = height * (1 - b.y);
-            return (
+      {/* Axis labels — note names on Y when showAxisNotes + Note mode.
+          When the active range spans many octaves (chromatic / wide), labels
+          for every active pitch class would overlap.  Filter to keep one
+          label per ~14 vertical pixels: walk top→bottom and skip any label
+          that would collide with the previously-kept one.  When skipping,
+          prefer keeping root pcs where possible by ordering them first. */}
+      {showAxisNotes && focusLane?.target === 'Note' && scaleBands && (() => {
+        const minSpacing = 14;  // px
+        const active = scaleBands.filter(b => b.active);
+        // Walk top→bottom (highest semi first because y is small at the top)
+        const ordered = [...active].sort((a, b) => b.semi - a.semi);
+        const kept = [];
+        let lastY = -Infinity;
+        for (const b of ordered) {
+          const y = height * (1 - b.y);
+          // Always keep root pcs; otherwise enforce min spacing.
+          const isRoot = b.pc === focusLane.scaleRoot;
+          if (isRoot || (y - lastY) >= minSpacing) {
+            kept.push({ ...b, y });
+            lastY = y;
+          }
+        }
+        return (
+          <div style={{
+            position: 'absolute', left: 0, top: 0, bottom: 0, width: 36,
+            pointerEvents: 'none',
+          }}>
+            {kept.map(b => (
               <div key={b.semi} style={{
-                position: 'absolute', left: 4, top: y - 7,
+                position: 'absolute', left: 4, top: b.y - 7,
                 fontFamily: '"Instrument Serif", Georgia, serif',
                 fontSize: 12, fontStyle: 'italic',
-                color: paper.ink70,
+                color: b.pc === focusLane.scaleRoot ? paper.amberInk : paper.ink70,
+                fontWeight: b.pc === focusLane.scaleRoot ? 600 : 400,
               }}>
-                {PITCH_SHORT[b.pc]}
+                {window.pitchName(b.pc, useFlats)}
               </div>
-            );
-          })}
-        </div>
-      )}
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Empty hint */}
       {!focusLane?.curve && !liveStroke && (

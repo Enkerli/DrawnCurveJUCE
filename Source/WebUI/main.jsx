@@ -173,6 +173,18 @@ import { initJuceBridge, sendCurve, sendParam, sendFocus,
       sendClearLane(id);
     }, [demo.clearLane]);
 
+    // Add / remove lanes — both go through the C++ side.  C++ updates
+    // `proc.activeLaneCount`, then re-emits stateSnapshot so the JS lane
+    // array is replaced wholesale (palette + defaults are pulled from
+    // window.LANES + APVTS in juce-bridge.js).  No local state mutation
+    // needed here; sendAddLane() / sendRemoveLane() are fire-and-forget.
+    const addLane = React.useCallback(() => {
+      sendAddLane();
+    }, []);
+    const removeLane = React.useCallback((id) => {
+      sendRemoveLane(id);
+    }, []);
+
     const clearAll = React.useCallback(() => {
       demo.clearAll();
       demo.lanes.forEach(l => sendClearLane(l.id));
@@ -191,6 +203,8 @@ import { initJuceBridge, sendCurve, sendParam, sendFocus,
       updateLane,
       clearLane,
       clearAll,
+      addLane,
+      removeLane,
     };
   };
 })();

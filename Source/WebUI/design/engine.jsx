@@ -77,6 +77,11 @@ function useDrawnQurveEngine(initial = {}) {
   const [phase, setPhase] = React.useState(0);   // 0..1
   const [ppForward, setPpForward] = React.useState(true);
   const [mode, setMode] = React.useState(initial.mode || 'standard');
+  // Chromatic notation toggle — false = sharps (default, matches the native
+  // editor's _useFlats=false), true = flats.  Used by every site that maps
+  // pitch class → display name (axis labels, readouts, range slider, scale
+  // wheel labels, bottom-bar summary).  Resolved through pitchName(pc, …).
+  const [useFlats, setUseFlats] = React.useState(false);
   // Note: quantizeX/Y are PER-LANE (on each lane object), not global, so the
   // C++ engine can quantize lanes independently.  The UI surfaces them via the
   // currently-focused lane in juce-ipad.jsx.
@@ -118,6 +123,7 @@ function useDrawnQurveEngine(initial = {}) {
     playing, setPlaying, direction, setDirection,
     syncOn, setSyncOn, speed, setSpeed, beats, setBeats, phase,
     mode, setMode,
+    useFlats, setUseFlats,
   };
 }
 
@@ -162,13 +168,11 @@ function applyLane(lane, raw) {
   const { rangeMin, rangeMax, target, scaleMask, scaleRoot } = lane;
   const ranged = rangeMin + raw * (rangeMax - rangeMin);
   if (target === 'Note') {
-    // map ranged [0..1] to semitone range across 2 octaves starting at C4 (60)
-    const semiRange = 24;
-    const base = 60;
-    let semi = Math.round(ranged * semiRange);
-    // snap to nearest active pitch class
+    // Map ranged [0..1] across the full MIDI range 0..127 (C-1 to G9), to
+    // match the C++ engine which multiplies by 127.0f when emitting Note On.
+    let semi = Math.round(ranged * 127);
     const snapped = snapSemitone(semi, scaleMask, scaleRoot);
-    return { value: ranged, semitone: base + snapped };
+    return { value: ranged, semitone: snapped };
   }
   return { value: ranged, semitone: null };
 }

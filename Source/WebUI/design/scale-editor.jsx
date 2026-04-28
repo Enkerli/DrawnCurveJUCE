@@ -4,7 +4,7 @@
 // ──────────────────────────────────────────────────────────
 // v1: Piano-row — 5 black / 7 white layout (established idiom)
 // ──────────────────────────────────────────────────────────
-function PianoScaleRow({ lane, updateLane, paper = window.PAPER }) {
+function PianoScaleRow({ lane, updateLane, paper = window.PAPER, useFlats = false }) {
   const { scaleMask, scaleRoot, scaleId } = lane;
 
   const white = [0, 2, 4, 5, 7, 9, 11];
@@ -47,7 +47,7 @@ function PianoScaleRow({ lane, updateLane, paper = window.PAPER }) {
         }}
       >
         {active && <>
-          {PITCH_SHORT[pc]}
+          {window.pitchName(pc, useFlats)}
           {isRoot && (
             <div style={{
               position: 'absolute', top: 6, left: '50%', transform: 'translateX(-50%)',
@@ -124,7 +124,7 @@ function PianoScaleRow({ lane, updateLane, paper = window.PAPER }) {
 // of this widget didn't, which broke transposition: changing the root
 // shifted nothing on screen even though the audio output really had moved.
 // ──────────────────────────────────────────────────────────
-function ChromaticWheel({ lane, updateLane, paper = window.PAPER, size = 240 }) {
+function ChromaticWheel({ lane, updateLane, paper = window.PAPER, size = 240, useFlats = false }) {
   const { scaleMask, scaleRoot, scaleId } = lane;
   const r = size / 2;
   const inner = r * 0.45;
@@ -166,7 +166,15 @@ function ChromaticWheel({ lane, updateLane, paper = window.PAPER, size = 240 }) 
     : null;
 
   // Family-grouped scale picker (Diatonic / Pentatonic / Symmetric / Harmonic).
-  const families = ['Diatonic', 'Pentatonic', 'Symmetric', 'Harmonic'];
+  // Family list — derived from SCALES so adding scales/families in tokens.jsx
+  // automatically shows up here.  Order is the order they first appear in
+  // SCALES (matches Source/ScaleData.h ordering).
+  const families = React.useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    for (const s of SCALES) if (!seen.has(s.family)) { seen.add(s.family); out.push(s.family); }
+    return out;
+  }, []);
   const currentScale = SCALES.find(s => s.id === scaleId);
   const [selectedFamily, setSelectedFamily] = React.useState(
     () => currentScale?.family || 'Diatonic');
@@ -245,7 +253,7 @@ function ChromaticWheel({ lane, updateLane, paper = window.PAPER, size = 240 }) 
                 fontSize: 14, fontStyle: 'italic',
                 fill: active ? paper.ink : paper.ink30,
               }}
-            >{PITCH_SHORT[pc]}</text>
+            >{window.pitchName(pc, useFlats)}</text>
           );
         })}
 
@@ -257,7 +265,7 @@ function ChromaticWheel({ lane, updateLane, paper = window.PAPER, size = 240 }) 
         <text x={r} y={r + 12} textAnchor="middle" style={{
           fontFamily: 'Inter Tight, Inter, system-ui, sans-serif',
           fontSize: 10, fill: paper.ink50, letterSpacing: 1.2,
-        }}>{PITCH_SHORT[scaleRoot]} ROOT</text>
+        }}>{window.pitchName(scaleRoot, useFlats)} ROOT</text>
       </svg>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>

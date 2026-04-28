@@ -3,37 +3,42 @@
 // bottom qurve shelf, scale discovery, MIDI ghost, plugin comms badge.
 
 // ── Range formatter — real MIDI values per output mode ───────
-function formatRange(lane) {
+// useFlats: when true, chromatic pitch classes use flat names (D♭/E♭/G♭/…)
+// instead of sharps.  Bound to the global ♯/♭ toggle in the top bar.
+function formatRange(lane, useFlats) {
   const { rangeMin: lo, rangeMax: hi, target } = lane;
   if (target === 'CC' || target === 'Aftertouch') {
     return `${Math.round(lo * 127)} – ${Math.round(hi * 127)}`;
   }
   if (target === 'PitchBend') {
-    const scale = 8192;
-    return `${Math.round((lo - 0.5) * 2 * scale)} – ${Math.round((hi - 0.5) * 2 * scale)}`;
+    // Engine emits raw 14-bit unsigned PB (0..16383, centre 8192) — display
+    // matches that.  Subtract 8192 if you prefer bipolar; keeping unsigned
+    // here so it lines up with what ShowMIDI / standard monitors show.
+    return `${Math.round(lo * 16383)} – ${Math.round(hi * 16383)}`;
   }
   if (target === 'Note') {
-    const base = 60, semiRange = 24;
+    // Full MIDI range: 0..127 → C-1 .. G9.  rangeMin/rangeMax are 0..1
+    // and the engine multiplies by 127, so the JS display must match.
     const noteName = (midi) => {
       const pc = ((midi % 12) + 12) % 12;
       const oct = Math.floor(midi / 12) - 1;
-      return (window.PITCH_SHORT || ['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'])[pc] + oct;
+      return window.pitchName(pc, useFlats) + oct;
     };
-    return `${noteName(base + Math.round(lo * semiRange))} – ${noteName(base + Math.round(hi * semiRange))}`;
+    return `${noteName(Math.round(lo * 127))} – ${noteName(Math.round(hi * 127))}`;
   }
   return `${Math.round(lo * 127)} – ${Math.round(hi * 127)}`;
 }
 
-function formatCenter(lane) {
+function formatCenter(lane, useFlats) {
   const mid = (lane.rangeMin + lane.rangeMax) / 2;
   if (lane.target === 'CC' || lane.target === 'Aftertouch')
     return Math.round(mid * 127);
   if (lane.target === 'PitchBend')
-    return Math.round((mid - 0.5) * 2 * 8192);
+    return Math.round(mid * 16383);
   if (lane.target === 'Note') {
-    const midi = 60 + Math.round(mid * 24);
+    const midi = Math.round(mid * 127);   // full MIDI range — see formatRange
     const pc = ((midi % 12) + 12) % 12;
-    return (window.PITCH_SHORT || ['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'])[pc] + (Math.floor(midi / 12) - 1);
+    return window.pitchName(pc, useFlats) + (Math.floor(midi / 12) - 1);
   }
   return Math.round(mid * 127);
 }
@@ -43,9 +48,9 @@ function formatDepth(lane) {
   if (lane.target === 'CC' || lane.target === 'Aftertouch')
     return '±' + Math.round(span * 127 / 2);
   if (lane.target === 'PitchBend')
-    return '±' + Math.round(span * 8192);
+    return '±' + Math.round(span * 16383 / 2);   // half-span around centre
   if (lane.target === 'Note')
-    return Math.round(span * 24) + ' semi';
+    return Math.round(span * 127) + ' semi';   // full MIDI range
   return '±' + Math.round(span * 127 / 2);
 }
 
@@ -97,8 +102,13 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
   // Plugin sync demo state
   const [pluginSync, setPluginSync] = React.useState(false);
 
-  const canvasW = width - LEFT_W - RIGHT_W;
-  const canvasH = height - TOP_H - BOTTOM_H - SHELF_H - SCALE_H;
+  // Gutter geometry — Y gutter on the left, X gutter on the bottom of the
+  // canvas area, intersecting at the '#' corner cell.  Width must match
+  // CORNER_W for the L to align.
+  const Y_GUTTER_W = 56;
+  const X_GUTTER_H = 40;
+  const canvasW = width  - LEFT_W - RIGHT_W - Y_GUTTER_W;
+  const canvasH = height - TOP_H - BOTTOM_H - SHELF_H - SCALE_H - X_GUTTER_H;
 
   const containerRef = React.useRef(null);
   const [canvasSize, setCanvasSize] = React.useState({ w: canvasW, h: canvasH });
@@ -135,41 +145,48 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
           width={LEFT_W}
         />
 
-        {/* Canvas stack */}
+        {/* Canvas stack — Y gutter + canvas row above X gutter row */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
 
-          {/* Main canvas */}
-          <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-            <CurveCanvas
-              width={canvasSize.w} height={canvasSize.h}
-              lanes={eng.lanes} focus={eng.focus} phase={eng.phase}
-              setCurve={eng.setCurve}
-              variant="studio"
-              showScaleBanding={focusLane?.target === 'Note'}
-              showAxisNotes={focusLane?.target === 'Note'}
-              paper={paper} gridX={gridX} gridY={gridY}
-              quantizeX={!!focusLane?.quantizeX}
-              quantizeY={!!focusLane?.quantizeY}
-            />
+          {/* Canvas row — Y gutter on left, drawing surface on right */}
+          <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+            <YAxisGutter eng={eng} paper={paper} focusLane={focusLane}
+              gridY={gridY} setGridY={setGridY} width={Y_GUTTER_W} />
 
-            {/* MIDI ghost overlay */}
-            {midiGhostOn && <MidiGhostOverlay w={canvasSize.w} h={canvasSize.h} paper={paper} />}
+            <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+              <CurveCanvas
+                width={canvasSize.w} height={canvasSize.h}
+                lanes={eng.lanes} focus={eng.focus} phase={eng.phase}
+                setCurve={eng.setCurve}
+                variant="studio"
+                showScaleBanding={focusLane?.target === 'Note'}
+                showAxisNotes={focusLane?.target === 'Note'}
+                paper={paper} gridX={gridX} gridY={gridY}
+                quantizeX={!!focusLane?.quantizeX}
+                quantizeY={!!focusLane?.quantizeY}
+                useFlats={eng.useFlats}
+              />
 
-            {/* Typographic readout */}
-            <TypoReadout focusLane={focusLane} phase={eng.phase}
-              canvasW={canvasSize.w} canvasH={canvasSize.h} paper={paper} />
+              {/* MIDI ghost overlay */}
+              {midiGhostOn && <MidiGhostOverlay w={canvasSize.w} h={canvasSize.h} paper={paper} />}
 
-            {/* Scale discovery chip */}
-            {discoveryVisible && <DiscoveryChip paper={paper} onOpen={() => setScaleOpen(true)} />}
+              {/* Typographic readout */}
+              <TypoReadout focusLane={focusLane} phase={eng.phase}
+                canvasW={canvasSize.w} canvasH={canvasSize.h} paper={paper}
+                useFlats={eng.useFlats} />
 
-            {/* Corner controls */}
-            <CanvasCornerControls eng={eng} paper={paper}
-              shelfOpen={shelfOpen} setShelfOpen={setShelfOpen}
-              scaleOpen={scaleOpen} setScaleOpen={setScaleOpen}
-              focusLane={focusLane}
-              gridX={gridX} setGridX={setGridX}
-              gridY={gridY} setGridY={setGridY} />
+              {/* Scale discovery chip */}
+              {discoveryVisible && <DiscoveryChip paper={paper} onOpen={() => setScaleOpen(true)} />}
+            </div>
           </div>
+
+          {/* X gutter row — '#' corner cell aligned under the Y gutter, then
+              X-axis controls and the qurves / scale toggles to the right. */}
+          <XAxisGutter eng={eng} paper={paper} focusLane={focusLane}
+            gridX={gridX} setGridX={setGridX}
+            height={X_GUTTER_H} cornerW={Y_GUTTER_W}
+            shelfOpen={shelfOpen} setShelfOpen={setShelfOpen}
+            scaleOpen={scaleOpen} setScaleOpen={setScaleOpen} />
 
           {/* Scale wheel panel (slides up) */}
           <div style={{
@@ -179,7 +196,8 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
           }}>
             {SCALE_H > 0 && focusLane?.target === 'Note' && (
               <div style={{ padding: '14px 18px', display: 'flex', gap: 24, alignItems: 'flex-start', height: '100%' }}>
-                <ChromaticWheel lane={focusLane} updateLane={eng.updateLane} paper={paper} size={220} />
+                <ChromaticWheel lane={focusLane} updateLane={eng.updateLane}
+                  paper={paper} size={220} useFlats={eng.useFlats} />
                 <div style={{ flex: 1, borderLeft: `1px dashed ${paper.rule}`, paddingLeft: 20 }}>
                   <div style={{
                     fontFamily: '"Instrument Serif", Georgia, serif',
@@ -306,6 +324,23 @@ function JuceTopBar({ eng, paper, h, midiGhostOn, setMidiGhostOn, pluginSync, se
       }}>plugin sync</button>
 
       <div style={{ width: 1, height: 20, background: paper.rule }} />
+      {/* Chromatic notation toggle — flips every pitch-class label between
+          sharp and flat spellings (axis labels, range slider, readouts,
+          scale wheel, bottom-bar summary).  Mirrors the native editor's
+          ♯/♭ utility-bar button. */}
+      <button
+        onClick={() => eng.setUseFlats(!eng.useFlats)}
+        title={eng.useFlats ? 'Show sharps' : 'Show flats'}
+        style={{
+          width: 32, height: 28, padding: 0,
+          background: paper.card,
+          border: `1px solid ${paper.rule}`, borderRadius: 2,
+          cursor: 'pointer',
+          fontFamily: '"Instrument Serif", Georgia, serif',
+          fontSize: 16, fontStyle: 'italic',
+          color: paper.ink,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>{eng.useFlats ? '♭' : '♯'}</button>
       <Btn paper={paper} small onClick={eng.clearAll}>Clear</Btn>
       <IconBtn paper={paper} size={32} title="Panic"><span style={{ fontSize: 13 }}>!</span></IconBtn>
       <IconBtn paper={paper} size={32} title="Help"><span style={{ fontSize: 13 }}>?</span></IconBtn>
@@ -401,14 +436,14 @@ function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
                 <span style={{
                   fontFamily: '"Instrument Serif", Georgia, serif',
                   fontSize: 16, fontStyle: 'italic', color: paper.ink,
-                }}>{formatRange(focusLane)}</span>
+                }}>{formatRange(focusLane, eng.useFlats)}</span>
               </div>
               {/* Secondary: center + depth hint */}
               <div style={{
                 marginTop: 3, display: 'flex', gap: 12,
                 fontFamily: 'Inter Tight', fontSize: 10, color: paper.ink50, letterSpacing: 0.5,
               }}>
-                <span>center {formatCenter(focusLane)}</span>
+                <span>center {formatCenter(focusLane, eng.useFlats)}</span>
                 <span>depth {formatDepth(focusLane)}</span>
               </div>
               <div style={{
@@ -455,6 +490,10 @@ function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
 
 // ── Right lane panel (always visible) ───────────────────────
 function JuceLanePanel({ eng, paper, width, height }) {
+  // C++ engine caps lanes at kMaxLanes (4); hide the "+ Lane" button when
+  // we're already at the cap so the click doesn't silently no-op.
+  const MAX_LANES = 4;
+  const canAdd = eng.lanes.length < MAX_LANES;
   return (
     <div style={{
       width, height, flexShrink: 0,
@@ -465,9 +504,27 @@ function JuceLanePanel({ eng, paper, width, height }) {
     }}>
       <div style={{
         padding: '10px 10px 6px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 1.5,
         color: paper.ink50, textTransform: 'uppercase',
-      }}>Lanes</div>
+      }}>
+        <span>Lanes</span>
+        {canAdd && (
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); eng.addLane?.(); }}
+            title="Add lane"
+            style={{
+              width: 22, height: 22, padding: 0,
+              border: `1px solid ${paper.rule}`,
+              background: paper.bg, borderRadius: 2,
+              color: paper.ink70, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'Inter Tight', fontSize: 14, lineHeight: 1,
+              position: 'relative', zIndex: 5,
+            }}>+</button>
+        )}
+      </div>
 
       {eng.lanes.map(l => {
         const focused = eng.focus === l.id;
@@ -542,7 +599,9 @@ function JuceLanePanel({ eng, paper, width, height }) {
           let val;
           if (l.target === 'Note' && semitone != null) {
             const pc = ((semitone % 12) + 12) % 12;
-            val = PITCH_SHORT[pc] + Math.floor(semitone / 12 - 1);
+            val = window.pitchName(pc, eng.useFlats) + Math.floor(semitone / 12 - 1);
+          } else if (l.target === 'PitchBend') {
+            val = Math.round(value * 16383);   // raw 14-bit unsigned PB
           } else {
             val = Math.round(value * 127);
           }
@@ -632,6 +691,63 @@ function GridBtn({ axis, denser, onClick, paper }) {
   );
 }
 
+// Corner button — toggles X+Y quantize together.  Visually anchors the
+// L-shape control cluster and lights up only when both axes are locked.
+function BothBtn({ active, onClick, paper }) {
+  return (
+    <button
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); if (onClick) onClick(e); }}
+      title="Lock both axes" style={{
+      width: 32, height: 28,
+      border: `1px solid ${active ? paper.amberInk : paper.rule}`,
+      background: active ? paper.amberInk : paper.card,
+      color: active ? paper.bg : paper.ink70,
+      borderRadius: 2, cursor: 'pointer', padding: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: 'Inter Tight', fontSize: 13, fontWeight: 700,
+      position: 'relative', zIndex: 5,
+    }}>#</button>
+  );
+}
+
+// Compact numeric pill — shows the current grid count between density steppers.
+function CountPill({ value, paper }) {
+  return (
+    <div style={{
+      minWidth: 24, height: 22, padding: '0 6px',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: '"Instrument Serif", Georgia, serif',
+      fontStyle: 'italic', fontSize: 13,
+      color: paper.ink70,
+      background: 'transparent',
+      borderTop: `1px solid ${paper.ruleFaint}`,
+      borderBottom: `1px solid ${paper.ruleFaint}`,
+      fontVariantNumeric: 'tabular-nums',
+      userSelect: 'none',
+    }}>{value}</div>
+  );
+}
+
+// Small preset button shared by the X (1/4..1/32) and Y (chr/oct/5th/3rd) rows.
+function PresetBtn({ label, active, onClick, paper }) {
+  return (
+    <button
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); if (onClick) onClick(e); }}
+      style={{
+        padding: '2px 6px', height: 22,
+        border: `1px solid ${active ? paper.amberInk : paper.rule}`,
+        background: active ? paper.amberInk : paper.card,
+        color: active ? paper.bg : paper.ink50,
+        borderRadius: 2, cursor: 'pointer',
+        fontFamily: '"Instrument Serif", Georgia, serif',
+        fontStyle: 'italic', fontSize: 12,
+        position: 'relative', zIndex: 5,
+      }}>{label}</button>
+  );
+}
+
 function LockBtn({ axis, active, onClick, paper }) {
   return (
     <button
@@ -658,80 +774,146 @@ function LockBtn({ axis, active, onClick, paper }) {
   );
 }
 
-function CanvasCornerControls({ eng, paper, shelfOpen, setShelfOpen, scaleOpen, setScaleOpen, focusLane, gridX, setGridX, gridY, setGridY }) {
-  // X sync presets (shown when syncOn)
-  const syncPresets = [
+// Vertical Y gutter — runs alongside the LEFT edge of the canvas.  Holds
+// (top→bottom): Y presets, Y denser, Y count, Y sparser, Y lock.  The lock
+// sits at the bottom so the bottom edge of this gutter aligns with the X
+// gutter's '#' corner button — together they form the L-shape the user
+// asked for.  Width must match the X gutter's corner cell so they line up.
+function YAxisGutter({ eng, paper, focusLane, gridY, setGridY, width, height }) {
+  const noteSpan = focusLane
+    ? Math.max(1, Math.round(((focusLane.rangeMax ?? 1) - (focusLane.rangeMin ?? 0)) * 127))
+    : 24;
+  const yNotePresets = [
+    { label: 'chr', div: Math.min(127, noteSpan) },
+    { label: 'oct', div: Math.max(2, Math.round(noteSpan / 12)) },
+    { label: '5th', div: Math.max(2, Math.round(noteSpan / 7)) },
+    { label: '3rd', div: Math.max(2, Math.round(noteSpan / 4)) },
+  ];
+  const yValuePresets = [
+    { label: '2',  div: 2 },
+    { label: '4',  div: 4 },
+    { label: '8',  div: 8 },
+    { label: '16', div: 16 },
+    { label: '24', div: 24 },
+  ];
+  const showPresets = !!focusLane?.quantizeY;
+  const presets = focusLane?.target === 'Note' ? yNotePresets : yValuePresets;
+  const toggleY = () => focusLane && eng.updateLane(focusLane.id, { quantizeY: !focusLane.quantizeY });
+  return (
+    <div style={{
+      width, height,
+      flexShrink: 0,
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'flex-end',
+      gap: 3, padding: '6px 0',
+      background: paper.card,
+      borderRight: `1px solid ${paper.rule}`,
+      // Sit above the canvas content.  z-index isn't strictly necessary as
+      // a sibling gutter, but it documents intent.
+      position: 'relative', zIndex: 4,
+    }}>
+      {showPresets && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 4 }}>
+          {presets.map(p => (
+            <PresetBtn key={p.label} label={p.label} paper={paper}
+              active={gridY === p.div}
+              onClick={() => setGridY(p.div)} />
+          ))}
+        </div>
+      )}
+      <GridBtn axis="Y" denser={true}  paper={paper} onClick={() => setGridY(g => Math.min(24, g + 2))} />
+      <CountPill value={gridY} paper={paper} />
+      <GridBtn axis="Y" denser={false} paper={paper} onClick={() => setGridY(g => Math.max(2, g - 2))} />
+      <LockBtn  axis="Y" active={!!focusLane?.quantizeY} paper={paper} onClick={toggleY} />
+    </div>
+  );
+}
+
+// Horizontal X gutter — runs along the BOTTOM edge of the canvas.  The '#'
+// corner button sits at the very left so it aligns with the Y gutter above
+// it; the rest of the X-axis controls fan out to the right.  When sync is
+// on AND X-quantize is on, the beat presets (1/4 .. 1/32) appear inline.
+// "qurves" and "scale" toggles live at the right end.
+function XAxisGutter({ eng, paper, focusLane, gridX, setGridX, height, cornerW,
+                       shelfOpen, setShelfOpen, scaleOpen, setScaleOpen }) {
+  const xSyncPresets = [
     { label: '1/4',  cols: 4  },
     { label: '1/8',  cols: 8  },
     { label: '1/16', cols: 16 },
     { label: '1/32', cols: 32 },
   ];
-
+  const toggleX = () => focusLane && eng.updateLane(focusLane.id, { quantizeX: !focusLane.quantizeX });
+  const toggleBoth = () => {
+    if (!focusLane) return;
+    const both = focusLane.quantizeX && focusLane.quantizeY;
+    eng.updateLane(focusLane.id, { quantizeX: !both, quantizeY: !both });
+  };
+  const bothActive = !!(focusLane?.quantizeX && focusLane?.quantizeY);
   return (
-    <>
-      {/* Bottom-left: grid controls + lock buttons + shelf toggle */}
+    <div style={{
+      height,
+      display: 'flex', alignItems: 'center', flexShrink: 0,
+      borderTop: `1px solid ${paper.rule}`,
+      background: paper.card,
+      position: 'relative', zIndex: 4,
+    }}>
+      {/* Corner cell — width matches the Y gutter so the '#' aligns. */}
       <div style={{
-        position: 'absolute', bottom: 10, left: 10,
-        display: 'flex', alignItems: 'flex-end', gap: 4,
+        width: cornerW, height: '100%',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        borderRight: `1px solid ${paper.rule}`,
+        flexShrink: 0,
       }}>
-        {/* Y axis — vertical stack of density + lock */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <GridBtn axis="Y" denser={true}  paper={paper} onClick={() => setGridY(g => Math.min(20, g + 2))} />
-          <GridBtn axis="Y" denser={false} paper={paper} onClick={() => setGridY(g => Math.max(2, g - 2))} />
-          <LockBtn axis="Y" active={!!focusLane?.quantizeY} paper={paper}
-            onClick={() => focusLane && eng.updateLane(focusLane.id, { quantizeY: !focusLane.quantizeY })} />
-        </div>
-        <div style={{ width: 1, height: 20, background: paper.rule, margin: '0 2px' }} />
-        {/* X axis — density + lock + optional sync presets */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>
-          <div style={{ display: 'flex', gap: 3 }}>
-            <GridBtn axis="X" denser={false} paper={paper} onClick={() => setGridX(g => Math.max(2, g - 2))} />
-            <GridBtn axis="X" denser={true}  paper={paper} onClick={() => setGridX(g => Math.min(32, g + 2))} />
-            <LockBtn axis="X" active={!!focusLane?.quantizeX} paper={paper}
-              onClick={() => focusLane && eng.updateLane(focusLane.id, { quantizeX: !focusLane.quantizeX })} />
+        <BothBtn paper={paper} active={bothActive} onClick={toggleBoth} />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '0 8px' }}>
+        <LockBtn axis="X" active={!!focusLane?.quantizeX} paper={paper} onClick={toggleX} />
+        <GridBtn axis="X" denser={false} paper={paper} onClick={() => setGridX(g => Math.max(2, g - 2))} />
+        <CountPill value={gridX} paper={paper} />
+        <GridBtn axis="X" denser={true}  paper={paper} onClick={() => setGridX(g => Math.min(32, g + 2))} />
+        {eng.syncOn && focusLane?.quantizeX && (
+          <div style={{ display: 'flex', gap: 3, marginLeft: 6 }}>
+            {xSyncPresets.map(p => (
+              <PresetBtn key={p.label} label={p.label} paper={paper}
+                active={gridX === p.cols}
+                onClick={() => setGridX(p.cols)} />
+            ))}
           </div>
-          {eng.syncOn && focusLane?.quantizeX && (
-            <div style={{ display: 'flex', gap: 3 }}>
-              {syncPresets.map(p => (
-                <button key={p.label} onClick={() => setGridX(p.cols)} style={{
-                  padding: '2px 6px', height: 22,
-                  border: `1px solid ${gridX === p.cols ? paper.amberInk : paper.rule}`,
-                  background: gridX === p.cols ? paper.amberInk : paper.card,
-                  color: gridX === p.cols ? paper.bg : paper.ink50,
-                  borderRadius: 2, cursor: 'pointer',
-                  fontFamily: '"Instrument Serif", Georgia, serif',
-                  fontStyle: 'italic', fontSize: 12,
-                }}>{p.label}</button>
-              ))}
-            </div>
-          )}
-        </div>
-        <div style={{ width: 1, height: 20, background: paper.rule, margin: '0 4px' }} />
-        <button onClick={() => setShelfOpen(!shelfOpen)} style={{
-          padding: '4px 10px', minHeight: 28,
+        )}
+      </div>
+      <div style={{ flex: 1 }} />
+      <button
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); setShelfOpen(!shelfOpen); }}
+        style={{
+          padding: '4px 10px', height: 28, marginRight: 6,
           background: paper.card, border: `1px solid ${paper.rule}`,
           borderRadius: 2, cursor: 'pointer',
           fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 1,
           color: paper.ink50, textTransform: 'uppercase',
+          position: 'relative', zIndex: 5,
         }}>{shelfOpen ? '▾ qurves' : '▸ qurves'}</button>
-      </div>
-
-      {/* Bottom-right: scale toggle (only in Note mode) */}
       {focusLane?.target === 'Note' && (
-        <button onClick={() => setScaleOpen(!scaleOpen)} style={{
-          position: 'absolute', bottom: 10, right: 10,
-          padding: '5px 12px', minHeight: 32,
-          background: scaleOpen ? paper.ink : paper.card,
-          color: scaleOpen ? paper.bg : paper.ink50,
-          border: `1px solid ${scaleOpen ? paper.ink : paper.rule}`,
-          borderRadius: 2, cursor: 'pointer',
-          fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 1,
-          textTransform: 'uppercase',
-        }}>{scaleOpen ? '▾ scale' : '▴ scale'}</button>
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); setScaleOpen(!scaleOpen); }}
+          style={{
+            padding: '4px 12px', height: 28, marginRight: 8,
+            background: scaleOpen ? paper.ink : paper.card,
+            color: scaleOpen ? paper.bg : paper.ink50,
+            border: `1px solid ${scaleOpen ? paper.ink : paper.rule}`,
+            borderRadius: 2, cursor: 'pointer',
+            fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 1,
+            textTransform: 'uppercase',
+            position: 'relative', zIndex: 5,
+          }}>{scaleOpen ? '▾ scale' : '▴ scale'}</button>
       )}
-    </>
+    </div>
   );
 }
+
+// (CanvasCornerControls removed — replaced by the gutter components above)
+
 
 // ── Scale discovery chip ──────────────────────────────────────
 function DiscoveryChip({ paper, onOpen }) {
@@ -764,7 +946,7 @@ function DiscoveryChip({ paper, onOpen }) {
 }
 
 // ── Typographic readout ──────────────────────────────────────
-function TypoReadout({ focusLane, phase, canvasW, canvasH, paper }) {
+function TypoReadout({ focusLane, phase, canvasW, canvasH, paper, useFlats }) {
   if (!focusLane?.curve || !focusLane.enabled) return null;
   // Mirror the C++ engine's quantization so the on-canvas readout shows the
   // value that's actually being emitted via MIDI, not the un-quantized curve.
@@ -776,13 +958,16 @@ function TypoReadout({ focusLane, phase, canvasW, canvasH, paper }) {
   if (focusLane.target === 'Note' && semitone != null) {
     const pc = ((semitone % 12) + 12) % 12;
     const oct = Math.floor(semitone / 12) - 1;
-    primary = PITCH_SHORT[pc] + oct;
+    primary = window.pitchName(pc, useFlats) + oct;
     units = 'note';
   } else if (focusLane.target === 'CC') {
     primary = Math.round(value * 127);
     units = 'cc ' + focusLane.targetDetail;
   } else if (focusLane.target === 'PitchBend') {
-    primary = ((value - 0.5) * 200).toFixed(0);
+    // Engine emits raw 14-bit unsigned PB (0..16383, centre 8192).  Match
+    // that here so the readout lines up with what ShowMIDI / standard MIDI
+    // monitors display.
+    primary = Math.round (value * 16383);
     units = 'pb';
   } else {
     primary = Math.round(value * 127);
@@ -923,7 +1108,7 @@ function JuceBottomBar({ eng, paper, h }) {
     CC: `CC ${focusLane.targetDetail}`,
     Aftertouch: 'Aftertouch',
     PitchBend: 'Pitch Bend',
-    Note: `Notes · ${(SCALES.find(s => s.id === focusLane.scaleId) || { name: 'Custom' }).name} / ${PITCH_SHORT[focusLane.scaleRoot]}`,
+    Note: `Notes · ${(SCALES.find(s => s.id === focusLane.scaleId) || { name: 'Custom' }).name} / ${window.pitchName(focusLane.scaleRoot, eng.useFlats)}`,
   }[focusLane.target] || focusLane.target;
 
   const Dot = ({ color, label }) => (
@@ -953,7 +1138,7 @@ function JuceBottomBar({ eng, paper, h }) {
       </span>
       <Sep />
       <span style={{ fontFamily: 'Inter Tight', fontSize: 11, color: paper.ink70 }}>
-        {formatRange(focusLane)} · <span style={{ color: paper.ink50 }}>±{formatDepth(focusLane)}</span>
+        {formatRange(focusLane, eng.useFlats)} · <span style={{ color: paper.ink50 }}>±{formatDepth(focusLane)}</span>
       </span>
       <Sep />
       <span style={{ fontFamily: 'Inter Tight', fontSize: 11, color: paper.ink70 }}>

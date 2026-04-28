@@ -158,7 +158,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout DrawnCurveProcessor::createP
         // Prep: Per-lane playback controls (currently unused by engine; UI TBD)
         layout.add (std::make_unique<juce::AudioParameterBool>(
             juce::ParameterID { laneParam (L, ParamID::useGlobalPlayback), 1 },
-            lname + "Use Global Playback", false));  // false = per-lane values active by default
+            // Default: follow the global transport.  The WebUI exposes only
+            // the global direction / speed sliders, so per-lane overrides
+            // would silently shadow them and the user would see "direction
+            // doesn't change" when they toggled rev/pp/fwd.  Old presets
+            // saved with this off are unaffected — this is just the fresh
+            // default for new lanes / fresh state.
+            lname + "Use Global Playback", true));
 
         layout.add (std::make_unique<juce::AudioParameterFloat>(
             juce::ParameterID { laneParam (L, ParamID::laneSpeedMul), 1 },
