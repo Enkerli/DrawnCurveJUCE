@@ -24726,7 +24726,13 @@
       const p = pos(pc, mid);
       return (i === 0 ? "M" : "L") + p.x.toFixed(1) + "," + p.y.toFixed(1);
     }).join(" ") + " Z" : null;
-    return /* @__PURE__ */ React.createElement("svg", { width: size, height: size, style: { flexShrink: 0, overflow: "visible" } }, /* @__PURE__ */ React.createElement("circle", { cx: r, cy: r, r: r - 4, fill: "none", stroke: paper.rule, strokeWidth: 0.5, strokeDasharray: "2 3" }), /* @__PURE__ */ React.createElement("circle", { cx: r, cy: r, r: mid, fill: "none", stroke: paper.ruleFaint, strokeWidth: 0.5 }), /* @__PURE__ */ React.createElement("circle", { cx: r, cy: r, r: inner, fill: "none", stroke: paper.ruleFaint, strokeWidth: 0.5 }), pcs.map((pc) => {
+    return /* @__PURE__ */ React.createElement("svg", { width: size, height: size, style: {
+      flexShrink: 0,
+      overflow: "visible",
+      // Suppress the iOS double-tap-to-zoom 300 ms delay, so onDoubleClick
+      // fires immediately when setting the scale root (audit F-18).
+      touchAction: "manipulation"
+    } }, /* @__PURE__ */ React.createElement("circle", { cx: r, cy: r, r: r - 4, fill: "none", stroke: paper.rule, strokeWidth: 0.5, strokeDasharray: "2 3" }), /* @__PURE__ */ React.createElement("circle", { cx: r, cy: r, r: mid, fill: "none", stroke: paper.ruleFaint, strokeWidth: 0.5 }), /* @__PURE__ */ React.createElement("circle", { cx: r, cy: r, r: inner, fill: "none", stroke: paper.ruleFaint, strokeWidth: 0.5 }), pcs.map((pc) => {
       const a = pc / 12 * Math.PI * 2 - Math.PI / 2;
       return /* @__PURE__ */ React.createElement(
         "line",
@@ -25126,13 +25132,23 @@
     const focusLane = eng.lanes.find((l) => l.id === eng.focus);
     const TOP_H = 52;
     const BOTTOM_H = 38;
-    const [leftOpen, setLeftOpen] = React.useState(false);
+    const [leftOpen, setLeftOpen] = React.useState(true);
     const LEFT_W = leftOpen ? 256 : 22;
     const [rightOpen, setRightOpen] = React.useState(true);
     const RIGHT_W = rightOpen ? 148 : 22;
-    const [shelfOpen, setShelfOpen] = React.useState(false);
+    const [shelfOpen, setShelfOpenRaw] = React.useState(false);
+    const [scaleOpen, setScaleOpenRaw] = React.useState(false);
+    const setShelfOpen = (next) => {
+      const v = typeof next === "function" ? next(shelfOpen) : next;
+      if (v) setScaleOpenRaw(false);
+      setShelfOpenRaw(v);
+    };
+    const setScaleOpen = (next) => {
+      const v = typeof next === "function" ? next(scaleOpen) : next;
+      if (v) setShelfOpenRaw(false);
+      setScaleOpenRaw(v);
+    };
     const SHELF_H = shelfOpen ? 180 : 0;
-    const [scaleOpen, setScaleOpen] = React.useState(false);
     const SCALE_H = scaleOpen ? 310 : 0;
     const gridX = focusLane?.xDivisions ?? 4;
     const gridY = focusLane?.yDivisions ?? 4;
@@ -25344,7 +25360,7 @@
       color: paper.ink70,
       lineHeight: 1.5,
       marginTop: "auto"
-    } }, "Toggle pitches on the wheel \xB7 double-tap or hold a node to set the root \xB7 pick a preset to overwrite the mask \xB7 type a decimal value to enter a custom set.")))), /* @__PURE__ */ React.createElement("div", { style: {
+    } }, "Tap a pitch to toggle \xB7 double-tap or hold (0.5 s) to set the root \xB7 pick a preset to overwrite the mask \xB7 type a decimal value (0\u20134095) to enter a custom set.")))), /* @__PURE__ */ React.createElement("div", { style: {
       height: SHELF_H,
       overflow: "hidden",
       transition: "height 240ms ease-out",
@@ -25402,29 +25418,55 @@
       fontStyle: "italic",
       fontSize: 16,
       minWidth: 64
-    } }, eng.syncOn ? `${eng.beats} beats` : `${eng.speed.toFixed(2)}\xD7`)), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }), /* @__PURE__ */ React.createElement("button", { onClick: () => setMidiGhostOn(!midiGhostOn), style: {
-      padding: "4px 10px",
-      borderRadius: 2,
-      border: `1px solid ${midiGhostOn ? paper.amberInk : paper.rule}`,
-      background: midiGhostOn ? "oklch(90% 0.06 65)" : "transparent",
-      color: midiGhostOn ? paper.amberInk : paper.ink50,
-      fontFamily: "Inter Tight",
-      fontSize: 10,
-      letterSpacing: 0.8,
-      textTransform: "uppercase",
-      cursor: "pointer"
-    } }, "MIDI in"), /* @__PURE__ */ React.createElement("button", { onClick: () => setPluginSync(!pluginSync), style: {
-      padding: "4px 10px",
-      borderRadius: 2,
-      border: `1px solid ${pluginSync ? paper.amberInk : paper.rule}`,
-      background: pluginSync ? "oklch(90% 0.06 65)" : "transparent",
-      color: pluginSync ? paper.amberInk : paper.ink50,
-      fontFamily: "Inter Tight",
-      fontSize: 10,
-      letterSpacing: 0.8,
-      textTransform: "uppercase",
-      cursor: "pointer"
-    } }, "plugin sync"), /* @__PURE__ */ React.createElement("div", { style: { width: 1, height: 20, background: paper.rule } }), /* @__PURE__ */ React.createElement(
+    } }, eng.syncOn ? `${eng.beats} beats` : `${eng.speed.toFixed(2)}\xD7`)), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: () => setMidiGhostOn(!midiGhostOn),
+        title: "MIDI input ghosting (preview)",
+        style: {
+          padding: "4px 8px 4px 10px",
+          borderRadius: 2,
+          border: `1px dashed ${midiGhostOn ? paper.amberInk : paper.ink30}`,
+          background: midiGhostOn ? "oklch(90% 0.06 65)" : "transparent",
+          color: midiGhostOn ? paper.amberInk : paper.ink30,
+          fontFamily: "Inter Tight",
+          fontSize: 10,
+          letterSpacing: 0.8,
+          textTransform: "uppercase",
+          cursor: "pointer",
+          fontStyle: "italic",
+          display: "flex",
+          alignItems: "center",
+          gap: 5
+        }
+      },
+      "MIDI in ",
+      /* @__PURE__ */ React.createElement("span", { style: { fontSize: 8, opacity: 0.7 } }, "soon")
+    ), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: () => setPluginSync(!pluginSync),
+        title: "ScalePlugin sync (preview)",
+        style: {
+          padding: "4px 8px 4px 10px",
+          borderRadius: 2,
+          border: `1px dashed ${pluginSync ? paper.amberInk : paper.ink30}`,
+          background: pluginSync ? "oklch(90% 0.06 65)" : "transparent",
+          color: pluginSync ? paper.amberInk : paper.ink30,
+          fontFamily: "Inter Tight",
+          fontSize: 10,
+          letterSpacing: 0.8,
+          textTransform: "uppercase",
+          cursor: "pointer",
+          fontStyle: "italic",
+          display: "flex",
+          alignItems: "center",
+          gap: 5
+        }
+      },
+      "plugin sync ",
+      /* @__PURE__ */ React.createElement("span", { style: { fontSize: 8, opacity: 0.7 } }, "soon")
+    ), /* @__PURE__ */ React.createElement("div", { style: { width: 1, height: 20, background: paper.rule } }), /* @__PURE__ */ React.createElement(
       "button",
       {
         onClick: () => eng.setUseFlats(!eng.useFlats),
@@ -25483,7 +25525,7 @@
           cursor: "pointer"
         }
       },
-      t === "Aftertouch" ? "Aft" : t === "PitchBend" ? "PB" : t
+      t === "Aftertouch" ? "AT" : t === "PitchBend" ? "PB" : t
     )))), focusLane.target === "CC" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Label, { paper }, "CC number"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 6 } }, /* @__PURE__ */ React.createElement(
       Slider,
       {
@@ -25527,7 +25569,7 @@
         sublabel: focusLane.smooth.toFixed(2),
         paper
       }
-    ))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Label, { paper }, "Remap output"), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 8 } }, /* @__PURE__ */ React.createElement(
+    ))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Label, { paper }, "Output range"), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 8 } }, /* @__PURE__ */ React.createElement(
       RangeSlider,
       {
         min: 0,
@@ -25559,8 +25601,8 @@
       letterSpacing: 0.5
     } }, /* @__PURE__ */ React.createElement("span", null, "center ", formatCenter(focusLane, eng.useFlats)), /* @__PURE__ */ React.createElement("span", null, "depth ", formatDepth(focusLane))), /* @__PURE__ */ React.createElement("div", { style: {
       marginTop: 5,
-      fontSize: 10,
-      color: paper.ink30,
+      fontSize: 11,
+      color: paper.ink50,
       fontFamily: "Inter Tight",
       lineHeight: 1.5,
       borderTop: `1px dashed ${paper.ruleFaint}`,
@@ -25743,15 +25785,21 @@
           width: 12,
           height: 12,
           borderRadius: "50%",
-          background: l.color,
           flexShrink: 0,
-          boxShadow: focused ? `0 0 0 2px ${paper.bg}, 0 0 0 3.5px ${l.color}` : "none"
+          background: l.enabled ? l.color : paper.bg,
+          border: l.enabled ? "none" : `2px solid ${l.color}`,
+          boxSizing: "border-box",
+          boxShadow: focused ? `0 0 0 2px ${paper.bg}, 0 0 0 3.5px ${l.color}` : "none",
+          opacity: l.enabled ? 1 : 0.7
         } }), /* @__PURE__ */ React.createElement("span", { style: {
           fontFamily: '"Instrument Serif", Georgia, serif',
           fontStyle: "italic",
           fontSize: 18,
           color: focused ? paper.ink : paper.ink70,
-          lineHeight: 1
+          lineHeight: 1,
+          // Single-property shorthand to avoid React's "mix shorthand
+          // and longhand" warning (line / colour combined here).
+          textDecoration: l.enabled ? "none" : `line-through ${paper.ink30}`
         } }, "Lane ", l.id + 1)),
         /* @__PURE__ */ React.createElement("div", { style: {
           fontFamily: "Inter Tight",
@@ -25780,13 +25828,7 @@
             style: laneChip(paper, false)
           },
           "Clear"
-        )),
-        !l.enabled && /* @__PURE__ */ React.createElement("div", { style: {
-          fontFamily: "Inter Tight",
-          fontSize: 9,
-          color: paper.ink30,
-          letterSpacing: 0.5
-        } }, "muted")
+        ))
       );
     }), /* @__PURE__ */ React.createElement("div", { style: {
       marginTop: "auto",
@@ -25804,16 +25846,25 @@
       } else {
         val = Math.round(value * 127);
       }
+      const isFocus = l.id === eng.focus;
       return /* @__PURE__ */ React.createElement("div", { key: l.id, style: {
         display: "flex",
         alignItems: "baseline",
         gap: 6,
-        marginBottom: 4
-      } }, /* @__PURE__ */ React.createElement("span", { style: { width: 8, height: 8, borderRadius: "50%", background: l.color, flexShrink: 0 } }), /* @__PURE__ */ React.createElement("span", { style: {
+        marginBottom: isFocus ? 6 : 3,
+        opacity: isFocus ? 1 : 0.7
+      } }, /* @__PURE__ */ React.createElement("span", { style: {
+        width: isFocus ? 9 : 7,
+        height: isFocus ? 9 : 7,
+        borderRadius: "50%",
+        background: l.color,
+        flexShrink: 0
+      } }), /* @__PURE__ */ React.createElement("span", { style: {
         fontFamily: '"Instrument Serif", Georgia, serif',
         fontStyle: "italic",
-        fontSize: 20,
+        fontSize: isFocus ? 26 : 16,
         lineHeight: 1,
+        fontWeight: isFocus ? 600 : 400,
         color: l.color,
         fontVariantNumeric: "tabular-nums"
       } }, val));
@@ -26304,8 +26355,8 @@
       units = "aft";
     }
     const onLeft = x > canvasW * 0.72;
-    const READOUT_H = 64;
-    const top = Math.max(4, Math.min(y - 28, canvasH - READOUT_H));
+    const READOUT_H = 50;
+    const top = Math.max(4, Math.min(y - 22, canvasH - READOUT_H));
     return /* @__PURE__ */ React.createElement("div", { style: {
       position: "absolute",
       left: onLeft ? Math.max(4, x - 100) : x + 14,
@@ -26315,7 +26366,7 @@
       lineHeight: 0.9
     } }, /* @__PURE__ */ React.createElement("div", { style: {
       fontFamily: '"Instrument Serif", Georgia, serif',
-      fontSize: 52,
+      fontSize: 38,
       fontStyle: "italic",
       color: focusLane.color,
       textShadow: `0 0 8px ${paper.bg}, 0 0 8px ${paper.bg}`,

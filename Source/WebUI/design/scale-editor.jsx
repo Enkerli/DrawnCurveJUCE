@@ -201,7 +201,12 @@ function ChromaticWheel({ lane, updateLane, paper = window.PAPER, size = 240, us
   // Wheel is now SVG-only — picker logic moved to juce-ipad.jsx scale panel.
 
   return (
-      <svg width={size} height={size} style={{ flexShrink: 0, overflow: 'visible' }}>
+      <svg width={size} height={size} style={{
+        flexShrink: 0, overflow: 'visible',
+        // Suppress the iOS double-tap-to-zoom 300 ms delay, so onDoubleClick
+        // fires immediately when setting the scale root (audit F-18).
+        touchAction: 'manipulation',
+      }}>
         {/* outer ruled circle */}
         <circle cx={r} cy={r} r={r - 4} fill="none" stroke={paper.rule} strokeWidth={0.5} strokeDasharray="2 3" />
         <circle cx={r} cy={r} r={mid} fill="none" stroke={paper.ruleFaint} strokeWidth={0.5} />

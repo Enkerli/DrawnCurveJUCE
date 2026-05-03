@@ -61,15 +61,31 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
 
   const TOP_H = 52;
   const BOTTOM_H = 38;
-  const [leftOpen, setLeftOpen] = React.useState(false);
+  // Default open per usability audit F-05 — collapsed-by-default hid every
+  // per-lane setting (output type, CC#, channel, smooth, range remap)
+  // behind a 22 px tab.  At 256 px wide the well still leaves a usable
+  // canvas on a 1024 px window.  User can collapse explicitly.
+  const [leftOpen, setLeftOpen] = React.useState(true);
   const LEFT_W = leftOpen ? 256 : 22;
   const [rightOpen, setRightOpen] = React.useState(true);
   const RIGHT_W = rightOpen ? 148 : 22;
 
-  const [shelfOpen, setShelfOpen] = React.useState(false);
+  // Mutually exclusive bottom panels — opening one closes the other so the
+  // canvas can never collapse to ~148 px under both (audit F-14).  Wrap the
+  // setters: scaleOpen=true ⇒ shelfOpen=false and vice versa.
+  const [shelfOpen, setShelfOpenRaw] = React.useState(false);
+  const [scaleOpen, setScaleOpenRaw] = React.useState(false);
+  const setShelfOpen = (next) => {
+    const v = typeof next === 'function' ? next(shelfOpen) : next;
+    if (v) setScaleOpenRaw(false);
+    setShelfOpenRaw(v);
+  };
+  const setScaleOpen = (next) => {
+    const v = typeof next === 'function' ? next(scaleOpen) : next;
+    if (v) setShelfOpenRaw(false);
+    setScaleOpenRaw(v);
+  };
   const SHELF_H = shelfOpen ? 180 : 0;
-
-  const [scaleOpen, setScaleOpen] = React.useState(false);
   const SCALE_H = scaleOpen ? 310 : 0;
 
   // Grid density and quantize toggles are per-lane — they live on focusLane
@@ -300,9 +316,9 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
                     fontSize: 11, color: paper.ink70, lineHeight: 1.5,
                     marginTop: 'auto',
                   }}>
-                    Toggle pitches on the wheel · double-tap or hold a node
-                    to set the root · pick a preset to overwrite the mask ·
-                    type a decimal value to enter a custom set.
+                    Tap a pitch to toggle · double-tap or hold (0.5 s) to set
+                    the root · pick a preset to overwrite the mask · type a
+                    decimal value (0–4095) to enter a custom set.
                   </div>
                 </div>
               </div>
@@ -371,24 +387,34 @@ function JuceTopBar({ eng, paper, h, midiGhostOn, setMidiGhostOn, pluginSync, se
 
       <div style={{ flex: 1 }} />
 
-      {/* Demo toggles for future features */}
-      <button onClick={() => setMidiGhostOn(!midiGhostOn)} style={{
-        padding: '4px 10px', borderRadius: 2,
-        border: `1px solid ${midiGhostOn ? paper.amberInk : paper.rule}`,
+      {/* Preview toggles — UI placeholders for unimplemented features
+          (MIDI input ghosting, ScalePlugin sync).  Audit F-09: styled
+          differently from real controls (dashed border, italic, ink30
+          colour, "soon" pill) so users understand they're previews.
+          Wire to real behaviour in roadmap rounds F.3 / F.4. */}
+      <button onClick={() => setMidiGhostOn(!midiGhostOn)}
+        title="MIDI input ghosting (preview)" style={{
+        padding: '4px 8px 4px 10px', borderRadius: 2,
+        border: `1px dashed ${midiGhostOn ? paper.amberInk : paper.ink30}`,
         background: midiGhostOn ? 'oklch(90% 0.06 65)' : 'transparent',
-        color: midiGhostOn ? paper.amberInk : paper.ink50,
+        color: midiGhostOn ? paper.amberInk : paper.ink30,
         fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 0.8,
         textTransform: 'uppercase', cursor: 'pointer',
-      }}>MIDI in</button>
+        fontStyle: 'italic',
+        display: 'flex', alignItems: 'center', gap: 5,
+      }}>MIDI in <span style={{ fontSize: 8, opacity: 0.7 }}>soon</span></button>
 
-      <button onClick={() => setPluginSync(!pluginSync)} style={{
-        padding: '4px 10px', borderRadius: 2,
-        border: `1px solid ${pluginSync ? paper.amberInk : paper.rule}`,
+      <button onClick={() => setPluginSync(!pluginSync)}
+        title="ScalePlugin sync (preview)" style={{
+        padding: '4px 8px 4px 10px', borderRadius: 2,
+        border: `1px dashed ${pluginSync ? paper.amberInk : paper.ink30}`,
         background: pluginSync ? 'oklch(90% 0.06 65)' : 'transparent',
-        color: pluginSync ? paper.amberInk : paper.ink50,
+        color: pluginSync ? paper.amberInk : paper.ink30,
         fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 0.8,
         textTransform: 'uppercase', cursor: 'pointer',
-      }}>plugin sync</button>
+        fontStyle: 'italic',
+        display: 'flex', alignItems: 'center', gap: 5,
+      }}>plugin sync <span style={{ fontSize: 8, opacity: 0.7 }}>soon</span></button>
 
       <div style={{ width: 1, height: 20, background: paper.rule }} />
       {/* Chromatic notation toggle — flips every pitch-class label between
@@ -446,7 +472,7 @@ function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
                     color: focusLane.target === t ? paper.bg : paper.ink70,
                     borderRadius: 2, fontSize: 11, fontFamily: 'Inter Tight',
                     cursor: 'pointer',
-                  }}>{t === 'Aftertouch' ? 'Aft' : t === 'PitchBend' ? 'PB' : t}</button>
+                  }}>{t === 'Aftertouch' ? 'AT' : t === 'PitchBend' ? 'PB' : t}</button>
               ))}
             </div>
           </div>
@@ -491,7 +517,7 @@ function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
           </div>
 
           <div>
-            <Label paper={paper}>Remap output</Label>
+            <Label paper={paper}>Output range</Label>
             <div style={{ marginTop: 8 }}>
               <RangeSlider min={0} max={1} lo={focusLane.rangeMin} hi={focusLane.rangeMax}
                 onChange={({ lo, hi }) => eng.updateLane(focusLane.id, { rangeMin: lo, rangeMax: hi })}
@@ -514,7 +540,7 @@ function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
                 <span>depth {formatDepth(focusLane)}</span>
               </div>
               <div style={{
-                marginTop: 5, fontSize: 10, color: paper.ink30,
+                marginTop: 5, fontSize: 11, color: paper.ink50,
                 fontFamily: 'Inter Tight', lineHeight: 1.5,
                 borderTop: `1px dashed ${paper.ruleFaint}`, paddingTop: 5,
               }}>
@@ -656,14 +682,24 @@ function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {/* Lane colour dot.  When the lane is muted the dot is shown
+                  hollow (paper.bg fill, lane-colour 2 px ring) — independent
+                  of focus, so muted state is always legible (audit F-11). */}
               <span style={{
-                width: 12, height: 12, borderRadius: '50%', background: l.color, flexShrink: 0,
+                width: 12, height: 12, borderRadius: '50%', flexShrink: 0,
+                background: l.enabled ? l.color : paper.bg,
+                border: l.enabled ? 'none' : `2px solid ${l.color}`,
+                boxSizing: 'border-box',
                 boxShadow: focused ? `0 0 0 2px ${paper.bg}, 0 0 0 3.5px ${l.color}` : 'none',
+                opacity: l.enabled ? 1 : 0.7,
               }} />
               <span style={{
                 fontFamily: '"Instrument Serif", Georgia, serif',
                 fontStyle: 'italic', fontSize: 18,
                 color: focused ? paper.ink : paper.ink70, lineHeight: 1,
+                // Single-property shorthand to avoid React's "mix shorthand
+                // and longhand" warning (line / colour combined here).
+                textDecoration: l.enabled ? 'none' : `line-through ${paper.ink30}`,
               }}>Lane {l.id + 1}</span>
             </div>
             <div style={{
@@ -688,12 +724,6 @@ function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
                 </button>
               </div>
             )}
-            {!l.enabled && (
-              <div style={{
-                fontFamily: 'Inter Tight', fontSize: 9,
-                color: paper.ink30, letterSpacing: 0.5,
-              }}>muted</div>
-            )}
           </div>
         );
       })}
@@ -717,15 +747,24 @@ function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
           } else {
             val = Math.round(value * 127);
           }
+          // Audit F-15: emphasise the focused lane's readout so the active
+          // lane reads at a glance even when several lanes are running.
+          const isFocus = l.id === eng.focus;
           return (
             <div key={l.id} style={{
               display: 'flex', alignItems: 'baseline', gap: 6,
-              marginBottom: 4,
+              marginBottom: isFocus ? 6 : 3,
+              opacity: isFocus ? 1 : 0.7,
             }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: l.color, flexShrink: 0 }} />
+              <span style={{
+                width: isFocus ? 9 : 7, height: isFocus ? 9 : 7,
+                borderRadius: '50%', background: l.color, flexShrink: 0,
+              }} />
               <span style={{
                 fontFamily: '"Instrument Serif", Georgia, serif',
-                fontStyle: 'italic', fontSize: 20, lineHeight: 1,
+                fontStyle: 'italic',
+                fontSize: isFocus ? 26 : 16, lineHeight: 1,
+                fontWeight: isFocus ? 600 : 400,
                 color: l.color,
                 fontVariantNumeric: 'tabular-nums',
               }}>{val}</span>
@@ -1140,12 +1179,14 @@ function TypoReadout({ focusLane, phase, canvasW, canvasH, paper, useFlats }) {
   }
   const onLeft = x > canvasW * 0.72;
   // Clamp the readout to stay inside the canvas vertically.  The huge
-  // serif numerals (fontSize: 52) plus the small uppercase units below
-  // total ~64 px; without this clamp, low values land near canvasH and
+  // serif numerals (fontSize: 38) plus the small uppercase units below
+  // total ~50 px; without this clamp, low values land near canvasH and
   // the text overflows the canvas's overflow:hidden into the X gutter
   // — which is what made the canvas appear to be "cut off by the gutter".
-  const READOUT_H = 64;
-  const top = Math.max(4, Math.min(y - 28, canvasH - READOUT_H));
+  // Audit F-25 dropped the font from 52 → 38 to reduce curve occlusion
+  // (especially in Note mode where labels like "C♯-1" are wider).
+  const READOUT_H = 50;
+  const top = Math.max(4, Math.min(y - 22, canvasH - READOUT_H));
   return (
     <div style={{
       position: 'absolute',
@@ -1156,7 +1197,7 @@ function TypoReadout({ focusLane, phase, canvasW, canvasH, paper, useFlats }) {
     }}>
       <div style={{
         fontFamily: '"Instrument Serif", Georgia, serif',
-        fontSize: 52, fontStyle: 'italic',
+        fontSize: 38, fontStyle: 'italic',
         color: focusLane.color,
         textShadow: `0 0 8px ${paper.bg}, 0 0 8px ${paper.bg}`,
         lineHeight: 1,
