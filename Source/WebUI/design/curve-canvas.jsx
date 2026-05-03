@@ -113,7 +113,13 @@ function CurveCanvas({
         userSelect: 'none',
         touchAction: 'none',
         overflow: 'hidden',
-        border: variant === 'studio' ? `1px solid ${paper.rule}` : 'none',
+        // No border on the studio variant: the surrounding gutters draw the
+        // visual edge.  Keeping a 1px border + global box-sizing:border-box
+        // shrank the inner content area by 2 px, so the SVG (rendered at
+        // exactly width × height) overflowed by 1 px on the right and
+        // bottom and got clipped by overflow:hidden — the visible
+        // "canvas cut off" symptom.
+        border: 'none',
         borderRadius: variant === 'studio' ? 2 : 0,
       }}
     >
@@ -270,19 +276,26 @@ function CurveCanvas({
           that would collide with the previously-kept one.  When skipping,
           prefer keeping root pcs where possible by ordering them first. */}
       {showAxisNotes && focusLane?.target === 'Note' && scaleBands && (() => {
-        const minSpacing = 14;  // px
+        const minSpacing = 14;          // px between kept labels
+        const labelH     = 14;          // approx height of a label glyph
         const active = scaleBands.filter(b => b.active);
         // Walk top→bottom (highest semi first because y is small at the top)
         const ordered = [...active].sort((a, b) => b.semi - a.semi);
         const kept = [];
         let lastY = -Infinity;
         for (const b of ordered) {
-          const y = height * (1 - b.y);
+          const yMid = height * (1 - b.y);
           // Always keep root pcs; otherwise enforce min spacing.
           const isRoot = b.pc === focusLane.scaleRoot;
-          if (isRoot || (y - lastY) >= minSpacing) {
-            kept.push({ ...b, y });
-            lastY = y;
+          if (isRoot || (yMid - lastY) >= minSpacing) {
+            // Clamp the LABEL's top so it stays fully inside the canvas.
+            // Without this, the bottommost band's label (yMid ≈ canvasH)
+            // had its lower half outside overflow:hidden — the user saw
+            // the C-1 / C♯-1 row "cut off" even though the band itself was
+            // technically rendered.
+            const top = Math.max(0, Math.min(height - labelH, yMid - labelH / 2));
+            kept.push({ ...b, top });
+            lastY = yMid;
           }
         }
         return (
@@ -292,9 +305,9 @@ function CurveCanvas({
           }}>
             {kept.map(b => (
               <div key={b.semi} style={{
-                position: 'absolute', left: 4, top: b.y - 7,
+                position: 'absolute', left: 4, top: b.top,
                 fontFamily: '"Instrument Serif", Georgia, serif',
-                fontSize: 12, fontStyle: 'italic',
+                fontSize: 12, fontStyle: 'italic', lineHeight: '14px',
                 color: b.pc === focusLane.scaleRoot ? paper.amberInk : paper.ink70,
                 fontWeight: b.pc === focusLane.scaleRoot ? 600 : 400,
               }}>

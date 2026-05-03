@@ -59,11 +59,12 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
   const paper = window.PAPER;
   const focusLane = eng.lanes.find(l => l.id === eng.focus);
 
-  const RIGHT_W = 148;  // always-visible lane panel
   const TOP_H = 52;
   const BOTTOM_H = 38;
   const [leftOpen, setLeftOpen] = React.useState(false);
   const LEFT_W = leftOpen ? 256 : 22;
+  const [rightOpen, setRightOpen] = React.useState(true);
+  const RIGHT_W = rightOpen ? 148 : 22;
 
   const [shelfOpen, setShelfOpen] = React.useState(false);
   const SHELF_H = shelfOpen ? 180 : 0;
@@ -110,11 +111,34 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
   const canvasW = width  - LEFT_W - RIGHT_W - Y_GUTTER_W;
   const canvasH = height - TOP_H - BOTTOM_H - SHELF_H - SCALE_H - X_GUTTER_H;
 
+  // Canvas sizing — track the canvas-area div's *actual* allocated size with
+  // a ResizeObserver instead of computing from window.innerWidth/Height.  The
+  // computed values (canvasW/canvasH) are used as a fallback before the
+  // observer fires; the live measured values take over after first paint.
+  // This makes the layout robust to:
+  //   • host windows that aren't exactly 1024×768
+  //   • the user resizing the standalone
+  //   • the right panel collapsing (canvas-area widens) and the scale/qurves
+  //     panels opening (canvas-area shortens) — both flexbox events that
+  //     window-based math can't see.
   const containerRef = React.useRef(null);
-  const [canvasSize, setCanvasSize] = React.useState({ w: canvasW, h: canvasH });
+  const [canvasSize, setCanvasSize] = React.useState({
+    w: Math.max(200, canvasW),
+    h: Math.max(100, canvasH),
+  });
   React.useLayoutEffect(() => {
-    setCanvasSize({ w: Math.max(200, canvasW), h: Math.max(100, canvasH) });
-  }, [canvasW, canvasH]);
+    if (! containerRef.current || typeof ResizeObserver === 'undefined') {
+      // Fallback: use the window-derived numbers.
+      setCanvasSize({ w: Math.max(200, canvasW), h: Math.max(100, canvasH) });
+      return;
+    }
+    const ro = new ResizeObserver(([entry]) => {
+      const { width: w, height: h } = entry.contentRect;
+      setCanvasSize({ w: Math.max(200, Math.floor(w)), h: Math.max(100, Math.floor(h)) });
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
 
   return (
     <div style={{
@@ -153,7 +177,7 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
             <YAxisGutter eng={eng} paper={paper} focusLane={focusLane}
               gridY={gridY} setGridY={setGridY} width={Y_GUTTER_W} />
 
-            <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+            <div ref={containerRef} style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
               <CurveCanvas
                 width={canvasSize.w} height={canvasSize.h}
                 lanes={eng.lanes} focus={eng.focus} phase={eng.phase}
@@ -188,23 +212,55 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
             shelfOpen={shelfOpen} setShelfOpen={setShelfOpen}
             scaleOpen={scaleOpen} setScaleOpen={setScaleOpen} />
 
-          {/* Scale wheel panel (slides up) */}
+          {/* Scale panel (slides up).  Three columns side-by-side:
+                1. SVG wheel (interval geometry, bracelet polygon, click to
+                   toggle pitches, double-tap / long-press to set root)
+                2. Family-grouped scale picker (8 families × 47 scales,
+                   matching Source/ScaleData.h)
+                3. Action row (All / Invert / None) + editable decimal
+                   bitmask + help blurb
+              Each column has its own scroll containment so the panel
+              never overflows into the X gutter or out of the panel below. */}
           <div style={{
             height: SCALE_H, overflow: 'hidden',
             transition: 'height 260ms ease-out',
             background: paper.card, borderTop: `1px solid ${paper.rule}`,
           }}>
             {SCALE_H > 0 && focusLane?.target === 'Note' && (
-              <div style={{ padding: '14px 18px', display: 'flex', gap: 24, alignItems: 'flex-start', height: '100%' }}>
+              <div style={{
+                padding: '12px 18px', display: 'flex', gap: 18,
+                alignItems: 'stretch', height: '100%',
+                boxSizing: 'border-box',
+              }}>
                 <ChromaticWheel lane={focusLane} updateLane={eng.updateLane}
-                  paper={paper} size={220} useFlats={eng.useFlats} />
-                <div style={{ flex: 1, borderLeft: `1px dashed ${paper.rule}`, paddingLeft: 20 }}>
+                  paper={paper} size={Math.min(220, SCALE_H - 24)}
+                  useFlats={eng.useFlats} />
+
+                <div style={{
+                  width: 220, flexShrink: 0,
+                  borderLeft: `1px dashed ${paper.rule}`, paddingLeft: 18,
+                  display: 'flex', flexDirection: 'column', minHeight: 0,
+                }}>
+                  <div style={{
+                    fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 1.5,
+                    color: paper.ink50, textTransform: 'uppercase',
+                    marginBottom: 8, flexShrink: 0,
+                  }}>Scale</div>
+                  <ScalePicker lane={focusLane} updateLane={eng.updateLane} paper={paper} />
+                </div>
+
+                <div style={{
+                  flex: 1, minWidth: 0,
+                  borderLeft: `1px dashed ${paper.rule}`, paddingLeft: 18,
+                  display: 'flex', flexDirection: 'column', gap: 12,
+                  overflowY: 'auto',
+                }}>
                   <div style={{
                     fontFamily: '"Instrument Serif", Georgia, serif',
-                    fontStyle: 'italic', fontSize: 20, marginBottom: 8,
+                    fontStyle: 'italic', fontSize: 20,
                     display: 'flex', alignItems: 'center', gap: 10,
                   }}>
-                    Scale
+                    Mask
                     {pluginSync && (
                       <span style={{
                         fontSize: 10, padding: '2px 8px', borderRadius: 10,
@@ -214,30 +270,39 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
                       }}>↓ synced from ScalePlugin</span>
                     )}
                   </div>
-                  <div style={{ fontSize: 11, color: paper.ink70, lineHeight: 1.7, maxWidth: 280 }}>
-                    The polygon shows your scale's interval geometry.
-                    Toggle pitch classes — your drawn curve will snap to them live.
-                    Double-tap a node to set the root.
-                  </div>
-                  <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {SCALES.map(s => (
-                      <button key={s.id}
-                        onClick={() => eng.updateLane(focusLane.id, { scaleId: s.id, scaleMask: s.mask })}
-                        style={{
-                          padding: '5px 10px', borderRadius: 2,
-                          border: `1px solid ${focusLane.scaleId === s.id ? paper.ink : paper.rule}`,
-                          background: focusLane.scaleId === s.id ? paper.ink : 'transparent',
-                          color: focusLane.scaleId === s.id ? paper.bg : paper.ink70,
-                          fontFamily: '"Instrument Serif", Georgia, serif',
-                          fontStyle: 'italic', fontSize: 14,
-                          cursor: 'pointer',
-                        }}>{s.name}</button>
-                    ))}
-                  </div>
-                  <div style={{ marginTop: 10, display: 'flex', gap: 6 }}>
-                    <Btn paper={paper} small onClick={() => eng.updateLane(focusLane.id, { scaleMask: 0b111111111111, scaleId: 'chromatic' })}>All</Btn>
-                    <Btn paper={paper} small onClick={() => eng.updateLane(focusLane.id, { scaleMask: (~focusLane.scaleMask) & 0b111111111111, scaleId: 'custom' })}>Invert</Btn>
+
+                  {/* Action row — All / Invert / None set the mask directly,
+                      same as the native editor's scale toolbar.  Recognition
+                      auto-names the scale where one matches. */}
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <Btn paper={paper} small onClick={() => eng.updateLane(focusLane.id, {
+                      scaleMask: 0xFFF, scaleId: 'chromatic',
+                    })}>All</Btn>
+                    <Btn paper={paper} small onClick={() => {
+                      const next = (~focusLane.scaleMask) & 0xFFF;
+                      eng.updateLane(focusLane.id, {
+                        scaleMask: next, scaleId: recognizeScaleId(next),
+                      });
+                    }}>Invert</Btn>
+                    <Btn paper={paper} small onClick={() => eng.updateLane(focusLane.id, {
+                      // "None" = root only.  Empty mask (0x000) would silence the
+                      // engine; root-only is what the native editor used.
+                      scaleMask: 0x800, scaleId: 'custom',
+                    })}>None</Btn>
                     {pluginSync && <Btn paper={paper} small tone="active">Re-sync ↺</Btn>}
+                  </div>
+
+                  {/* Editable decimal bitmask — type a value 0..4095 (e.g.
+                      2773 = C Ionian) to set the pitch-class set directly. */}
+                  <ScaleMaskInput lane={focusLane} updateLane={eng.updateLane} paper={paper} />
+
+                  <div style={{
+                    fontSize: 11, color: paper.ink70, lineHeight: 1.5,
+                    marginTop: 'auto',
+                  }}>
+                    Toggle pitches on the wheel · double-tap or hold a node
+                    to set the root · pick a preset to overwrite the mask ·
+                    type a decimal value to enter a custom set.
                   </div>
                 </div>
               </div>
@@ -255,7 +320,9 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
         </div>
 
         {/* Right lane panel — always visible */}
-        <JuceLanePanel eng={eng} paper={paper} width={RIGHT_W} height={height - TOP_H - BOTTOM_H} />
+        <JuceLanePanel eng={eng} paper={paper} width={RIGHT_W}
+          height={height - TOP_H - BOTTOM_H}
+          open={rightOpen} setOpen={setRightOpen} />
       </div>
 
       {/* ── Bottom bar ── */}
@@ -489,11 +556,40 @@ function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
 }
 
 // ── Right lane panel (always visible) ───────────────────────
-function JuceLanePanel({ eng, paper, width, height }) {
+function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
   // C++ engine caps lanes at kMaxLanes (4); hide the "+ Lane" button when
   // we're already at the cap so the click doesn't silently no-op.
   const MAX_LANES = 4;
   const canAdd = eng.lanes.length < MAX_LANES;
+
+  // Collapsed mode — show only a vertical "▸ lanes" tab so the user can
+  // reclaim canvas width.  Mirrors JuceShapeWell's collapsed handle.
+  if (!open) {
+    return (
+      <div style={{
+        width, height, flexShrink: 0,
+        borderLeft: `1px solid ${paper.rule}`,
+        background: paper.card,
+        display: 'flex', alignItems: 'stretch',
+        position: 'relative',
+      }}>
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+          title="Show lane panel"
+          style={{
+            flex: 1, background: 'transparent', border: 'none',
+            cursor: 'pointer',
+            writingMode: 'vertical-rl', transform: 'rotate(180deg)',
+            fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 2,
+            color: paper.ink50, textTransform: 'uppercase',
+            padding: '14px 2px',
+            position: 'relative', zIndex: 5,
+          }}>◂ lanes</button>
+      </div>
+    );
+  }
+
   return (
     <div style={{
       width, height, flexShrink: 0,
@@ -501,6 +597,7 @@ function JuceLanePanel({ eng, paper, width, height }) {
       background: paper.card,
       display: 'flex', flexDirection: 'column',
       overflowY: 'auto',
+      position: 'relative',
     }}>
       <div style={{
         padding: '10px 10px 6px',
@@ -509,21 +606,36 @@ function JuceLanePanel({ eng, paper, width, height }) {
         color: paper.ink50, textTransform: 'uppercase',
       }}>
         <span>Lanes</span>
-        {canAdd && (
+        <div style={{ display: 'flex', gap: 4 }}>
+          {canAdd && (
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); eng.addLane?.(); }}
+              title="Add lane"
+              style={{
+                width: 22, height: 22, padding: 0,
+                border: `1px solid ${paper.rule}`,
+                background: paper.bg, borderRadius: 2,
+                color: paper.ink70, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: 'Inter Tight', fontSize: 14, lineHeight: 1,
+                position: 'relative', zIndex: 5,
+              }}>+</button>
+          )}
           <button
             onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); eng.addLane?.(); }}
-            title="Add lane"
+            onClick={(e) => { e.stopPropagation(); setOpen(false); }}
+            title="Hide lane panel"
             style={{
               width: 22, height: 22, padding: 0,
               border: `1px solid ${paper.rule}`,
               background: paper.bg, borderRadius: 2,
               color: paper.ink70, cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'Inter Tight', fontSize: 14, lineHeight: 1,
+              fontFamily: 'Inter Tight', fontSize: 11, lineHeight: 1,
               position: 'relative', zIndex: 5,
-            }}>+</button>
-        )}
+            }}>▸</button>
+        </div>
       </div>
 
       {eng.lanes.map(l => {
@@ -748,6 +860,56 @@ function PresetBtn({ label, active, onClick, paper }) {
   );
 }
 
+// Editable decimal bitmask field for the scale panel.  Shows the current
+// scaleMask as a 0..4095 integer and lets the user type a new value to set
+// it directly — mirrors the native editor's mask entry.  Local draft state
+// keeps the input editable while invalid; only commits on Enter / blur.
+function ScaleMaskInput({ lane, updateLane, paper }) {
+  const current = lane.scaleMask & 0xFFF;
+  const [draft, setDraft] = React.useState(String(current));
+  // Re-sync when the lane's mask changes from elsewhere (toggle, preset,
+  // All/Invert/None) so the input doesn't get stuck on a stale value.
+  React.useEffect(() => { setDraft(String(current)); }, [current]);
+
+  const commit = () => {
+    const n = parseInt(draft, 10);
+    if (Number.isFinite(n) && n >= 0 && n <= 0xFFF && n !== current) {
+      updateLane(lane.id, { scaleMask: n, scaleId: recognizeScaleId(n) });
+    } else {
+      setDraft(String(current));   // revert if invalid
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={{
+        fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 1.4,
+        color: paper.ink50, textTransform: 'uppercase',
+      }}>Mask</span>
+      <input type="text" value={draft}
+        onPointerDown={(e) => e.stopPropagation()}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { commit(); e.currentTarget.blur(); }
+          if (e.key === 'Escape') { setDraft(String(current)); e.currentTarget.blur(); }
+        }}
+        onBlur={commit}
+        style={{
+          width: 64, padding: '3px 8px',
+          fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+          fontSize: 13, fontVariantNumeric: 'tabular-nums',
+          color: paper.ink, background: paper.bg,
+          border: `1px solid ${paper.rule}`, borderRadius: 2,
+          textAlign: 'right', outline: 'none',
+        }} />
+      <span style={{
+        fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+        fontSize: 10, color: paper.ink50,
+      }}>0x{current.toString(16).toUpperCase().padStart(3, '0')}</span>
+    </div>
+  );
+}
+
 function LockBtn({ axis, active, onClick, paper }) {
   return (
     <button
@@ -856,6 +1018,9 @@ function XAxisGutter({ eng, paper, focusLane, gridX, setGridX, height, cornerW,
       borderTop: `1px solid ${paper.rule}`,
       background: paper.card,
       position: 'relative', zIndex: 4,
+      // Clip overflow so the right-side qurves/scale toggles can't spill past
+      // the gutter when the X presets are showing on a narrow window.
+      overflow: 'hidden',
     }}>
       {/* Corner cell — width matches the Y gutter so the '#' aligns. */}
       <div style={{
@@ -974,11 +1139,18 @@ function TypoReadout({ focusLane, phase, canvasW, canvasH, paper, useFlats }) {
     units = 'aft';
   }
   const onLeft = x > canvasW * 0.72;
+  // Clamp the readout to stay inside the canvas vertically.  The huge
+  // serif numerals (fontSize: 52) plus the small uppercase units below
+  // total ~64 px; without this clamp, low values land near canvasH and
+  // the text overflows the canvas's overflow:hidden into the X gutter
+  // — which is what made the canvas appear to be "cut off by the gutter".
+  const READOUT_H = 64;
+  const top = Math.max(4, Math.min(y - 28, canvasH - READOUT_H));
   return (
     <div style={{
       position: 'absolute',
       left: onLeft ? Math.max(4, x - 100) : x + 14,
-      top: Math.max(4, y - 28),
+      top,
       pointerEvents: 'none', zIndex: 5,
       lineHeight: 0.9,
     }}>

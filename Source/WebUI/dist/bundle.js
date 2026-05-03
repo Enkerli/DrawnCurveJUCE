@@ -24377,7 +24377,13 @@
           userSelect: "none",
           touchAction: "none",
           overflow: "hidden",
-          border: variant === "studio" ? `1px solid ${paper.rule}` : "none",
+          // No border on the studio variant: the surrounding gutters draw the
+          // visual edge.  Keeping a 1px border + global box-sizing:border-box
+          // shrank the inner content area by 2 px, so the SVG (rendered at
+          // exactly width × height) overflowed by 1 px on the right and
+          // bottom and got clipped by overflow:hidden — the visible
+          // "canvas cut off" symptom.
+          border: "none",
           borderRadius: variant === "studio" ? 2 : 0
         }
       },
@@ -24537,16 +24543,18 @@
       ),
       showAxisNotes && focusLane?.target === "Note" && scaleBands && (() => {
         const minSpacing = 14;
+        const labelH = 14;
         const active = scaleBands.filter((b) => b.active);
         const ordered = [...active].sort((a, b) => b.semi - a.semi);
         const kept = [];
         let lastY = -Infinity;
         for (const b of ordered) {
-          const y = height * (1 - b.y);
+          const yMid = height * (1 - b.y);
           const isRoot = b.pc === focusLane.scaleRoot;
-          if (isRoot || y - lastY >= minSpacing) {
-            kept.push({ ...b, y });
-            lastY = y;
+          if (isRoot || yMid - lastY >= minSpacing) {
+            const top = Math.max(0, Math.min(height - labelH, yMid - labelH / 2));
+            kept.push({ ...b, top });
+            lastY = yMid;
           }
         }
         return /* @__PURE__ */ React.createElement("div", { style: {
@@ -24559,10 +24567,11 @@
         } }, kept.map((b) => /* @__PURE__ */ React.createElement("div", { key: b.semi, style: {
           position: "absolute",
           left: 4,
-          top: b.y - 7,
+          top: b.top,
           fontFamily: '"Instrument Serif", Georgia, serif',
           fontSize: 12,
           fontStyle: "italic",
+          lineHeight: "14px",
           color: b.pc === focusLane.scaleRoot ? paper.amberInk : paper.ink70,
           fontWeight: b.pc === focusLane.scaleRoot ? 600 : 400
         } }, window.pitchName(b.pc, useFlats))));
@@ -24595,6 +24604,11 @@
 
   // design/scale-editor.jsx
   init_react_globals();
+  function recognizeScaleId2(mask) {
+    const m = mask & 4095;
+    const found = SCALES.find((s) => s.mask === m);
+    return found ? found.id : "custom";
+  }
   function PianoScaleRow({ lane, updateLane, paper = window.PAPER, useFlats = false }) {
     const { scaleMask, scaleRoot, scaleId } = lane;
     const white = [0, 2, 4, 5, 7, 9, 11];
@@ -24608,10 +24622,13 @@
       return /* @__PURE__ */ React.createElement(
         "div",
         {
-          onClick: () => updateLane(lane.id, {
-            scaleMask: togglePc(scaleMask, relOf(pc)),
-            scaleId: "custom"
-          }),
+          onClick: () => {
+            const newMask = togglePc(scaleMask, relOf(pc));
+            updateLane(lane.id, {
+              scaleMask: newMask,
+              scaleId: recognizeScaleId2(newMask)
+            });
+          },
           onDoubleClick: () => updateLane(lane.id, { scaleRoot: pc }),
           style: {
             width: kind === "white" ? 42 : 28,
@@ -24709,21 +24726,7 @@
       const p = pos(pc, mid);
       return (i === 0 ? "M" : "L") + p.x.toFixed(1) + "," + p.y.toFixed(1);
     }).join(" ") + " Z" : null;
-    const families = React.useMemo(() => {
-      const seen = /* @__PURE__ */ new Set();
-      const out = [];
-      for (const s of SCALES) if (!seen.has(s.family)) {
-        seen.add(s.family);
-        out.push(s.family);
-      }
-      return out;
-    }, []);
-    const currentScale = SCALES.find((s) => s.id === scaleId);
-    const [selectedFamily, setSelectedFamily] = React.useState(
-      () => currentScale?.family || "Diatonic"
-    );
-    const familyScales = SCALES.filter((s) => s.family === selectedFamily);
-    return /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 20, alignItems: "flex-start" } }, /* @__PURE__ */ React.createElement("svg", { width: size, height: size, style: { flexShrink: 0, overflow: "visible" } }, /* @__PURE__ */ React.createElement("circle", { cx: r, cy: r, r: r - 4, fill: "none", stroke: paper.rule, strokeWidth: 0.5, strokeDasharray: "2 3" }), /* @__PURE__ */ React.createElement("circle", { cx: r, cy: r, r: mid, fill: "none", stroke: paper.ruleFaint, strokeWidth: 0.5 }), /* @__PURE__ */ React.createElement("circle", { cx: r, cy: r, r: inner, fill: "none", stroke: paper.ruleFaint, strokeWidth: 0.5 }), pcs.map((pc) => {
+    return /* @__PURE__ */ React.createElement("svg", { width: size, height: size, style: { flexShrink: 0, overflow: "visible" } }, /* @__PURE__ */ React.createElement("circle", { cx: r, cy: r, r: r - 4, fill: "none", stroke: paper.rule, strokeWidth: 0.5, strokeDasharray: "2 3" }), /* @__PURE__ */ React.createElement("circle", { cx: r, cy: r, r: mid, fill: "none", stroke: paper.ruleFaint, strokeWidth: 0.5 }), /* @__PURE__ */ React.createElement("circle", { cx: r, cy: r, r: inner, fill: "none", stroke: paper.ruleFaint, strokeWidth: 0.5 }), pcs.map((pc) => {
       const a = pc / 12 * Math.PI * 2 - Math.PI / 2;
       return /* @__PURE__ */ React.createElement(
         "line",
@@ -24754,10 +24757,13 @@
         "g",
         {
           key: pc,
-          onClick: () => updateLane(lane.id, {
-            scaleMask: togglePc(scaleMask, relOf(pc)),
-            scaleId: "custom"
-          }),
+          onClick: () => {
+            const newMask = togglePc(scaleMask, relOf(pc));
+            updateLane(lane.id, {
+              scaleMask: newMask,
+              scaleId: recognizeScaleId2(newMask)
+            });
+          },
           onDoubleClick: () => updateLane(lane.id, { scaleRoot: pc }),
           onPointerDown: (e) => {
             e.stopPropagation();
@@ -24811,21 +24817,54 @@
         },
         window.pitchName(pc, useFlats)
       );
-    }), /* @__PURE__ */ React.createElement("text", { x: r, y: r - 4, textAnchor: "middle", style: {
+    }), /* @__PURE__ */ React.createElement("text", { x: r, y: r - 12, textAnchor: "middle", style: {
       fontFamily: '"Instrument Serif", Georgia, serif',
       fontSize: 16,
       fontStyle: "italic",
       fill: paper.ink
-    } }, (SCALES.find((s) => s.id === scaleId) || { name: "Custom" }).name), /* @__PURE__ */ React.createElement("text", { x: r, y: r + 12, textAnchor: "middle", style: {
+    } }, (SCALES.find((s) => s.id === scaleId) || { name: "Custom" }).name), /* @__PURE__ */ React.createElement("text", { x: r, y: r + 4, textAnchor: "middle", style: {
       fontFamily: "Inter Tight, Inter, system-ui, sans-serif",
       fontSize: 10,
       fill: paper.ink50,
       letterSpacing: 1.2
-    } }, window.pitchName(scaleRoot, useFlats), " ROOT")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8, flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 4, flexWrap: "wrap" } }, families.map((f) => /* @__PURE__ */ React.createElement(
+    } }, window.pitchName(scaleRoot, useFlats), " ROOT"), /* @__PURE__ */ React.createElement("text", { x: r, y: r + 22, textAnchor: "middle", style: {
+      fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+      fontSize: 14,
+      fill: paper.ink70,
+      letterSpacing: 0.5,
+      fontVariantNumeric: "tabular-nums"
+    } }, scaleMask & 4095));
+  }
+  function ScalePicker2({ lane, updateLane, paper = window.PAPER }) {
+    const { scaleId } = lane;
+    const families = React.useMemo(() => {
+      const seen = /* @__PURE__ */ new Set();
+      const out = [];
+      for (const s of SCALES) if (!seen.has(s.family)) {
+        seen.add(s.family);
+        out.push(s.family);
+      }
+      return out;
+    }, []);
+    const currentScale = SCALES.find((s) => s.id === scaleId);
+    const [selectedFamily, setSelectedFamily] = React.useState(
+      () => currentScale?.family || families[0] || "Diatonic"
+    );
+    React.useEffect(() => {
+      if (currentScale && currentScale.family !== selectedFamily) {
+        setSelectedFamily(currentScale.family);
+      }
+    }, [currentScale?.family]);
+    const familyScales = SCALES.filter((s) => s.family === selectedFamily);
+    return /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8, minHeight: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 4, flexWrap: "wrap", flexShrink: 0 } }, families.map((f) => /* @__PURE__ */ React.createElement(
       "button",
       {
         key: f,
-        onClick: () => setSelectedFamily(f),
+        onPointerDown: (e) => e.stopPropagation(),
+        onClick: (e) => {
+          e.stopPropagation();
+          setSelectedFamily(f);
+        },
         style: {
           padding: "4px 10px",
           borderRadius: 2,
@@ -24836,15 +24875,21 @@
           fontSize: 10,
           letterSpacing: 1,
           textTransform: "uppercase",
-          cursor: "pointer"
+          cursor: "pointer",
+          position: "relative",
+          zIndex: 5
         }
       },
       f
-    ))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } }, familyScales.map((s) => /* @__PURE__ */ React.createElement(
+    ))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4, overflowY: "auto", minHeight: 0 } }, familyScales.map((s) => /* @__PURE__ */ React.createElement(
       "button",
       {
         key: s.id,
-        onClick: () => updateLane(lane.id, { scaleId: s.id, scaleMask: s.mask }),
+        onPointerDown: (e) => e.stopPropagation(),
+        onClick: (e) => {
+          e.stopPropagation();
+          updateLane(lane.id, { scaleId: s.id, scaleMask: s.mask });
+        },
         style: {
           padding: "5px 10px",
           borderRadius: 2,
@@ -24855,19 +24900,15 @@
           fontSize: 15,
           fontStyle: "italic",
           cursor: "pointer",
-          textAlign: "left"
+          textAlign: "left",
+          position: "relative",
+          zIndex: 5
         }
       },
       s.name
-    ))), /* @__PURE__ */ React.createElement("div", { style: {
-      marginTop: 4,
-      fontSize: 10,
-      fontFamily: "Inter Tight",
-      color: paper.ink50,
-      lineHeight: 1.5
-    } }, "tap to toggle pitch\xB7", /* @__PURE__ */ React.createElement("br", null), "double-tap or hold to set root\xB7", /* @__PURE__ */ React.createElement("br", null), "shape shows interval geometry")));
+    ))));
   }
-  Object.assign(window, { PianoScaleRow, ChromaticWheel: ChromaticWheel2 });
+  Object.assign(window, { PianoScaleRow, ChromaticWheel: ChromaticWheel2, ScalePicker: ScalePicker2, recognizeScaleId: recognizeScaleId2 });
 
   // juce-bridge.js
   init_react_globals();
@@ -25083,11 +25124,12 @@
     const eng = useDrawnQurveEngine({ mode: "standard" });
     const paper = window.PAPER;
     const focusLane = eng.lanes.find((l) => l.id === eng.focus);
-    const RIGHT_W = 148;
     const TOP_H = 52;
     const BOTTOM_H = 38;
     const [leftOpen, setLeftOpen] = React.useState(false);
     const LEFT_W = leftOpen ? 256 : 22;
+    const [rightOpen, setRightOpen] = React.useState(true);
+    const RIGHT_W = rightOpen ? 148 : 22;
     const [shelfOpen, setShelfOpen] = React.useState(false);
     const SHELF_H = shelfOpen ? 180 : 0;
     const [scaleOpen, setScaleOpen] = React.useState(false);
@@ -25116,10 +25158,22 @@
     const canvasW = width - LEFT_W - RIGHT_W - Y_GUTTER_W;
     const canvasH = height - TOP_H - BOTTOM_H - SHELF_H - SCALE_H - X_GUTTER_H;
     const containerRef = React.useRef(null);
-    const [canvasSize, setCanvasSize] = React.useState({ w: canvasW, h: canvasH });
+    const [canvasSize, setCanvasSize] = React.useState({
+      w: Math.max(200, canvasW),
+      h: Math.max(100, canvasH)
+    });
     React.useLayoutEffect(() => {
-      setCanvasSize({ w: Math.max(200, canvasW), h: Math.max(100, canvasH) });
-    }, [canvasW, canvasH]);
+      if (!containerRef.current || typeof ResizeObserver === "undefined") {
+        setCanvasSize({ w: Math.max(200, canvasW), h: Math.max(100, canvasH) });
+        return;
+      }
+      const ro = new ResizeObserver(([entry]) => {
+        const { width: w, height: h } = entry.contentRect;
+        setCanvasSize({ w: Math.max(200, Math.floor(w)), h: Math.max(100, Math.floor(h)) });
+      });
+      ro.observe(containerRef.current);
+      return () => ro.disconnect();
+    }, []);
     return /* @__PURE__ */ React.createElement("div", { style: {
       width,
       height,
@@ -25165,7 +25219,7 @@
         setGridY,
         width: Y_GUTTER_W
       }
-    ), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, position: "relative", overflow: "hidden" } }, /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement("div", { ref: containerRef, style: { flex: 1, position: "relative", overflow: "hidden" } }, /* @__PURE__ */ React.createElement(
       CurveCanvas,
       {
         width: canvasSize.w,
@@ -25215,24 +25269,55 @@
       transition: "height 260ms ease-out",
       background: paper.card,
       borderTop: `1px solid ${paper.rule}`
-    } }, SCALE_H > 0 && focusLane?.target === "Note" && /* @__PURE__ */ React.createElement("div", { style: { padding: "14px 18px", display: "flex", gap: 24, alignItems: "flex-start", height: "100%" } }, /* @__PURE__ */ React.createElement(
+    } }, SCALE_H > 0 && focusLane?.target === "Note" && /* @__PURE__ */ React.createElement("div", { style: {
+      padding: "12px 18px",
+      display: "flex",
+      gap: 18,
+      alignItems: "stretch",
+      height: "100%",
+      boxSizing: "border-box"
+    } }, /* @__PURE__ */ React.createElement(
       ChromaticWheel,
       {
         lane: focusLane,
         updateLane: eng.updateLane,
         paper,
-        size: 220,
+        size: Math.min(220, SCALE_H - 24),
         useFlats: eng.useFlats
       }
-    ), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, borderLeft: `1px dashed ${paper.rule}`, paddingLeft: 20 } }, /* @__PURE__ */ React.createElement("div", { style: {
+    ), /* @__PURE__ */ React.createElement("div", { style: {
+      width: 220,
+      flexShrink: 0,
+      borderLeft: `1px dashed ${paper.rule}`,
+      paddingLeft: 18,
+      display: "flex",
+      flexDirection: "column",
+      minHeight: 0
+    } }, /* @__PURE__ */ React.createElement("div", { style: {
+      fontFamily: "Inter Tight",
+      fontSize: 10,
+      letterSpacing: 1.5,
+      color: paper.ink50,
+      textTransform: "uppercase",
+      marginBottom: 8,
+      flexShrink: 0
+    } }, "Scale"), /* @__PURE__ */ React.createElement(ScalePicker, { lane: focusLane, updateLane: eng.updateLane, paper })), /* @__PURE__ */ React.createElement("div", { style: {
+      flex: 1,
+      minWidth: 0,
+      borderLeft: `1px dashed ${paper.rule}`,
+      paddingLeft: 18,
+      display: "flex",
+      flexDirection: "column",
+      gap: 12,
+      overflowY: "auto"
+    } }, /* @__PURE__ */ React.createElement("div", { style: {
       fontFamily: '"Instrument Serif", Georgia, serif',
       fontStyle: "italic",
       fontSize: 20,
-      marginBottom: 8,
       display: "flex",
       alignItems: "center",
       gap: 10
-    } }, "Scale", pluginSync && /* @__PURE__ */ React.createElement("span", { style: {
+    } }, "Mask", pluginSync && /* @__PURE__ */ React.createElement("span", { style: {
       fontSize: 10,
       padding: "2px 8px",
       borderRadius: 10,
@@ -25240,31 +25325,42 @@
       color: paper.amberInk,
       fontFamily: "Inter Tight",
       letterSpacing: 0.5
-    } }, "\u2193 synced from ScalePlugin")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: paper.ink70, lineHeight: 1.7, maxWidth: 280 } }, "The polygon shows your scale's interval geometry. Toggle pitch classes \u2014 your drawn curve will snap to them live. Double-tap a node to set the root."), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" } }, SCALES.map((s) => /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        key: s.id,
-        onClick: () => eng.updateLane(focusLane.id, { scaleId: s.id, scaleMask: s.mask }),
-        style: {
-          padding: "5px 10px",
-          borderRadius: 2,
-          border: `1px solid ${focusLane.scaleId === s.id ? paper.ink : paper.rule}`,
-          background: focusLane.scaleId === s.id ? paper.ink : "transparent",
-          color: focusLane.scaleId === s.id ? paper.bg : paper.ink70,
-          fontFamily: '"Instrument Serif", Georgia, serif',
-          fontStyle: "italic",
-          fontSize: 14,
-          cursor: "pointer"
-        }
-      },
-      s.name
-    ))), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10, display: "flex", gap: 6 } }, /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: () => eng.updateLane(focusLane.id, { scaleMask: 4095, scaleId: "chromatic" }) }, "All"), /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: () => eng.updateLane(focusLane.id, { scaleMask: ~focusLane.scaleMask & 4095, scaleId: "custom" }) }, "Invert"), pluginSync && /* @__PURE__ */ React.createElement(Btn, { paper, small: true, tone: "active" }, "Re-sync \u21BA"))))), /* @__PURE__ */ React.createElement("div", { style: {
+    } }, "\u2193 synced from ScalePlugin")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: () => eng.updateLane(focusLane.id, {
+      scaleMask: 4095,
+      scaleId: "chromatic"
+    }) }, "All"), /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: () => {
+      const next = ~focusLane.scaleMask & 4095;
+      eng.updateLane(focusLane.id, {
+        scaleMask: next,
+        scaleId: recognizeScaleId(next)
+      });
+    } }, "Invert"), /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: () => eng.updateLane(focusLane.id, {
+      // "None" = root only.  Empty mask (0x000) would silence the
+      // engine; root-only is what the native editor used.
+      scaleMask: 2048,
+      scaleId: "custom"
+    }) }, "None"), pluginSync && /* @__PURE__ */ React.createElement(Btn, { paper, small: true, tone: "active" }, "Re-sync \u21BA")), /* @__PURE__ */ React.createElement(ScaleMaskInput, { lane: focusLane, updateLane: eng.updateLane, paper }), /* @__PURE__ */ React.createElement("div", { style: {
+      fontSize: 11,
+      color: paper.ink70,
+      lineHeight: 1.5,
+      marginTop: "auto"
+    } }, "Toggle pitches on the wheel \xB7 double-tap or hold a node to set the root \xB7 pick a preset to overwrite the mask \xB7 type a decimal value to enter a custom set.")))), /* @__PURE__ */ React.createElement("div", { style: {
       height: SHELF_H,
       overflow: "hidden",
       transition: "height 240ms ease-out",
       background: paper.bgDeep,
       borderTop: `1px solid ${paper.rule}`
-    } }, SHELF_H > 0 && /* @__PURE__ */ React.createElement(QurveShelf, { eng, paper, focusLane }))), /* @__PURE__ */ React.createElement(JuceLanePanel, { eng, paper, width: RIGHT_W, height: height - TOP_H - BOTTOM_H })), /* @__PURE__ */ React.createElement(JuceBottomBar, { eng, paper, h: BOTTOM_H }));
+    } }, SHELF_H > 0 && /* @__PURE__ */ React.createElement(QurveShelf, { eng, paper, focusLane }))), /* @__PURE__ */ React.createElement(
+      JuceLanePanel,
+      {
+        eng,
+        paper,
+        width: RIGHT_W,
+        height: height - TOP_H - BOTTOM_H,
+        open: rightOpen,
+        setOpen: setRightOpen
+      }
+    )), /* @__PURE__ */ React.createElement(JuceBottomBar, { eng, paper, h: BOTTOM_H }));
   }
   function JuceTopBar({ eng, paper, h, midiGhostOn, setMidiGhostOn, pluginSync, setPluginSync }) {
     return /* @__PURE__ */ React.createElement("div", { style: {
@@ -25500,9 +25596,48 @@
       padding: "14px 2px"
     } }, open ? "\u25C2" : "\u25B8 shape"));
   }
-  function JuceLanePanel({ eng, paper, width, height }) {
+  function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
     const MAX_LANES = 4;
     const canAdd = eng.lanes.length < MAX_LANES;
+    if (!open) {
+      return /* @__PURE__ */ React.createElement("div", { style: {
+        width,
+        height,
+        flexShrink: 0,
+        borderLeft: `1px solid ${paper.rule}`,
+        background: paper.card,
+        display: "flex",
+        alignItems: "stretch",
+        position: "relative"
+      } }, /* @__PURE__ */ React.createElement(
+        "button",
+        {
+          onPointerDown: (e) => e.stopPropagation(),
+          onClick: (e) => {
+            e.stopPropagation();
+            setOpen(true);
+          },
+          title: "Show lane panel",
+          style: {
+            flex: 1,
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            writingMode: "vertical-rl",
+            transform: "rotate(180deg)",
+            fontFamily: "Inter Tight",
+            fontSize: 10,
+            letterSpacing: 2,
+            color: paper.ink50,
+            textTransform: "uppercase",
+            padding: "14px 2px",
+            position: "relative",
+            zIndex: 5
+          }
+        },
+        "\u25C2 lanes"
+      ));
+    }
     return /* @__PURE__ */ React.createElement("div", { style: {
       width,
       height,
@@ -25511,7 +25646,8 @@
       background: paper.card,
       display: "flex",
       flexDirection: "column",
-      overflowY: "auto"
+      overflowY: "auto",
+      position: "relative"
     } }, /* @__PURE__ */ React.createElement("div", { style: {
       padding: "10px 10px 6px",
       display: "flex",
@@ -25522,7 +25658,7 @@
       letterSpacing: 1.5,
       color: paper.ink50,
       textTransform: "uppercase"
-    } }, /* @__PURE__ */ React.createElement("span", null, "Lanes"), canAdd && /* @__PURE__ */ React.createElement(
+    } }, /* @__PURE__ */ React.createElement("span", null, "Lanes"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 4 } }, canAdd && /* @__PURE__ */ React.createElement(
       "button",
       {
         onPointerDown: (e) => e.stopPropagation(),
@@ -25551,7 +25687,36 @@
         }
       },
       "+"
-    )), eng.lanes.map((l) => {
+    ), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onPointerDown: (e) => e.stopPropagation(),
+        onClick: (e) => {
+          e.stopPropagation();
+          setOpen(false);
+        },
+        title: "Hide lane panel",
+        style: {
+          width: 22,
+          height: 22,
+          padding: 0,
+          border: `1px solid ${paper.rule}`,
+          background: paper.bg,
+          borderRadius: 2,
+          color: paper.ink70,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "Inter Tight",
+          fontSize: 11,
+          lineHeight: 1,
+          position: "relative",
+          zIndex: 5
+        }
+      },
+      "\u25B8"
+    ))), eng.lanes.map((l) => {
       const focused = eng.focus === l.id;
       return /* @__PURE__ */ React.createElement(
         "div",
@@ -25828,6 +25993,64 @@
       label
     );
   }
+  function ScaleMaskInput({ lane, updateLane, paper }) {
+    const current = lane.scaleMask & 4095;
+    const [draft, setDraft] = React.useState(String(current));
+    React.useEffect(() => {
+      setDraft(String(current));
+    }, [current]);
+    const commit = () => {
+      const n = parseInt(draft, 10);
+      if (Number.isFinite(n) && n >= 0 && n <= 4095 && n !== current) {
+        updateLane(lane.id, { scaleMask: n, scaleId: recognizeScaleId(n) });
+      } else {
+        setDraft(String(current));
+      }
+    };
+    return /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("span", { style: {
+      fontFamily: "Inter Tight",
+      fontSize: 10,
+      letterSpacing: 1.4,
+      color: paper.ink50,
+      textTransform: "uppercase"
+    } }, "Mask"), /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        type: "text",
+        value: draft,
+        onPointerDown: (e) => e.stopPropagation(),
+        onChange: (e) => setDraft(e.target.value),
+        onKeyDown: (e) => {
+          if (e.key === "Enter") {
+            commit();
+            e.currentTarget.blur();
+          }
+          if (e.key === "Escape") {
+            setDraft(String(current));
+            e.currentTarget.blur();
+          }
+        },
+        onBlur: commit,
+        style: {
+          width: 64,
+          padding: "3px 8px",
+          fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+          fontSize: 13,
+          fontVariantNumeric: "tabular-nums",
+          color: paper.ink,
+          background: paper.bg,
+          border: `1px solid ${paper.rule}`,
+          borderRadius: 2,
+          textAlign: "right",
+          outline: "none"
+        }
+      }
+    ), /* @__PURE__ */ React.createElement("span", { style: {
+      fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+      fontSize: 10,
+      color: paper.ink50
+    } }, "0x", current.toString(16).toUpperCase().padStart(3, "0")));
+  }
   function LockBtn({ axis, active, onClick, paper }) {
     return /* @__PURE__ */ React.createElement(
       "button",
@@ -25943,7 +26166,10 @@
       borderTop: `1px solid ${paper.rule}`,
       background: paper.card,
       position: "relative",
-      zIndex: 4
+      zIndex: 4,
+      // Clip overflow so the right-side qurves/scale toggles can't spill past
+      // the gutter when the X presets are showing on a narrow window.
+      overflow: "hidden"
     } }, /* @__PURE__ */ React.createElement("div", { style: {
       width: cornerW,
       height: "100%",
@@ -26078,10 +26304,12 @@
       units = "aft";
     }
     const onLeft = x > canvasW * 0.72;
+    const READOUT_H = 64;
+    const top = Math.max(4, Math.min(y - 28, canvasH - READOUT_H));
     return /* @__PURE__ */ React.createElement("div", { style: {
       position: "absolute",
       left: onLeft ? Math.max(4, x - 100) : x + 14,
-      top: Math.max(4, y - 28),
+      top,
       pointerEvents: "none",
       zIndex: 5,
       lineHeight: 0.9

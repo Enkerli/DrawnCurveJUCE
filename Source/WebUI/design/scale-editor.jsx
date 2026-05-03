@@ -1,5 +1,28 @@
 // Scale editors — v1 piano-row style (safe), v2 chromatic wheel (bold).
 // Both toggle pitch classes in a lane's scaleMask.
+//
+// Module-scope helpers shared by both widgets.
+
+// Identify which preset (if any) corresponds to a given interval mask, so
+// toggling pitches that happen to land on a known scale shows that scale's
+// name instead of "Custom".  Mirrors the C++ pcsRecognise() in ScaleData.h.
+function recognizeScaleId(mask) {
+  const m = mask & 0xFFF;
+  const found = SCALES.find(s => s.mask === m);
+  return found ? found.id : 'custom';
+}
+
+// Format a 12-bit interval mask for display: "1010 1101 0101" (bit 11 → 0,
+// root on the left).  Easy to scan against the standard interval template.
+function formatMaskBits(mask) {
+  const m = mask & 0xFFF;
+  let out = '';
+  for (let i = 0; i < 12; i++) {
+    out += ((m >> (11 - i)) & 1) ? '1' : '0';
+    if (i === 3 || i === 7) out += ' ';
+  }
+  return out;
+}
 
 // ──────────────────────────────────────────────────────────
 // v1: Piano-row — 5 black / 7 white layout (established idiom)
@@ -23,10 +46,13 @@ function PianoScaleRow({ lane, updateLane, paper = window.PAPER, useFlats = fals
     const fg = kind === 'white' ? paper.ink : 'oklch(92% 0.012 80)';
     return (
       <div
-        onClick={() => updateLane(lane.id, {
-          scaleMask: togglePc(scaleMask, relOf(pc)),
-          scaleId: 'custom',
-        })}
+        onClick={() => {
+          const newMask = togglePc(scaleMask, relOf(pc));
+          updateLane(lane.id, {
+            scaleMask: newMask,
+            scaleId: recognizeScaleId(newMask),
+          });
+        }}
         onDoubleClick={() => updateLane(lane.id, { scaleRoot: pc })}
         style={{
           width: kind === 'white' ? 42 : 28,
@@ -124,6 +150,12 @@ function PianoScaleRow({ lane, updateLane, paper = window.PAPER, useFlats = fals
 // of this widget didn't, which broke transposition: changing the root
 // shifted nothing on screen even though the audio output really had moved.
 // ──────────────────────────────────────────────────────────
+// ChromaticWheel renders just the SVG with the 12 pitch nodes, scale shape
+// polygon, and centre labels.  The family/scale picker lives in the parent
+// (juce-ipad.jsx scale panel) so it shares the layout with the All / Invert /
+// None action row and the editable mask input.  Standalone callers that want
+// the wheel + its own picker can wrap it; design previews in the bundle
+// kept the inline picker, but the JUCE Studio uses just the wheel here.
 function ChromaticWheel({ lane, updateLane, paper = window.PAPER, size = 240, useFlats = false }) {
   const { scaleMask, scaleRoot, scaleId } = lane;
   const r = size / 2;
@@ -166,22 +198,9 @@ function ChromaticWheel({ lane, updateLane, paper = window.PAPER, size = 240, us
     : null;
 
   // Family-grouped scale picker (Diatonic / Pentatonic / Symmetric / Harmonic).
-  // Family list — derived from SCALES so adding scales/families in tokens.jsx
-  // automatically shows up here.  Order is the order they first appear in
-  // SCALES (matches Source/ScaleData.h ordering).
-  const families = React.useMemo(() => {
-    const seen = new Set();
-    const out = [];
-    for (const s of SCALES) if (!seen.has(s.family)) { seen.add(s.family); out.push(s.family); }
-    return out;
-  }, []);
-  const currentScale = SCALES.find(s => s.id === scaleId);
-  const [selectedFamily, setSelectedFamily] = React.useState(
-    () => currentScale?.family || 'Diatonic');
-  const familyScales = SCALES.filter(s => s.family === selectedFamily);
+  // Wheel is now SVG-only — picker logic moved to juce-ipad.jsx scale panel.
 
   return (
-    <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
       <svg width={size} height={size} style={{ flexShrink: 0, overflow: 'visible' }}>
         {/* outer ruled circle */}
         <circle cx={r} cy={r} r={r - 4} fill="none" stroke={paper.rule} strokeWidth={0.5} strokeDasharray="2 3" />
@@ -216,10 +235,13 @@ function ChromaticWheel({ lane, updateLane, paper = window.PAPER, size = 240, us
           const isRoot = pc === scaleRoot;
           return (
             <g key={pc}
-               onClick={() => updateLane(lane.id, {
-                 scaleMask: togglePc(scaleMask, relOf(pc)),
-                 scaleId: 'custom',
-               })}
+               onClick={() => {
+                 const newMask = togglePc(scaleMask, relOf(pc));
+                 updateLane(lane.id, {
+                   scaleMask: newMask,
+                   scaleId: recognizeScaleId(newMask),
+                 });
+               }}
                onDoubleClick={() => updateLane(lane.id, { scaleRoot: pc })}
                onPointerDown={(e) => { e.stopPropagation(); startLongPress(pc); }}
                onPointerUp={cancelLongPress}
@@ -257,62 +279,90 @@ function ChromaticWheel({ lane, updateLane, paper = window.PAPER, size = 240, us
           );
         })}
 
-        {/* center label — scale name + root */}
-        <text x={r} y={r - 4} textAnchor="middle" style={{
+        {/* center label — scale name, root, interval bitmask */}
+        <text x={r} y={r - 12} textAnchor="middle" style={{
           fontFamily: '"Instrument Serif", Georgia, serif',
           fontSize: 16, fontStyle: 'italic', fill: paper.ink,
         }}>{(SCALES.find(s => s.id === scaleId) || { name: 'Custom' }).name}</text>
-        <text x={r} y={r + 12} textAnchor="middle" style={{
+        <text x={r} y={r + 4} textAnchor="middle" style={{
           fontFamily: 'Inter Tight, Inter, system-ui, sans-serif',
           fontSize: 10, fill: paper.ink50, letterSpacing: 1.2,
         }}>{window.pitchName(scaleRoot, useFlats)} ROOT</text>
+        {/* Interval bitmask — decimal value, left-to-right, matching the
+            native editor's display (e.g. 2773 = C Ionian).  The same value
+            is editable in the scale panel's mask input field. */}
+        <text x={r} y={r + 22} textAnchor="middle" style={{
+          fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+          fontSize: 14, fill: paper.ink70, letterSpacing: 0.5,
+          fontVariantNumeric: 'tabular-nums',
+        }}>{scaleMask & 0xFFF}</text>
       </svg>
+  );
+}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-        {/* family selector */}
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          {families.map(f => (
-            <button key={f}
-              onClick={() => setSelectedFamily(f)}
-              style={{
-                padding: '4px 10px', borderRadius: 2,
-                border: `1px solid ${selectedFamily === f ? paper.ink : paper.rule}`,
-                background: selectedFamily === f ? paper.ink : 'transparent',
-                color: selectedFamily === f ? paper.bg : paper.ink50,
-                fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 1,
-                textTransform: 'uppercase', cursor: 'pointer',
-              }}>{f}</button>
-          ))}
-        </div>
-
-        {/* scales in selected family */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {familyScales.map(s => (
-            <button key={s.id}
-              onClick={() => updateLane(lane.id, { scaleId: s.id, scaleMask: s.mask })}
-              style={{
-                padding: '5px 10px', borderRadius: 2,
-                border: `1px solid ${scaleId === s.id ? paper.amberInk : paper.rule}`,
-                background: scaleId === s.id ? paper.amberInk : 'transparent',
-                color: scaleId === s.id ? paper.bg : paper.ink70,
-                fontFamily: '"Instrument Serif", Georgia, serif',
-                fontSize: 15, fontStyle: 'italic',
-                cursor: 'pointer', textAlign: 'left',
-              }}>{s.name}</button>
-          ))}
-        </div>
-
-        <div style={{
-          marginTop: 4, fontSize: 10, fontFamily: 'Inter Tight',
-          color: paper.ink50, lineHeight: 1.5,
-        }}>
-          tap to toggle pitch·<br/>
-          double-tap or hold to set root·<br/>
-          shape shows interval geometry
-        </div>
+// Stand-alone family-grouped scale picker.  Used by the JUCE Studio's scale
+// panel; a sibling of ChromaticWheel rather than a child, so layout decisions
+// (column widths, scrolling, action rows) stay in the parent.
+function ScalePicker({ lane, updateLane, paper = window.PAPER }) {
+  const { scaleId } = lane;
+  // Family list — derived from SCALES so adding scales/families in tokens.jsx
+  // automatically shows up.  Order matches Source/ScaleData.h.
+  const families = React.useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    for (const s of SCALES) if (!seen.has(s.family)) { seen.add(s.family); out.push(s.family); }
+    return out;
+  }, []);
+  const currentScale = SCALES.find(s => s.id === scaleId);
+  const [selectedFamily, setSelectedFamily] = React.useState(
+    () => currentScale?.family || families[0] || 'Diatonic');
+  // Re-sync the family tab when the lane moves to a scale in a different
+  // family (e.g. after All/Invert/None or a numeric mask edit lands on
+  // something outside the current family).
+  React.useEffect(() => {
+    if (currentScale && currentScale.family !== selectedFamily) {
+      setSelectedFamily(currentScale.family);
+    }
+  }, [currentScale?.family]);
+  const familyScales = SCALES.filter(s => s.family === selectedFamily);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', flexShrink: 0 }}>
+        {families.map(f => (
+          <button key={f}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); setSelectedFamily(f); }}
+            style={{
+              padding: '4px 10px', borderRadius: 2,
+              border: `1px solid ${selectedFamily === f ? paper.ink : paper.rule}`,
+              background: selectedFamily === f ? paper.ink : 'transparent',
+              color: selectedFamily === f ? paper.bg : paper.ink50,
+              fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 1,
+              textTransform: 'uppercase', cursor: 'pointer',
+              position: 'relative', zIndex: 5,
+            }}>{f}</button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, overflowY: 'auto', minHeight: 0 }}>
+        {familyScales.map(s => (
+          <button key={s.id}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation();
+              updateLane(lane.id, { scaleId: s.id, scaleMask: s.mask }); }}
+            style={{
+              padding: '5px 10px', borderRadius: 2,
+              border: `1px solid ${scaleId === s.id ? paper.amberInk : paper.rule}`,
+              background: scaleId === s.id ? paper.amberInk : 'transparent',
+              color: scaleId === s.id ? paper.bg : paper.ink70,
+              fontFamily: '"Instrument Serif", Georgia, serif',
+              fontSize: 15, fontStyle: 'italic',
+              cursor: 'pointer', textAlign: 'left',
+              position: 'relative', zIndex: 5,
+            }}>{s.name}</button>
+        ))}
       </div>
     </div>
   );
 }
 
-Object.assign(window, { PianoScaleRow, ChromaticWheel });
+Object.assign(window, { PianoScaleRow, ChromaticWheel, ScalePicker, recognizeScaleId });
