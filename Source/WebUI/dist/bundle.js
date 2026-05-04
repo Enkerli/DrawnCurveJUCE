@@ -23983,6 +23983,9 @@
       onChange(snapped);
     };
     const thumbX = (value - min) / (max - min) * width;
+    const H = 44;
+    const trackY = (H - 2) / 2;
+    const thumbY = (H - 12) / 2;
     return /* @__PURE__ */ React.createElement(
       "div",
       {
@@ -23998,7 +24001,7 @@
         onPointerUp: () => setDrag(false),
         style: {
           width,
-          height: 22,
+          height: H,
           position: "relative",
           cursor: "pointer",
           touchAction: "none"
@@ -24006,7 +24009,7 @@
       },
       /* @__PURE__ */ React.createElement("div", { style: {
         position: "absolute",
-        top: 10,
+        top: trackY,
         left: 0,
         right: 0,
         height: 2,
@@ -24015,7 +24018,7 @@
       } }),
       /* @__PURE__ */ React.createElement("div", { style: {
         position: "absolute",
-        top: 10,
+        top: trackY,
         left: 0,
         width: thumbX,
         height: 2,
@@ -24024,14 +24027,16 @@
       } }),
       /* @__PURE__ */ React.createElement("div", { style: {
         position: "absolute",
-        top: 5,
+        top: thumbY,
         left: thumbX - 6,
         width: 12,
         height: 12,
         borderRadius: "50%",
         background: paper.card,
         border: `1.5px solid ${accent || paper.ink}`,
-        boxShadow: "0 1px 2px rgba(0,0,0,0.08)"
+        boxShadow: "0 1px 2px rgba(0,0,0,0.08)",
+        pointerEvents: "none"
+        // parent owns the gesture
       } })
     );
   }
@@ -24086,6 +24091,8 @@
     };
     const loX = (lo - min) / (max - min) * width;
     const hiX = (hi - min) / (max - min) * width;
+    const H = 44;
+    const trackY = (H - 2) / 2;
     return /* @__PURE__ */ React.createElement(
       "div",
       {
@@ -24099,54 +24106,86 @@
           dragging.current = null;
           midStart.current = null;
         },
-        style: { width, height: 22, position: "relative", touchAction: "none" }
+        style: { width, height: H, position: "relative", touchAction: "none" }
       },
-      /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", top: 10, left: 0, right: 0, height: 2, background: paper.rule } }),
+      /* @__PURE__ */ React.createElement("div", { style: {
+        position: "absolute",
+        top: trackY,
+        left: 0,
+        right: 0,
+        height: 2,
+        background: paper.rule,
+        pointerEvents: "none"
+      } }),
       /* @__PURE__ */ React.createElement(
         "div",
         {
           onPointerDown: onDownMid,
           style: {
             position: "absolute",
-            top: 6,
+            top: 0,
             left: loX,
             width: hiX - loX,
-            height: 10,
-            background: accent || paper.ink,
-            opacity: 0.25,
-            borderRadius: 1,
+            height: H,
             cursor: "ew-resize"
           }
-        }
+        },
+        /* @__PURE__ */ React.createElement("div", { style: {
+          position: "absolute",
+          top: (H - 10) / 2,
+          left: 0,
+          right: 0,
+          height: 10,
+          background: accent || paper.ink,
+          opacity: 0.25,
+          borderRadius: 1,
+          pointerEvents: "none"
+        } }),
+        /* @__PURE__ */ React.createElement("div", { style: {
+          position: "absolute",
+          top: trackY,
+          left: 0,
+          right: 0,
+          height: 2,
+          background: accent || paper.ink,
+          pointerEvents: "none"
+        } })
       ),
-      /* @__PURE__ */ React.createElement("div", { style: {
-        position: "absolute",
-        top: 10,
-        left: loX,
-        width: hiX - loX,
-        height: 2,
-        background: accent || paper.ink,
-        pointerEvents: "none"
-      } }),
-      /* @__PURE__ */ React.createElement("div", { onPointerDown: onDownLo, style: thumbStyle(loX, accent || paper.ink, paper) }),
-      /* @__PURE__ */ React.createElement("div", { onPointerDown: onDownHi, style: thumbStyle(hiX, accent || paper.ink, paper) })
+      /* @__PURE__ */ React.createElement(ThumbHit, { x: loX, onPointerDown: onDownLo, H, color: accent || paper.ink, paper }),
+      /* @__PURE__ */ React.createElement(ThumbHit, { x: hiX, onPointerDown: onDownHi, H, color: accent || paper.ink, paper })
     );
   }
-  function thumbStyle(x, color, paper) {
-    return {
-      position: "absolute",
-      top: 5,
-      left: x - 6,
-      width: 12,
-      height: 12,
-      borderRadius: "50%",
-      background: paper.card,
-      border: `1.5px solid ${color}`,
-      cursor: "grab",
-      touchAction: "none"
-    };
+  function ThumbHit({ x, onPointerDown, H, color, paper }) {
+    return /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        onPointerDown,
+        style: {
+          position: "absolute",
+          top: 0,
+          left: x - 11,
+          width: 22,
+          height: H,
+          cursor: "grab",
+          touchAction: "none",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 2
+        }
+      },
+      /* @__PURE__ */ React.createElement("div", { style: {
+        width: 12,
+        height: 12,
+        borderRadius: "50%",
+        background: paper.card,
+        border: `1.5px solid ${color}`,
+        pointerEvents: "none",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.08)"
+      } })
+    );
   }
-  function DrawnDial2({ value, min = 0, max = 1, onChange, size = 56, label, sublabel, paper = window.PAPER }) {
+  function DrawnDial2({ value, min = 0, max = 1, defaultValue, onChange, size = 56, label, sublabel, paper = window.PAPER }) {
     const f = (value - min) / (max - min);
     const a = -135 + f * 270;
     const r = size / 2 - 8;
@@ -24155,15 +24194,33 @@
     const tipX = cx + r * Math.cos(tipAngle - Math.PI / 2);
     const tipY = cy + r * Math.sin(tipAngle - Math.PI / 2);
     const drag = React.useRef(null);
+    const lastTap = React.useRef(0);
     const onDown = (e) => {
       e.currentTarget.setPointerCapture(e.pointerId);
-      drag.current = { y: e.clientY, v: value };
+      drag.current = { y: e.clientY, v: value, moved: false };
     };
     const onMove = (e) => {
       if (!drag.current) return;
       const dy = drag.current.y - e.clientY;
+      if (Math.abs(dy) > 2) drag.current.moved = true;
       const nv = Math.max(min, Math.min(max, drag.current.v + dy / 120 * (max - min)));
       onChange(nv);
+    };
+    const onUp = () => {
+      const wasDrag = drag.current && drag.current.moved;
+      drag.current = null;
+      if (wasDrag) {
+        lastTap.current = 0;
+        return;
+      }
+      const now = Date.now();
+      if (now - lastTap.current < 300) {
+        const dv = defaultValue != null ? defaultValue : (min + max) / 2;
+        onChange(Math.max(min, Math.min(max, dv)));
+        lastTap.current = 0;
+      } else {
+        lastTap.current = now;
+      }
     };
     const toXY = (ang) => {
       const rad = ang * Math.PI / 180 - Math.PI / 2;
@@ -24179,7 +24236,8 @@
         height: size,
         onPointerDown: onDown,
         onPointerMove: onMove,
-        onPointerUp: () => drag.current = null,
+        onPointerUp: onUp,
+        onPointerCancel: onUp,
         style: { cursor: "ns-resize", touchAction: "none" }
       },
       /* @__PURE__ */ React.createElement(
@@ -25133,9 +25191,9 @@
     const TOP_H = 52;
     const BOTTOM_H = 38;
     const [leftOpen, setLeftOpen] = React.useState(true);
-    const LEFT_W = leftOpen ? 256 : 22;
+    const LEFT_W = leftOpen ? 256 : 44;
     const [rightOpen, setRightOpen] = React.useState(true);
-    const RIGHT_W = rightOpen ? 148 : 22;
+    const RIGHT_W = rightOpen ? 148 : 44;
     const [shelfOpen, setShelfOpenRaw] = React.useState(false);
     const [scaleOpen, setScaleOpenRaw] = React.useState(false);
     const setShelfOpen = (next) => {
@@ -25169,8 +25227,8 @@
     }, [focusLane?.target]);
     const [midiGhostOn, setMidiGhostOn] = React.useState(false);
     const [pluginSync, setPluginSync] = React.useState(false);
-    const Y_GUTTER_W = 56;
-    const X_GUTTER_H = 40;
+    const Y_GUTTER_W = 60;
+    const X_GUTTER_H = 48;
     const canvasW = width - LEFT_W - RIGHT_W - Y_GUTTER_W;
     const canvasH = height - TOP_H - BOTTOM_H - SHELF_H - SCALE_H - X_GUTTER_H;
     const containerRef = React.useRef(null);
@@ -25472,8 +25530,8 @@
         onClick: () => eng.setUseFlats(!eng.useFlats),
         title: eng.useFlats ? "Show sharps" : "Show flats",
         style: {
-          width: 32,
-          height: 28,
+          width: 36,
+          height: 36,
           padding: 0,
           background: paper.card,
           border: `1px solid ${paper.rule}`,
@@ -25489,7 +25547,16 @@
         }
       },
       eng.useFlats ? "\u266D" : "\u266F"
-    ), /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: eng.clearAll }, "Clear"), /* @__PURE__ */ React.createElement(IconBtn, { paper, size: 32, title: "Panic" }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13 } }, "!")), /* @__PURE__ */ React.createElement(IconBtn, { paper, size: 32, title: "Help" }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13 } }, "?")));
+    ), /* @__PURE__ */ React.createElement(
+      ConfirmBtn,
+      {
+        paper,
+        onConfirm: eng.clearAll,
+        label: "Clear",
+        armedLabel: "Tap to confirm",
+        title: "Clear all lanes"
+      }
+    ), /* @__PURE__ */ React.createElement(IconBtn, { paper, size: 32, title: "Panic" }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13 } }, "!")), /* @__PURE__ */ React.createElement(IconBtn, { paper, size: 32, title: "Help" }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13 } }, "?")));
   }
   function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
     return /* @__PURE__ */ React.createElement("div", { style: {
@@ -25565,6 +25632,7 @@
       {
         value: focusLane.smooth,
         size: 52,
+        defaultValue: 0,
         onChange: (v) => eng.updateLane(focusLane.id, { smooth: v }),
         sublabel: focusLane.smooth.toFixed(2),
         paper
@@ -25614,29 +25682,41 @@
         min: 1,
         max: 127,
         size: 52,
+        defaultValue: 100,
         onChange: (v) => eng.updateLane(focusLane.id, { velocity: Math.round(v) }),
         sublabel: focusLane.velocity,
         paper
       }
-    ))), /* @__PURE__ */ React.createElement("div", { style: { borderTop: `1px dashed ${paper.rule}`, paddingTop: 10 } }, /* @__PURE__ */ React.createElement(Btn, { paper, small: true }, "Teach CC \u2192"))), /* @__PURE__ */ React.createElement("button", { onClick: () => setOpen(!open), style: {
-      position: "absolute",
-      right: 0,
-      top: 0,
-      bottom: 0,
-      width: 22,
-      background: "transparent",
-      border: "none",
-      borderLeft: `1px solid ${paper.rule}`,
-      cursor: "pointer",
-      writingMode: "vertical-rl",
-      transform: "rotate(180deg)",
-      fontFamily: "Inter Tight",
-      fontSize: 10,
-      letterSpacing: 2,
-      color: paper.ink50,
-      textTransform: "uppercase",
-      padding: "14px 2px"
-    } }, open ? "\u25C2" : "\u25B8 shape"));
+    ))), /* @__PURE__ */ React.createElement("div", { style: { borderTop: `1px dashed ${paper.rule}`, paddingTop: 10 } }, /* @__PURE__ */ React.createElement(Btn, { paper, small: true }, "Teach CC \u2192"))), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onPointerDown: (e) => e.stopPropagation(),
+        onClick: (e) => {
+          e.stopPropagation();
+          setOpen(!open);
+        },
+        style: {
+          position: "absolute",
+          right: 0,
+          top: 0,
+          bottom: 0,
+          width: open ? 36 : "100%",
+          background: "transparent",
+          border: "none",
+          borderLeft: `1px solid ${paper.rule}`,
+          cursor: "pointer",
+          writingMode: "vertical-rl",
+          transform: "rotate(180deg)",
+          fontFamily: "Inter Tight",
+          fontSize: 10,
+          letterSpacing: 2,
+          color: paper.ink50,
+          textTransform: "uppercase",
+          padding: "14px 2px"
+        }
+      },
+      open ? "\u25C2" : "\u25B8 shape"
+    ));
   }
   function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
     const MAX_LANES = 4;
@@ -25710,8 +25790,8 @@
         },
         title: "Add lane",
         style: {
-          width: 22,
-          height: 22,
+          width: 32,
+          height: 32,
           padding: 0,
           border: `1px solid ${paper.rule}`,
           background: paper.bg,
@@ -25722,7 +25802,7 @@
           alignItems: "center",
           justifyContent: "center",
           fontFamily: "Inter Tight",
-          fontSize: 14,
+          fontSize: 16,
           lineHeight: 1,
           position: "relative",
           zIndex: 5
@@ -25739,8 +25819,8 @@
         },
         title: "Hide lane panel",
         style: {
-          width: 22,
-          height: 22,
+          width: 32,
+          height: 32,
           padding: 0,
           border: `1px solid ${paper.rule}`,
           background: paper.bg,
@@ -25751,7 +25831,7 @@
           alignItems: "center",
           justifyContent: "center",
           fontFamily: "Inter Tight",
-          fontSize: 11,
+          fontSize: 12,
           lineHeight: 1,
           position: "relative",
           zIndex: 5
@@ -25819,15 +25899,11 @@
           },
           l.enabled ? "On" : "Muted"
         ), /* @__PURE__ */ React.createElement(
-          "button",
+          ConfirmChip,
           {
-            onClick: (e) => {
-              e.stopPropagation();
-              eng.clearLane(l.id);
-            },
-            style: laneChip(paper, false)
-          },
-          "Clear"
+            paper,
+            onConfirm: () => eng.clearLane(l.id)
+          }
         ))
       );
     }), /* @__PURE__ */ React.createElement("div", { style: {
@@ -25884,6 +25960,91 @@
       textTransform: "uppercase",
       cursor: "pointer"
     };
+  }
+  function useConfirmTap(action, timeoutMs = 1500) {
+    const [armed, setArmed] = React.useState(false);
+    const timerRef = React.useRef(null);
+    React.useEffect(() => () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    }, []);
+    const onTap = React.useCallback(() => {
+      if (armed) {
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+        setArmed(false);
+        action();
+      } else {
+        setArmed(true);
+        if (timerRef.current) clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => {
+          setArmed(false);
+          timerRef.current = null;
+        }, timeoutMs);
+      }
+    }, [armed, action, timeoutMs]);
+    return [armed, onTap];
+  }
+  function ConfirmBtn({ paper, onConfirm, label, armedLabel = "Tap to confirm", title }) {
+    const [armed, onTap] = useConfirmTap(onConfirm);
+    return /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onPointerDown: (e) => e.stopPropagation(),
+        onClick: (e) => {
+          e.stopPropagation();
+          onTap();
+        },
+        title: armed ? `${title || label} \u2014 tap again to confirm` : title || label,
+        style: {
+          padding: "4px 10px",
+          height: 36,
+          border: `1px solid ${armed ? "oklch(52% 0.18 22)" : paper.rule}`,
+          background: armed ? "oklch(94% 0.04 25)" : "transparent",
+          color: armed ? "oklch(40% 0.18 22)" : paper.ink70,
+          borderRadius: 2,
+          cursor: "pointer",
+          fontFamily: "Inter Tight",
+          fontSize: 11,
+          letterSpacing: 0.5,
+          textTransform: "uppercase",
+          position: "relative",
+          zIndex: 5
+        }
+      },
+      armed ? armedLabel : label
+    );
+  }
+  function ConfirmChip({ paper, onConfirm, label = "Clear", armedLabel = "Tap again" }) {
+    const [armed, onTap] = useConfirmTap(onConfirm);
+    return /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onPointerDown: (e) => e.stopPropagation(),
+        onClick: (e) => {
+          e.stopPropagation();
+          onTap();
+        },
+        style: {
+          padding: "4px 8px",
+          minHeight: 28,
+          borderRadius: 2,
+          border: `1px solid ${armed ? "oklch(52% 0.18 22)" : paper.rule}`,
+          background: armed ? "oklch(94% 0.04 25)" : "transparent",
+          color: armed ? "oklch(40% 0.18 22)" : paper.ink70,
+          fontFamily: "Inter Tight",
+          fontSize: 10,
+          letterSpacing: 0.5,
+          textTransform: "uppercase",
+          cursor: "pointer"
+        }
+      },
+      armed ? armedLabel : label
+    );
   }
   function GridIcon({ axis, denser }) {
     const w = 22, h = 18;
@@ -25948,8 +26109,8 @@
         },
         title: `${axis} grid ${denser ? "denser" : "sparser"}`,
         style: {
-          width: 32,
-          height: 28,
+          width: 36,
+          height: 36,
           border: `1px solid ${paper.rule}`,
           background: paper.card,
           borderRadius: 2,
@@ -25977,8 +26138,8 @@
         },
         title: "Lock both axes",
         style: {
-          width: 32,
-          height: 28,
+          width: 36,
+          height: 36,
           border: `1px solid ${active ? paper.amberInk : paper.rule}`,
           background: active ? paper.amberInk : paper.card,
           color: active ? paper.bg : paper.ink70,
@@ -25988,21 +26149,18 @@
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          fontFamily: "Inter Tight",
-          fontSize: 13,
-          fontWeight: 700,
           position: "relative",
           zIndex: 5
         }
       },
-      "#"
+      /* @__PURE__ */ React.createElement("svg", { width: 14, height: 16, viewBox: "0 0 14 16", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: 3, y: 7, width: 8, height: 8, rx: 1, fill: "currentColor", opacity: 0.9 }), /* @__PURE__ */ React.createElement("path", { d: "M3.5 7V5a3.5 3.5 0 017 0V7", fill: "none", stroke: "currentColor", strokeWidth: 1.4, strokeLinecap: "round" }), /* @__PURE__ */ React.createElement("line", { x1: 7, y1: 9, x2: 7, y2: 13, stroke: active ? "#FFFFFF" : "currentColor", strokeWidth: 0.9, opacity: 0.6 }), /* @__PURE__ */ React.createElement("line", { x1: 5, y1: 11, x2: 9, y2: 11, stroke: active ? "#FFFFFF" : "currentColor", strokeWidth: 0.9, opacity: 0.6 }))
     );
   }
   function CountPill({ value, paper }) {
     return /* @__PURE__ */ React.createElement("div", { style: {
-      minWidth: 24,
-      height: 22,
-      padding: "0 6px",
+      minWidth: 32,
+      height: 36,
+      padding: "0 8px",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
@@ -26027,8 +26185,9 @@
           if (onClick) onClick(e);
         },
         style: {
-          padding: "2px 6px",
-          height: 22,
+          padding: "4px 10px",
+          height: 30,
+          minWidth: 36,
           border: `1px solid ${active ? paper.amberInk : paper.rule}`,
           background: active ? paper.amberInk : paper.card,
           color: active ? paper.bg : paper.ink50,
@@ -26036,7 +26195,7 @@
           cursor: "pointer",
           fontFamily: '"Instrument Serif", Georgia, serif',
           fontStyle: "italic",
-          fontSize: 12,
+          fontSize: 13,
           position: "relative",
           zIndex: 5
         }
@@ -26113,8 +26272,8 @@
         },
         title: `${axis} quantize ${active ? "on" : "off"}`,
         style: {
-          width: 32,
-          height: 28,
+          width: 36,
+          height: 36,
           border: `1px solid ${active ? paper.amberInk : paper.rule}`,
           background: active ? paper.amberInk : "transparent",
           color: active ? paper.bg : paper.ink50,
@@ -26125,9 +26284,9 @@
           alignItems: "center",
           justifyContent: "center",
           fontFamily: "Inter Tight",
-          fontSize: 10,
+          fontSize: 11,
           letterSpacing: 0.5,
-          gap: 2,
+          gap: 3,
           // Own stacking context above the canvas div so spatial overlap doesn't
           // create unexpected hit-test outcomes.
           position: "relative",
@@ -26521,7 +26680,44 @@
       borderTop: `1px solid ${paper.rule}`,
       background: paper.card,
       flexShrink: 0
-    } }, /* @__PURE__ */ React.createElement(Dot, { color: focusLane.color, label: `Lane ${focusLane.id + 1}` }), /* @__PURE__ */ React.createElement(Sep, null), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "Inter Tight", fontSize: 11, color: paper.ink70 } }, targetLabel), /* @__PURE__ */ React.createElement(Sep, null), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "Inter Tight", fontSize: 11, color: paper.ink70 } }, "ch ", focusLane.channel), /* @__PURE__ */ React.createElement(Sep, null), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "Inter Tight", fontSize: 11, color: paper.ink70 } }, formatRange(focusLane, eng.useFlats), " \xB7 ", /* @__PURE__ */ React.createElement("span", { style: { color: paper.ink50 } }, "\xB1", formatDepth(focusLane))), /* @__PURE__ */ React.createElement(Sep, null), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "Inter Tight", fontSize: 11, color: paper.ink70 } }, "smooth ", focusLane.smooth.toFixed(2)));
+    } }, /* @__PURE__ */ React.createElement(Dot, { color: focusLane.color, label: `Lane ${focusLane.id + 1}` }), /* @__PURE__ */ React.createElement(Sep, null), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "Inter Tight", fontSize: 11, color: paper.ink70 } }, targetLabel), /* @__PURE__ */ React.createElement(Sep, null), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "Inter Tight", fontSize: 11, color: paper.ink70 } }, "ch ", focusLane.channel), /* @__PURE__ */ React.createElement(Sep, null), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "Inter Tight", fontSize: 11, color: paper.ink70 } }, formatRange(focusLane, eng.useFlats), " \xB7 ", /* @__PURE__ */ React.createElement("span", { style: { color: paper.ink50 } }, "\xB1", formatDepth(focusLane))), /* @__PURE__ */ React.createElement(Sep, null), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "Inter Tight", fontSize: 11, color: paper.ink70 } }, "smooth ", focusLane.smooth.toFixed(2)), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }), /* @__PURE__ */ React.createElement(BridgeStatus, { paper }));
+  }
+  function BridgeStatus({ paper }) {
+    const [connected, setConnected] = React.useState(
+      () => typeof window !== "undefined" && typeof window.__JUCE__ !== "undefined"
+    );
+    React.useEffect(() => {
+      const id = setInterval(() => {
+        const next = typeof window !== "undefined" && typeof window.__JUCE__ !== "undefined";
+        setConnected((prev) => prev === next ? prev : next);
+      }, 2e3);
+      return () => clearInterval(id);
+    }, []);
+    return /* @__PURE__ */ React.createElement(
+      "span",
+      {
+        title: connected ? "JUCE host connected" : "Standalone (no JUCE bridge)",
+        style: {
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 5,
+          fontFamily: "Inter Tight",
+          fontSize: 10,
+          letterSpacing: 0.8,
+          color: paper.ink50,
+          textTransform: "uppercase"
+        }
+      },
+      /* @__PURE__ */ React.createElement("span", { style: {
+        width: 8,
+        height: 8,
+        borderRadius: "50%",
+        background: connected ? "oklch(72% 0.15 145)" : "transparent",
+        border: `1.5px solid ${connected ? "oklch(50% 0.15 145)" : paper.ink30}`,
+        boxSizing: "border-box"
+      } }),
+      /* @__PURE__ */ React.createElement("span", null, connected ? "host" : "standalone")
+    );
   }
   function Label({ children, paper = window.PAPER }) {
     return /* @__PURE__ */ React.createElement("div", { style: {

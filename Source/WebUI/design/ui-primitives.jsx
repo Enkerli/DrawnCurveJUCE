@@ -35,6 +35,10 @@ function IconBtn({ active, onClick, children, size = 32, paper = window.PAPER, t
 }
 
 // Slider — horizontal, drawn feel
+// Slider — visual stays compact (12 px thumb on a 2 px track), but the
+// container is 44 px tall so the touch hit area meets the iOS minimum
+// (audit F-03).  The whole strip is draggable, so the user only needs to
+// land within 22 px above/below the track centre, not on the thumb itself.
 function Slider({ value, min = 0, max = 1, step = 0.01, onChange, width = 140, paper = window.PAPER, accent }) {
   const ref = React.useRef(null);
   const [drag, setDrag] = React.useState(false);
@@ -46,6 +50,9 @@ function Slider({ value, min = 0, max = 1, step = 0.01, onChange, width = 140, p
     onChange(snapped);
   };
   const thumbX = ((value - min) / (max - min)) * width;
+  const H = 44;                    // touch height
+  const trackY = (H - 2) / 2;      // centre the 2 px track vertically
+  const thumbY = (H - 12) / 2;     // centre the 12 px thumb vertically
   return (
     <div
       ref={ref}
@@ -53,29 +60,35 @@ function Slider({ value, min = 0, max = 1, step = 0.01, onChange, width = 140, p
       onPointerMove={(e) => { if (drag) set(e); }}
       onPointerUp={() => setDrag(false)}
       style={{
-        width, height: 22, position: 'relative',
+        width, height: H, position: 'relative',
         cursor: 'pointer', touchAction: 'none',
       }}
     >
       <div style={{
-        position: 'absolute', top: 10, left: 0, right: 0, height: 2,
+        position: 'absolute', top: trackY, left: 0, right: 0, height: 2,
         background: paper.rule, borderRadius: 1,
       }} />
       <div style={{
-        position: 'absolute', top: 10, left: 0, width: thumbX, height: 2,
+        position: 'absolute', top: trackY, left: 0, width: thumbX, height: 2,
         background: accent || paper.ink, borderRadius: 1,
       }} />
       <div style={{
-        position: 'absolute', top: 5, left: thumbX - 6, width: 12, height: 12,
+        position: 'absolute', top: thumbY, left: thumbX - 6, width: 12, height: 12,
         borderRadius: '50%', background: paper.card,
         border: `1.5px solid ${accent || paper.ink}`,
         boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
+        pointerEvents: 'none',     // parent owns the gesture
       }} />
     </div>
   );
 }
 
-// Dual-thumb range — middle drag shifts both (transpose)
+// Dual-thumb range — middle drag shifts both (transpose).
+// Audit F-03: visible thumbs are 12 px circles, but each thumb is wrapped in
+// a 22 × 44 px transparent hit-area square so the touch target meets the
+// iOS minimum.  The mid-drag fill is the full 44 px height for the same
+// reason (transpose gesture lands anywhere inside the band, not just on the
+// 10 px stripe).
 function RangeSlider({ min, max, lo, hi, onChange, width = 140, paper = window.PAPER, accent }) {
   const ref = React.useRef(null);
   const dragging = React.useRef(null); // 'lo' | 'hi' | 'mid'
@@ -118,45 +131,69 @@ function RangeSlider({ min, max, lo, hi, onChange, width = 140, paper = window.P
   const loX = ((lo - min) / (max - min)) * width;
   const hiX = ((hi - min) / (max - min)) * width;
 
+  const H = 44;
+  const trackY = (H - 2) / 2;
   return (
     <div ref={ref}
       onPointerMove={onMove}
       onPointerUp={() => { dragging.current = null; midStart.current = null; }}
       onPointerCancel={() => { dragging.current = null; midStart.current = null; }}
-      style={{ width, height: 22, position: 'relative', touchAction: 'none' }}
+      style={{ width, height: H, position: 'relative', touchAction: 'none' }}
     >
       {/* Track */}
-      <div style={{ position: 'absolute', top: 10, left: 0, right: 0, height: 2, background: paper.rule }} />
-      {/* Active fill — draggable middle */}
+      <div style={{
+        position: 'absolute', top: trackY, left: 0, right: 0, height: 2,
+        background: paper.rule, pointerEvents: 'none',
+      }} />
+      {/* Active fill — draggable middle, full-height hit area for transpose */}
       <div
         onPointerDown={onDownMid}
         style={{
-          position: 'absolute', top: 6, left: loX, width: hiX - loX, height: 10,
-          background: accent || paper.ink, opacity: 0.25, borderRadius: 1,
+          position: 'absolute', top: 0, left: loX, width: hiX - loX, height: H,
           cursor: 'ew-resize',
         }}
-      />
-      <div style={{
-        position: 'absolute', top: 10, left: loX, width: hiX - loX, height: 2,
-        background: accent || paper.ink, pointerEvents: 'none',
-      }} />
-      {/* Thumbs */}
-      <div onPointerDown={onDownLo} style={thumbStyle(loX, accent || paper.ink, paper)} />
-      <div onPointerDown={onDownHi} style={thumbStyle(hiX, accent || paper.ink, paper)} />
+      >
+        {/* The 10 px visible band, centred vertically */}
+        <div style={{
+          position: 'absolute', top: (H - 10) / 2, left: 0, right: 0, height: 10,
+          background: accent || paper.ink, opacity: 0.25, borderRadius: 1,
+          pointerEvents: 'none',
+        }} />
+        <div style={{
+          position: 'absolute', top: trackY, left: 0, right: 0, height: 2,
+          background: accent || paper.ink, pointerEvents: 'none',
+        }} />
+      </div>
+      {/* Thumbs — 22 × 44 hit area centred on x; visible 12 px circle inside */}
+      <ThumbHit x={loX} onPointerDown={onDownLo} H={H} color={accent || paper.ink} paper={paper} />
+      <ThumbHit x={hiX} onPointerDown={onDownHi} H={H} color={accent || paper.ink} paper={paper} />
     </div>
   );
 }
-function thumbStyle(x, color, paper) {
-  return {
-    position: 'absolute', top: 5, left: x - 6, width: 12, height: 12,
-    borderRadius: '50%', background: paper.card,
-    border: `1.5px solid ${color}`,
-    cursor: 'grab', touchAction: 'none',
-  };
+function ThumbHit({ x, onPointerDown, H, color, paper }) {
+  return (
+    <div
+      onPointerDown={onPointerDown}
+      style={{
+        position: 'absolute', top: 0, left: x - 11, width: 22, height: H,
+        cursor: 'grab', touchAction: 'none',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 2,
+      }}>
+      <div style={{
+        width: 12, height: 12, borderRadius: '50%', background: paper.card,
+        border: `1.5px solid ${color}`, pointerEvents: 'none',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
+      }} />
+    </div>
+  );
 }
 
 // Drawn rotary dial — sketchbook feel
-function DrawnDial({ value, min = 0, max = 1, onChange, size = 56, label, sublabel, paper = window.PAPER }) {
+// `defaultValue` enables double-tap-to-reset (audit F-04).  Falls back to the
+// midpoint between min and max if the caller doesn't pass one — matches the
+// "centred dial" intuition users expect from analogue knobs.
+function DrawnDial({ value, min = 0, max = 1, defaultValue, onChange, size = 56, label, sublabel, paper = window.PAPER }) {
   const f = (value - min) / (max - min);
   const a = -135 + f * 270;
   const r = size / 2 - 8;
@@ -165,15 +202,35 @@ function DrawnDial({ value, min = 0, max = 1, onChange, size = 56, label, sublab
   const tipX = cx + r * Math.cos(tipAngle - Math.PI / 2);
   const tipY = cy + r * Math.sin(tipAngle - Math.PI / 2);
   const drag = React.useRef(null);
+  // Track the previous tap timestamp for a manual double-tap detection.
+  // Native `onDoubleClick` fires after a 300 ms delay on touch devices and
+  // doesn't always survive the pointerdown→pointerup capture pattern, so
+  // we time the gap between consecutive non-drag pointerups instead.
+  const lastTap = React.useRef(0);
   const onDown = (e) => {
     e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { y: e.clientY, v: value };
+    drag.current = { y: e.clientY, v: value, moved: false };
   };
   const onMove = (e) => {
     if (!drag.current) return;
     const dy = drag.current.y - e.clientY;
+    if (Math.abs(dy) > 2) drag.current.moved = true;
     const nv = Math.max(min, Math.min(max, drag.current.v + (dy / 120) * (max - min)));
     onChange(nv);
+  };
+  const onUp = () => {
+    const wasDrag = drag.current && drag.current.moved;
+    drag.current = null;
+    if (wasDrag) { lastTap.current = 0; return; }
+    // Pure tap (no drag) — check for a double-tap within 300 ms.
+    const now = Date.now();
+    if (now - lastTap.current < 300) {
+      const dv = defaultValue != null ? defaultValue : (min + max) / 2;
+      onChange(Math.max(min, Math.min(max, dv)));
+      lastTap.current = 0;
+    } else {
+      lastTap.current = now;
+    }
   };
   // arc path for full range
   const toXY = (ang) => {
@@ -188,7 +245,7 @@ function DrawnDial({ value, min = 0, max = 1, onChange, size = 56, label, sublab
       <svg
         width={size} height={size}
         onPointerDown={onDown} onPointerMove={onMove}
-        onPointerUp={() => drag.current = null}
+        onPointerUp={onUp} onPointerCancel={onUp}
         style={{ cursor: 'ns-resize', touchAction: 'none' }}
       >
         {/* full track */}

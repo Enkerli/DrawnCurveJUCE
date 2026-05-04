@@ -66,9 +66,12 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
   // behind a 22 px tab.  At 256 px wide the well still leaves a usable
   // canvas on a 1024 px window.  User can collapse explicitly.
   const [leftOpen, setLeftOpen] = React.useState(true);
-  const LEFT_W = leftOpen ? 256 : 22;
+  // Collapsed strips are 44 px wide so the entire strip is a >= 44 pt iOS
+  // touch target (audit F-01).  The visual chevron + label stay centred in
+  // the strip; the wider hit area is the whole div.
+  const LEFT_W = leftOpen ? 256 : 44;
   const [rightOpen, setRightOpen] = React.useState(true);
-  const RIGHT_W = rightOpen ? 148 : 22;
+  const RIGHT_W = rightOpen ? 148 : 44;
 
   // Mutually exclusive bottom panels — opening one closes the other so the
   // canvas can never collapse to ~148 px under both (audit F-14).  Wrap the
@@ -122,8 +125,10 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
   // Gutter geometry — Y gutter on the left, X gutter on the bottom of the
   // canvas area, intersecting at the '#' corner cell.  Width must match
   // CORNER_W for the L to align.
-  const Y_GUTTER_W = 56;
-  const X_GUTTER_H = 40;
+  // Gutter sizing — Y_GUTTER_W & X_GUTTER_H bumped from 56/40 to 60/48 so
+  // 36 × 36 quantize buttons (audit F-02) fit cleanly with margin.
+  const Y_GUTTER_W = 60;
+  const X_GUTTER_H = 48;
   const canvasW = width  - LEFT_W - RIGHT_W - Y_GUTTER_W;
   const canvasH = height - TOP_H - BOTTOM_H - SHELF_H - SCALE_H - X_GUTTER_H;
 
@@ -425,7 +430,7 @@ function JuceTopBar({ eng, paper, h, midiGhostOn, setMidiGhostOn, pluginSync, se
         onClick={() => eng.setUseFlats(!eng.useFlats)}
         title={eng.useFlats ? 'Show sharps' : 'Show flats'}
         style={{
-          width: 32, height: 28, padding: 0,
+          width: 36, height: 36, padding: 0,
           background: paper.card,
           border: `1px solid ${paper.rule}`, borderRadius: 2,
           cursor: 'pointer',
@@ -434,7 +439,9 @@ function JuceTopBar({ eng, paper, h, midiGhostOn, setMidiGhostOn, pluginSync, se
           color: paper.ink,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>{eng.useFlats ? '♭' : '♯'}</button>
-      <Btn paper={paper} small onClick={eng.clearAll}>Clear</Btn>
+      <ConfirmBtn paper={paper} onConfirm={eng.clearAll}
+        label="Clear" armedLabel="Tap to confirm"
+        title="Clear all lanes" />
       <IconBtn paper={paper} size={32} title="Panic"><span style={{ fontSize: 13 }}>!</span></IconBtn>
       <IconBtn paper={paper} size={32} title="Help"><span style={{ fontSize: 13 }}>?</span></IconBtn>
     </div>
@@ -510,7 +517,7 @@ function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
           <div>
             <Label paper={paper}>Smooth</Label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
-              <DrawnDial value={focusLane.smooth} size={52}
+              <DrawnDial value={focusLane.smooth} size={52} defaultValue={0}
                 onChange={v => eng.updateLane(focusLane.id, { smooth: v })}
                 sublabel={focusLane.smooth.toFixed(2)} paper={paper} />
             </div>
@@ -553,7 +560,7 @@ function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
             <div>
               <Label paper={paper}>Velocity</Label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
-                <DrawnDial value={focusLane.velocity} min={1} max={127} size={52}
+                <DrawnDial value={focusLane.velocity} min={1} max={127} size={52} defaultValue={100}
                   onChange={v => eng.updateLane(focusLane.id, { velocity: Math.round(v) })}
                   sublabel={focusLane.velocity} paper={paper} />
               </div>
@@ -566,10 +573,16 @@ function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
         </div>
       )}
 
-      {/* Tab handle */}
-      <button onClick={() => setOpen(!open)} style={{
+      {/* Tab handle.  Audit F-01: 36 px wide in open state so the
+          close-tab hit area meets the iOS touch-target floor (closed
+          state inherits the wider 44 px collapsed strip). */}
+      <button
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        style={{
         position: 'absolute', right: 0, top: 0, bottom: 0,
-        width: 22, background: 'transparent', border: 'none',
+        width: open ? 36 : '100%',
+        background: 'transparent', border: 'none',
         borderLeft: `1px solid ${paper.rule}`,
         cursor: 'pointer',
         writingMode: 'vertical-rl', transform: 'rotate(180deg)',
@@ -639,12 +652,12 @@ function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
               onClick={(e) => { e.stopPropagation(); eng.addLane?.(); }}
               title="Add lane"
               style={{
-                width: 22, height: 22, padding: 0,
+                width: 32, height: 32, padding: 0,
                 border: `1px solid ${paper.rule}`,
                 background: paper.bg, borderRadius: 2,
                 color: paper.ink70, cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontFamily: 'Inter Tight', fontSize: 14, lineHeight: 1,
+                fontFamily: 'Inter Tight', fontSize: 16, lineHeight: 1,
                 position: 'relative', zIndex: 5,
               }}>+</button>
           )}
@@ -653,12 +666,12 @@ function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
             onClick={(e) => { e.stopPropagation(); setOpen(false); }}
             title="Hide lane panel"
             style={{
-              width: 22, height: 22, padding: 0,
+              width: 32, height: 32, padding: 0,
               border: `1px solid ${paper.rule}`,
               background: paper.bg, borderRadius: 2,
               color: paper.ink70, cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'Inter Tight', fontSize: 11, lineHeight: 1,
+              fontFamily: 'Inter Tight', fontSize: 12, lineHeight: 1,
               position: 'relative', zIndex: 5,
             }}>▸</button>
         </div>
@@ -717,11 +730,8 @@ function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
                   style={laneChip(paper, l.enabled)}>
                   {l.enabled ? 'On' : 'Muted'}
                 </button>
-                <button
-                  onClick={e => { e.stopPropagation(); eng.clearLane(l.id); }}
-                  style={laneChip(paper, false)}>
-                  Clear
-                </button>
+                <ConfirmChip paper={paper}
+                  onConfirm={() => eng.clearLane(l.id)} />
               </div>
             )}
           </div>
@@ -786,6 +796,77 @@ function laneChip(paper, active) {
   };
 }
 
+// Two-tap confirm pattern (audit F-10).  First tap arms the action and
+// returns visible "armed" state for the host button to restyle (red border,
+// "tap again" label).  Second tap within timeoutMs commits.  The armed
+// state auto-clears after the timeout so an accidental first tap doesn't
+// leave a dangerous button hot.
+function useConfirmTap(action, timeoutMs = 1500) {
+  const [armed, setArmed] = React.useState(false);
+  const timerRef = React.useRef(null);
+  React.useEffect(() => () => {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+  }, []);
+  const onTap = React.useCallback(() => {
+    if (armed) {
+      if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+      setArmed(false);
+      action();
+    } else {
+      setArmed(true);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        setArmed(false);
+        timerRef.current = null;
+      }, timeoutMs);
+    }
+  }, [armed, action, timeoutMs]);
+  return [armed, onTap];
+}
+
+// Top-bar Btn-style button that requires two taps to commit a destructive
+// action.  Module-scope so React reconciles to the same DOM node across the
+// 30 Hz phase-driven re-render flood (avoids the click-eating bug pattern).
+function ConfirmBtn({ paper, onConfirm, label, armedLabel = 'Tap to confirm', title }) {
+  const [armed, onTap] = useConfirmTap(onConfirm);
+  return (
+    <button
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); onTap(); }}
+      title={armed ? `${title || label} — tap again to confirm` : title || label}
+      style={{
+        padding: '4px 10px', height: 36,
+        border: `1px solid ${armed ? 'oklch(52% 0.18 22)' : paper.rule}`,
+        background: armed ? 'oklch(94% 0.04 25)' : 'transparent',
+        color: armed ? 'oklch(40% 0.18 22)' : paper.ink70,
+        borderRadius: 2, cursor: 'pointer',
+        fontFamily: 'Inter Tight', fontSize: 11, letterSpacing: 0.5,
+        textTransform: 'uppercase',
+        position: 'relative', zIndex: 5,
+      }}>{armed ? armedLabel : label}</button>
+  );
+}
+
+// Lane-Clear chip variant (lane panel).  Same two-tap pattern, but styled
+// as a chip and scoped to a single lane via the `onConfirm` prop closure.
+function ConfirmChip({ paper, onConfirm, label = 'Clear', armedLabel = 'Tap again' }) {
+  const [armed, onTap] = useConfirmTap(onConfirm);
+  return (
+    <button
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); onTap(); }}
+      style={{
+        padding: '4px 8px', minHeight: 28,
+        borderRadius: 2,
+        border: `1px solid ${armed ? 'oklch(52% 0.18 22)' : paper.rule}`,
+        background: armed ? 'oklch(94% 0.04 25)' : 'transparent',
+        color: armed ? 'oklch(40% 0.18 22)' : paper.ink70,
+        fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 0.5,
+        textTransform: 'uppercase', cursor: 'pointer',
+      }}>{armed ? armedLabel : label}</button>
+  );
+}
+
 // ── Canvas corner controls ────────────────────────────────────
 //
 // IMPORTANT: every helper below is defined at MODULE scope, not inside
@@ -831,7 +912,7 @@ function GridBtn({ axis, denser, onClick, paper }) {
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => { e.stopPropagation(); if (onClick) onClick(e); }}
       title={`${axis} grid ${denser ? 'denser' : 'sparser'}`} style={{
-      width: 32, height: 28, border: `1px solid ${paper.rule}`,
+      width: 36, height: 36, border: `1px solid ${paper.rule}`,
       background: paper.card, borderRadius: 2,
       color: paper.ink70, cursor: 'pointer', padding: 2,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -850,15 +931,24 @@ function BothBtn({ active, onClick, paper }) {
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => { e.stopPropagation(); if (onClick) onClick(e); }}
       title="Lock both axes" style={{
-      width: 32, height: 28,
+      width: 36, height: 36,
       border: `1px solid ${active ? paper.amberInk : paper.rule}`,
       background: active ? paper.amberInk : paper.card,
       color: active ? paper.bg : paper.ink70,
       borderRadius: 2, cursor: 'pointer', padding: 0,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontFamily: 'Inter Tight', fontSize: 13, fontWeight: 700,
       position: 'relative', zIndex: 5,
-    }}>#</button>
+    }}>
+      {/* Audit F-06: replace ASCII "#" with a tiny crossed-axis padlock that
+          shares vocabulary with the per-axis LockBtn padlocks. */}
+      <svg width={14} height={16} viewBox="0 0 14 16" aria-hidden="true">
+        <rect x={3} y={7} width={8} height={8} rx={1} fill="currentColor" opacity={0.9}/>
+        <path d="M3.5 7V5a3.5 3.5 0 017 0V7" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round"/>
+        {/* axis-cross marker */}
+        <line x1={7} y1={9} x2={7} y2={13} stroke={active ? '#FFFFFF' : 'currentColor'} strokeWidth={0.9} opacity={0.6}/>
+        <line x1={5} y1={11} x2={9} y2={11} stroke={active ? '#FFFFFF' : 'currentColor'} strokeWidth={0.9} opacity={0.6}/>
+      </svg>
+    </button>
   );
 }
 
@@ -866,7 +956,7 @@ function BothBtn({ active, onClick, paper }) {
 function CountPill({ value, paper }) {
   return (
     <div style={{
-      minWidth: 24, height: 22, padding: '0 6px',
+      minWidth: 32, height: 36, padding: '0 8px',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: '"Instrument Serif", Georgia, serif',
       fontStyle: 'italic', fontSize: 13,
@@ -887,13 +977,13 @@ function PresetBtn({ label, active, onClick, paper }) {
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => { e.stopPropagation(); if (onClick) onClick(e); }}
       style={{
-        padding: '2px 6px', height: 22,
+        padding: '4px 10px', height: 30, minWidth: 36,
         border: `1px solid ${active ? paper.amberInk : paper.rule}`,
         background: active ? paper.amberInk : paper.card,
         color: active ? paper.bg : paper.ink50,
         borderRadius: 2, cursor: 'pointer',
         fontFamily: '"Instrument Serif", Georgia, serif',
-        fontStyle: 'italic', fontSize: 12,
+        fontStyle: 'italic', fontSize: 13,
         position: 'relative', zIndex: 5,
       }}>{label}</button>
   );
@@ -955,13 +1045,13 @@ function LockBtn({ axis, active, onClick, paper }) {
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => { e.stopPropagation(); if (onClick) onClick(e); }}
       title={`${axis} quantize ${active ? 'on' : 'off'}`} style={{
-      width: 32, height: 28, border: `1px solid ${active ? paper.amberInk : paper.rule}`,
+      width: 36, height: 36, border: `1px solid ${active ? paper.amberInk : paper.rule}`,
       background: active ? paper.amberInk : 'transparent',
       color: active ? paper.bg : paper.ink50,
       borderRadius: 2, cursor: 'pointer', padding: 0,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 0.5,
-      gap: 2,
+      fontFamily: 'Inter Tight', fontSize: 11, letterSpacing: 0.5,
+      gap: 3,
       // Own stacking context above the canvas div so spatial overlap doesn't
       // create unexpected hit-test outcomes.
       position: 'relative', zIndex: 5,
@@ -1357,7 +1447,49 @@ function JuceBottomBar({ eng, paper, h }) {
       <span style={{ fontFamily: 'Inter Tight', fontSize: 11, color: paper.ink70 }}>
         smooth {focusLane.smooth.toFixed(2)}
       </span>
+
+      {/* Spacer pushes the connection indicator to the right edge. */}
+      <div style={{ flex: 1 }} />
+
+      {/* Audit F-12 / F-19: bridge connection indicator.  ●  host = JUCE
+          WebView with bridge active; ○  standalone = no JUCE host (file://
+          preview or webapp).  Live-derived from window.__JUCE__, not
+          plumbed through the engine, so the indicator works everywhere
+          the bundle runs. */}
+      <BridgeStatus paper={paper} />
     </div>
+  );
+}
+
+// Connection-status pill rendered in the bottom bar.  Module-scope so it
+// reconciles to a stable DOM node across phase-driven re-renders, and
+// re-checks window.__JUCE__ on a 2 s heartbeat (covers the unlikely case
+// of the bridge being injected after first paint).
+function BridgeStatus({ paper }) {
+  const [connected, setConnected] = React.useState(
+    () => typeof window !== 'undefined' && typeof window.__JUCE__ !== 'undefined');
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      const next = typeof window !== 'undefined' && typeof window.__JUCE__ !== 'undefined';
+      setConnected(prev => prev === next ? prev : next);
+    }, 2000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <span title={connected ? 'JUCE host connected' : 'Standalone (no JUCE bridge)'}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 0.8,
+        color: paper.ink50, textTransform: 'uppercase',
+      }}>
+      <span style={{
+        width: 8, height: 8, borderRadius: '50%',
+        background: connected ? 'oklch(72% 0.15 145)' : 'transparent',
+        border: `1.5px solid ${connected ? 'oklch(50% 0.15 145)' : paper.ink30}`,
+        boxSizing: 'border-box',
+      }} />
+      <span>{connected ? 'host' : 'standalone'}</span>
+    </span>
   );
 }
 
