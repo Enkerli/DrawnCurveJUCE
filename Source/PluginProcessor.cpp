@@ -250,15 +250,20 @@ static inline bool useGlobalScaleForLane(int /*lane*/) { return true; }
 ScaleConfig DrawnCurveProcessor::getScaleConfig (int /*lane*/) const noexcept
 {
     // Note: lane argument ignored; all lanes share global scale config as useGlobalScaleForLane(lane) is hardcoded true.
-    const int     mode = static_cast<int> (
+    const int      mode       = static_cast<int> (
         apvts.getRawParameterValue (ParamID::scaleMode)->load());
-    const uint8_t root = static_cast<uint8_t> (
+    const uint8_t  root       = static_cast<uint8_t> (
         apvts.getRawParameterValue (ParamID::scaleRoot)->load());
+    const uint16_t customMask = static_cast<uint16_t> (
+        apvts.getRawParameterValue (ParamID::scaleMask)->load());
 
+    // The WebUI sets scaleMask directly (without setting scaleMode=7), so honour
+    // any non-chromatic customMask regardless of scaleMode.  The preset table is
+    // used only when scaleMode selects a named preset AND scaleMask is still at
+    // its chromatic default (0xFFF), which means the WebUI has not overridden it.
     uint16_t mask;
-    if (mode == 7)
-        mask = static_cast<uint16_t> (
-            apvts.getRawParameterValue (ParamID::scaleMask)->load());
+    if (mode == 7 || customMask != 0xFFF)
+        mask = customMask;
     else
         mask = kScalePresetMasks[std::clamp (mode, 0, 7)];
 

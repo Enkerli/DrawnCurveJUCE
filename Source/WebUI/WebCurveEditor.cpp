@@ -310,11 +310,19 @@ void WebCurveEditor::parameterChanged (const juce::String& paramID, float newVal
         // from a separate LaneSnapshot struct that's only refreshed by
         // updateLaneSnapshot().  Per-lane params hit one lane; global sync
         // params (syncEnabled / syncBeats) change loop length, so every lane
-        // needs a refresh.
+        // needs a refresh.  Scale params write to _scalesPacked[] via
+        // updateAllLaneScales() — the WebUI sets scaleMask/scaleRoot directly
+        // without going through scaleMode, so this must fire on all three.
         if (paramID == ParamID::syncEnabled || paramID == ParamID::syncBeats)
         {
             for (int L = 0; L < proc.activeLaneCount; ++L)
                 proc.updateLaneSnapshot (L);
+        }
+        else if (   paramID == ParamID::scaleMode
+                 || paramID == ParamID::scaleRoot
+                 || paramID == ParamID::scaleMask)
+        {
+            proc.updateAllLaneScales();
         }
         else if (paramID.startsWith ("l"))
         {
