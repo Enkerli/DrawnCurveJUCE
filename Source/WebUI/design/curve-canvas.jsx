@@ -192,13 +192,13 @@ function CurveCanvas({
         {/* Ghost lanes (inactive or unfocused) */}
         {lanes.map(l => {
           if (l.id === focus || !l.curve || !l.enabled) return null;
-          return <CurvePath key={'g' + l.id} curve={l.curve} w={width} h={height} stroke={l.color} opacity={0.25} width={1.5} />;
+          return <CurvePath key={'g' + l.id} curve={l.curve} w={width} h={height} stroke={l.color} opacity={0.25} width={1.5} dash={l.dash} />;
         })}
 
         {/* Focused lane curve — original drawn shape, kept visible underneath
             the quantized staircase as a "source" reference. */}
         {focusLane?.curve && (
-          <CurvePath curve={focusLane.curve} w={width} h={height} stroke={focusLane.color} opacity={0.95} width={2.5} />
+          <CurvePath curve={focusLane.curve} w={width} h={height} stroke={focusLane.color} opacity={0.95} width={2.5} dash={focusLane.dash} />
         )}
 
         {/* Staircase overlay — shows the *actual* emitted playback curve when
@@ -241,6 +241,7 @@ function CurveCanvas({
             strokeLinecap="round"
             strokeLinejoin="round"
             opacity={0.75}
+            strokeDasharray={focusLane?.dash ?? '0'}
           />
         )}
 
@@ -334,7 +335,7 @@ function CurveCanvas({
   );
 }
 
-function CurvePath({ curve, w, h, stroke, opacity = 1, width = 2 }) {
+function CurvePath({ curve, w, h, stroke, opacity = 1, width = 2, dash = '0' }) {
   const n = curve.length;
   let d = '';
   for (let i = 0; i < n; i++) {
@@ -342,7 +343,7 @@ function CurvePath({ curve, w, h, stroke, opacity = 1, width = 2 }) {
     const y = (1 - curve[i]) * h;
     d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
   }
-  return <path d={d} fill="none" stroke={stroke} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" opacity={opacity} />;
+  return <path d={d} fill="none" stroke={stroke} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" opacity={opacity} strokeDasharray={dash} />;
 }
 
 Object.assign(window, { CurveCanvas, CurvePath });

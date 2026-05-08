@@ -23570,9 +23570,12 @@
     laneMoss: "#4A7A55"
   };
   var LANES = [
-    { id: 0, name: "One", color: PAPER.laneInk, tint: "oklch(88% 0.02 250)" },
-    { id: 1, name: "Two", color: PAPER.laneRose, tint: "oklch(92% 0.03  25)" },
-    { id: 2, name: "Three", color: PAPER.laneMoss, tint: "oklch(91% 0.03 145)" }
+    { id: 0, name: "One", color: PAPER.laneInk, tint: "oklch(88% 0.02 250)", dash: "0" },
+    // solid
+    { id: 1, name: "Two", color: PAPER.laneRose, tint: "oklch(92% 0.03  25)", dash: "10 4" },
+    // long-dash
+    { id: 2, name: "Three", color: PAPER.laneMoss, tint: "oklch(91% 0.03 145)", dash: "6 3 2 3" }
+    // dot-dash
   ];
   var SCALES2 = [
     // Diatonic — 7 modes of the major scale
@@ -23715,6 +23718,7 @@
         id: 0,
         color: window.LANES[0].color,
         name: window.LANES[0].name,
+        dash: window.LANES[0].dash,
         curve: makeSineCurve2(256, 0.5, 0.35, 1.2, 0),
         enabled: true,
         target: "CC",
@@ -23739,6 +23743,7 @@
         id: 1,
         color: window.LANES[1].color,
         name: window.LANES[1].name,
+        dash: window.LANES[1].dash,
         curve: makeSineCurve2(256, 0.5, 0.25, 2.4, Math.PI / 3),
         enabled: true,
         target: "Note",
@@ -23761,6 +23766,7 @@
         id: 2,
         color: window.LANES[2].color,
         name: window.LANES[2].name,
+        dash: window.LANES[2].dash,
         curve: null,
         enabled: false,
         target: "PitchBend",
@@ -24544,9 +24550,9 @@
         }),
         lanes.map((l) => {
           if (l.id === focus || !l.curve || !l.enabled) return null;
-          return /* @__PURE__ */ React.createElement(CurvePath2, { key: "g" + l.id, curve: l.curve, w: width, h: height, stroke: l.color, opacity: 0.25, width: 1.5 });
+          return /* @__PURE__ */ React.createElement(CurvePath2, { key: "g" + l.id, curve: l.curve, w: width, h: height, stroke: l.color, opacity: 0.25, width: 1.5, dash: l.dash });
         }),
-        focusLane?.curve && /* @__PURE__ */ React.createElement(CurvePath2, { curve: focusLane.curve, w: width, h: height, stroke: focusLane.color, opacity: 0.95, width: 2.5 }),
+        focusLane?.curve && /* @__PURE__ */ React.createElement(CurvePath2, { curve: focusLane.curve, w: width, h: height, stroke: focusLane.color, opacity: 0.95, width: 2.5, dash: focusLane.dash }),
         focusLane?.curve && (focusLane.quantizeX || focusLane.quantizeY) && (() => {
           const xDiv = focusLane.quantizeX && focusLane.xDivisions >= 2 ? focusLane.xDivisions : null;
           const N = xDiv ?? 256;
@@ -24582,7 +24588,8 @@
             strokeWidth: 2.5,
             strokeLinecap: "round",
             strokeLinejoin: "round",
-            opacity: 0.75
+            opacity: 0.75,
+            strokeDasharray: focusLane?.dash ?? "0"
           }
         ),
         lanes.map((l) => {
@@ -24648,7 +24655,7 @@
       } }, "draw a curve \u2192")
     );
   }
-  function CurvePath2({ curve, w, h, stroke, opacity = 1, width = 2 }) {
+  function CurvePath2({ curve, w, h, stroke, opacity = 1, width = 2, dash = "0" }) {
     const n = curve.length;
     let d = "";
     for (let i = 0; i < n; i++) {
@@ -24656,7 +24663,7 @@
       const y = (1 - curve[i]) * h;
       d += (i === 0 ? "M" : "L") + x.toFixed(1) + "," + y.toFixed(1);
     }
-    return /* @__PURE__ */ React.createElement("path", { d, fill: "none", stroke, strokeWidth: width, strokeLinecap: "round", strokeLinejoin: "round", opacity });
+    return /* @__PURE__ */ React.createElement("path", { d, fill: "none", stroke, strokeWidth: width, strokeLinecap: "round", strokeLinejoin: "round", opacity, strokeDasharray: dash });
   }
   Object.assign(window, { CurveCanvas: CurveCanvas2, CurvePath: CurvePath2 });
 
@@ -25076,6 +25083,7 @@
             ...l,
             color: l.color ?? fallback.color,
             name: l.name ?? fallback.name ?? `Lane ${l.id + 1}`,
+            dash: fallback.dash ?? "0",
             curve: l.curve ? arrayToF32(l.curve) : null
           };
         });

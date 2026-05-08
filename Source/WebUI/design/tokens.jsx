@@ -23,9 +23,9 @@ const PAPER = {
 };
 
 const LANES = [
-  { id: 0, name: 'One',   color: PAPER.laneInk,  tint: 'oklch(88% 0.02 250)' },
-  { id: 1, name: 'Two',   color: PAPER.laneRose, tint: 'oklch(92% 0.03  25)' },
-  { id: 2, name: 'Three', color: PAPER.laneMoss, tint: 'oklch(91% 0.03 145)' },
+  { id: 0, name: 'One',   color: PAPER.laneInk,  tint: 'oklch(88% 0.02 250)', dash: '0'     }, // solid
+  { id: 1, name: 'Two',   color: PAPER.laneRose, tint: 'oklch(92% 0.03  25)', dash: '10 4'  }, // long-dash
+  { id: 2, name: 'Three', color: PAPER.laneMoss, tint: 'oklch(91% 0.03 145)', dash: '6 3 2 3' }, // dot-dash
 ];
 
 // Scale presets — pitch-class bitmasks (MSB = root, bit 11 = interval 0).

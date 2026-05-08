@@ -316,6 +316,13 @@ void WebCurveEditor::parameterChanged (const juce::String& paramID, float newVal
             for (int L = 0; L < proc.activeLaneCount; ++L)
                 proc.updateLaneSnapshot (L);
         }
+        else if (paramID == ParamID::scaleRoot || paramID == ParamID::scaleMask
+              || paramID == ParamID::scaleMode)
+        {
+            // Global scale params — push the new ScaleConfig to the engine for
+            // every active lane so Note-mode quantization takes effect immediately.
+            proc.updateAllLaneScales();
+        }
         else if (paramID.startsWith ("l"))
         {
             const int sep = paramID.indexOfChar ('_');

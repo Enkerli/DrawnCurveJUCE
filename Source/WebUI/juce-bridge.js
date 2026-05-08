@@ -135,6 +135,7 @@ export function initJuceBridge(onEvent) {
           ...l,
           color: l.color ?? fallback.color,
           name:  l.name  ?? fallback.name ?? `Lane ${l.id + 1}`,
+          dash:  fallback.dash ?? '0',
           curve: l.curve ? arrayToF32(l.curve) : null,
         };
       });

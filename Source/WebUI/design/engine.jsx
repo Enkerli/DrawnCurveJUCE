@@ -7,6 +7,7 @@ function useDrawnQurveEngine(initial = {}) {
       id: 0,
       color: window.LANES[0].color,
       name: window.LANES[0].name,
+      dash: window.LANES[0].dash,
       curve: makeSineCurve(256, 0.5, 0.35, 1.2, 0),
       enabled: true,
       target: 'CC',      // 'CC' | 'Aftertouch' | 'PitchBend' | 'Note'
@@ -29,6 +30,7 @@ function useDrawnQurveEngine(initial = {}) {
       id: 1,
       color: window.LANES[1].color,
       name: window.LANES[1].name,
+      dash: window.LANES[1].dash,
       curve: makeSineCurve(256, 0.5, 0.25, 2.4, Math.PI / 3),
       enabled: true,
       target: 'Note',
@@ -50,6 +52,7 @@ function useDrawnQurveEngine(initial = {}) {
       id: 2,
       color: window.LANES[2].color,
       name: window.LANES[2].name,
+      dash: window.LANES[2].dash,
       curve: null,
       enabled: false,
       target: 'PitchBend',

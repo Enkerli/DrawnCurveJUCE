@@ -767,6 +767,12 @@ void DrawnCurveProcessor::updateLaneSnapshot (int lane)
     // Note: do NOT delete existing — it may still be in use by the audio thread until
     // the next processBlock acquires the new pointer.  Small intentional leak per update;
     // finalizeCapture() already has the same pattern (_laneSnaps overwrite without delete).
+
+    // Re-push scale config — updateLaneSnapshot is called when any per-lane or
+    // global param changes, so scaleRoot/scaleMask might have changed since the
+    // engine was last told.  Keeping it in sync here ensures the engine always
+    // has the correct ScaleConfig even if parameterChanged fires out of order.
+    updateEngineScale (lane);
 }
 
 void DrawnCurveProcessor::clearSnapshot (int lane)
@@ -831,6 +837,10 @@ void DrawnCurveProcessor::setSnapshotFromArray (int lane, const float* data, int
         _engine.setSnapshot (lane, snap);
         _engine.resetLane (lane);
     }
+
+    // Push the current global scale config to the engine for this lane so
+    // Note-mode quantization is active immediately after the first draw.
+    updateEngineScale (lane);
 }
 
 void DrawnCurveProcessor::clearAllSnapshots()
