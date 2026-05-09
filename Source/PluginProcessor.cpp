@@ -468,15 +468,17 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     }
 
 #if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
-    // Compute per-lane speed and direction.  When sync is on, speed comes from the
-    // host BPM calculation (all lanes share the same tempo-derived rate); only the
-    // direction can differ.  In free mode each lane may also have its own multiplier.
+    // Compute per-lane speed and direction.  effectiveSpeed is the global rate
+    // (tempo-derived in sync mode, playbackSpeed param in free mode).
+    // laneEffectiveSpeed() multiplies by the per-lane laneSpeedMul when that
+    // lane has useGlobalPlayback=false; otherwise it returns globalSpeed
+    // unchanged.  Apply it in both sync and free mode so per-lane multipliers
+    // work regardless of host sync state.
     std::array<float, kMaxLanes>            laneSpeedRatios;
     std::array<PlaybackDirection, kMaxLanes> laneDirs;
     for (int L = 0; L < kMaxLanes; ++L)
     {
-        laneSpeedRatios[static_cast<size_t>(L)] =
-            syncOn ? effectiveSpeed : laneEffectiveSpeed (apvts, L, effectiveSpeed);
+        laneSpeedRatios[static_cast<size_t>(L)] = laneEffectiveSpeed (apvts, L, effectiveSpeed);
         laneDirs[static_cast<size_t>(L)] = laneEffectiveDirection (apvts, L, dir);
     }
     _effectiveSpeedRatio.store (laneSpeedRatios[0], std::memory_order_relaxed);
