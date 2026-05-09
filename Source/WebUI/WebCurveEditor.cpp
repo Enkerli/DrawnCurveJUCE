@@ -205,6 +205,12 @@ juce::WebBrowserComponent::Options WebCurveEditor::buildOptions (WebCurveEditor*
             const int lane = static_cast<int> (args[0]["lane"]);
             owner->proc.deleteLane (lane);
             owner->sendStateSnapshot();
+        })
+
+        // "panic" — {} — All Notes Off on every channel; resets engine dedup state
+        .withEventListener ("panic", [owner] (const Array<var>&)
+        {
+            owner->proc.sendPanic();
         });
 }
 

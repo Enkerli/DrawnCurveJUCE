@@ -442,7 +442,7 @@ function JuceTopBar({ eng, paper, h, midiGhostOn, setMidiGhostOn, pluginSync, se
       <ConfirmBtn paper={paper} onConfirm={eng.clearAll}
         label="Clear" armedLabel="Tap to confirm"
         title="Clear all lanes" />
-      <IconBtn paper={paper} size={32} title="Panic"><span style={{ fontSize: 13 }}>!</span></IconBtn>
+      <IconBtn paper={paper} size={32} onClick={eng.panic} title="Panic — all notes off"><span style={{ fontSize: 13 }}>!</span></IconBtn>
       <IconBtn paper={paper} size={32} title="Help"><span style={{ fontSize: 13 }}>?</span></IconBtn>
     </div>
   );

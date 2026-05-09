@@ -301,11 +301,26 @@ void DrawnCurveProcessor::prepareToPlay (double sampleRate, int /*samplesPerBloc
 
 void DrawnCurveProcessor::releaseResources()
 {
-    // Signal a MIDI panic before the plugin is torn down.  The engine's
-    // setPlaying(false) also sets _noteOffNeeded on all lanes; the panic
-    // additionally sweeps all 128 notes so nothing stays held in the host.
+    // Signal a MIDI panic for any subsequent processBlock call (plugin mode).
     _panicNeeded.store (true, std::memory_order_release);
     _engine.setPlaying (false);
+
+    // In standalone mode (and as a belt-and-suspenders measure in plugin mode),
+    // send All Notes Off + a full Note Off sweep directly through the MIDI port
+    // now, without waiting for a processBlock that may never come.  This closes
+    // any notes that are still held when the audio device stops or the graph is
+    // torn down.  sendMessageNow is thread-safe (uses OS-level MIDI API locks).
+    auto* vOut = _virtualMidiOut.load (std::memory_order_acquire);
+    auto* dOut = _directMidiOut.load  (std::memory_order_acquire);
+    if (vOut != nullptr || dOut != nullptr)
+    {
+        for (int ch = 1; ch <= 16; ++ch)
+        {
+            const auto allNotesOff = juce::MidiMessage::controllerEvent (ch, 123, 0);
+            if (vOut) vOut->sendMessageNow (allNotesOff);
+            if (dOut) dOut->sendMessageNow (allNotesOff);
+        }
+    }
 }
 
 //==============================================================================

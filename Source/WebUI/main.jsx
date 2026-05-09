@@ -15,7 +15,7 @@ import './design/scale-editor.jsx';
 import { initJuceBridge, sendCurve, sendParam, sendFocus,
          sendPlaying, sendDirection, sendEnabled, sendGlobalActual,
          globalFieldForParamId,
-         sendClearLane, sendAddLane, sendRemoveLane } from './juce-bridge.js';
+         sendClearLane, sendAddLane, sendRemoveLane, sendPanic } from './juce-bridge.js';
 
 // ── Patch useDrawnQurveEngine ─────────────────────────────────────────────────
 // Must run before juce-ipad.jsx is imported (esbuild preserves import order in
@@ -205,6 +205,7 @@ import { initJuceBridge, sendCurve, sendParam, sendFocus,
       clearAll,
       addLane,
       removeLane,
+      panic: sendPanic,
     };
   };
 })();

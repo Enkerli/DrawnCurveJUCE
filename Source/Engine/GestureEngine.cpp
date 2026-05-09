@@ -274,13 +274,15 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
     const auto* snap = _snapshots[static_cast<size_t>(lane)].load (std::memory_order_acquire);
 
     // ── Note Off cleanup (may fire even without a valid snapshot) ─────────────
+    // Use rt.lastSentChannel (recorded at Note-On time) rather than
+    // snap->midiChannel so that:
+    //   (a) clearing a lane (snap == nullptr) still sends the Note Off, and
+    //   (b) a channel change between Note On and Note Off doesn't orphan a note.
     if (_noteOffNeeded[static_cast<size_t>(lane)].exchange (false, std::memory_order_acq_rel))
     {
-        if (snap && snap->valid
-            && snap->messageType == MessageType::Note
-            && rt.lastSentValue >= 0 && midiOut)
+        if (rt.lastSentValue >= 0 && midiOut)
         {
-            midiOut (0x80u | (snap->midiChannel & 0x0Fu),
+            midiOut (0x80u | (rt.lastSentChannel & 0x0Fu),
                      static_cast<uint8_t> (rt.lastSentValue), 0u);
         }
         rt.lastSentValue = -1;
@@ -545,7 +547,8 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
                              static_cast<uint8_t> (candidate), snap->noteVelocity);
                 }
             }
-            rt.lastSentValue = candidate;
+            rt.lastSentValue   = candidate;
+            rt.lastSentChannel = snap->midiChannel;   // record channel for matching Note Off
             _lastSentMirror[static_cast<size_t>(lane)].store (candidate, std::memory_order_release);
             break;
         }

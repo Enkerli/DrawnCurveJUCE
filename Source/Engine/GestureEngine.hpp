@@ -47,10 +47,12 @@ struct ScaleConfig
 /// Per-lane runtime state — render thread only.
 struct LaneRuntime
 {
-    double playheadSeconds = 0.0;   ///< Elapsed playback time within the current loop period
-    int    lastSentValue   = -1;    ///< Last emitted value (-1 = nothing sent yet); for dedup + Note Off
-    float  smoothedValue   = 0.0f;  ///< One-pole smoother state
-    int    lastXTick       = -1;    ///< Last committed X-grid tick index (for xQuantize dedup; -1 = none)
+    double  playheadSeconds  = 0.0;   ///< Elapsed playback time within the current loop period
+    int     lastSentValue    = -1;    ///< Last emitted value (-1 = nothing sent yet); for dedup + Note Off
+    uint8_t lastSentChannel  = 0;     ///< MIDI channel used for the last Note On; used for matching Note Off
+                                      ///<  even if the snapshot is replaced or cleared between events.
+    float   smoothedValue    = 0.0f;  ///< One-pole smoother state
+    int     lastXTick        = -1;    ///< Last committed X-grid tick index (for xQuantize dedup; -1 = none)
 };
 
 // ---------------------------------------------------------------------------

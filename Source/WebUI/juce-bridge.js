@@ -224,6 +224,7 @@ export function sendDirection(direction) { juceEmit('setDirection', { direction 
 export function sendClearLane(lane)      { juceEmit('clearLane',    { lane }); }
 export function sendAddLane()            { juceEmit('addLane',      {}); }
 export function sendRemoveLane(lane)     { juceEmit('removeLane',   { lane }); }
+export function sendPanic()              { juceEmit('panic',        {}); }
 
 // Export the LANE_MAP for use in C++ param-change dispatching
 export { LANE_MAP, laneParamId };

@@ -25148,6 +25148,9 @@
   function sendRemoveLane(lane) {
     juceEmit("removeLane", { lane });
   }
+  function sendPanic() {
+    juceEmit("panic", {});
+  }
 
   // design/juce-ipad.jsx
   init_react_globals();
@@ -25564,7 +25567,7 @@
         armedLabel: "Tap to confirm",
         title: "Clear all lanes"
       }
-    ), /* @__PURE__ */ React.createElement(IconBtn, { paper, size: 32, title: "Panic" }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13 } }, "!")), /* @__PURE__ */ React.createElement(IconBtn, { paper, size: 32, title: "Help" }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13 } }, "?")));
+    ), /* @__PURE__ */ React.createElement(IconBtn, { paper, size: 32, onClick: eng.panic, title: "Panic \u2014 all notes off" }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13 } }, "!")), /* @__PURE__ */ React.createElement(IconBtn, { paper, size: 32, title: "Help" }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13 } }, "?")));
   }
   function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
     return /* @__PURE__ */ React.createElement("div", { style: {
@@ -26886,7 +26889,8 @@
         clearLane,
         clearAll,
         addLane,
-        removeLane
+        removeLane,
+        panic: sendPanic
       };
     };
   })();
