@@ -116,11 +116,28 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
     prevTarget.current = focusLane?.target;
   }, [focusLane?.target]);
 
-  // MIDI ghost demo state
-  const [midiGhostOn, setMidiGhostOn] = React.useState(false);
-
-  // Plugin sync demo state
-  const [pluginSync, setPluginSync] = React.useState(false);
+  // F-24: Keyboard navigation — stable ref so the handler never needs to
+  // re-attach.  Space = play/pause; 1–4 = select lane N.
+  // Guard: skip when the user is typing in an input field.
+  const engRef = React.useRef(eng);
+  React.useEffect(() => { engRef.current = eng; });
+  React.useEffect(() => {
+    const onKey = (e) => {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.key === ' ') {
+        e.preventDefault();
+        engRef.current.setPlaying(p => !p);
+      }
+      const n = parseInt(e.key, 10);
+      if (n >= 1 && n <= engRef.current.lanes.length) {
+        e.preventDefault();
+        engRef.current.setFocus(engRef.current.lanes[n - 1].id);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []); // stable — reads engine state via ref
 
   // Gutter geometry — Y gutter on the left, X gutter on the bottom of the
   // canvas area, intersecting at the '#' corner cell.  Width must match
@@ -176,9 +193,7 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
     }}>
 
       {/* ── Top bar ── */}
-      <JuceTopBar eng={eng} paper={paper} h={TOP_H}
-        midiGhostOn={midiGhostOn} setMidiGhostOn={setMidiGhostOn}
-        pluginSync={pluginSync} setPluginSync={setPluginSync} />
+      <JuceTopBar eng={eng} paper={paper} h={TOP_H} />
 
       {/* ── Main row ── */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
@@ -211,9 +226,6 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
                 quantizeY={!!focusLane?.quantizeY}
                 useFlats={eng.useFlats}
               />
-
-              {/* MIDI ghost overlay */}
-              {midiGhostOn && <MidiGhostOverlay w={canvasSize.w} h={canvasSize.h} paper={paper} />}
 
               {/* Typographic readout */}
               <TypoReadout focusLane={focusLane} phase={eng.phase}
@@ -282,14 +294,15 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
                     display: 'flex', alignItems: 'center', gap: 10,
                   }}>
                     Mask
-                    {pluginSync && (
-                      <span style={{
-                        fontSize: 10, padding: '2px 8px', borderRadius: 10,
-                        border: `1px solid ${paper.amberInk}`,
-                        color: paper.amberInk, fontFamily: 'Inter Tight',
-                        letterSpacing: 0.5,
-                      }}>↓ synced from ScalePlugin</span>
-                    )}
+                    {/* F-20: make it clear scale settings are shared across
+                        all Note lanes until per-lane scale is implemented. */}
+                    <span style={{
+                      fontSize: 9, padding: '2px 8px', borderRadius: 10,
+                      border: `1px solid ${paper.rule}`,
+                      color: paper.ink50, fontFamily: 'Inter Tight',
+                      letterSpacing: 0.6, textTransform: 'uppercase',
+                      fontStyle: 'normal',
+                    }}>global · all Note lanes</span>
                   </div>
 
                   {/* Action row — All / Invert / None set the mask directly,
@@ -353,26 +366,31 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
 }
 
 // ── Top bar ──────────────────────────────────────────────────
-function JuceTopBar({ eng, paper, h, midiGhostOn, setMidiGhostOn, pluginSync, setPluginSync }) {
+// F-13: Stripped to essential controls only.  The "MIDI input ghosting"
+// and "ScalePlugin sync" placeholder buttons (F.3/F.4 roadmap items) were
+// removed — they consumed ~150 px and drove no real behaviour.  They will
+// return as real controls when the features are implemented.
+function JuceTopBar({ eng, paper, h }) {
   return (
     <div style={{
       height: h, display: 'flex', alignItems: 'center',
-      padding: '0 14px', gap: 12,
+      padding: '0 14px', gap: 10,
       borderBottom: `1px solid ${paper.rule}`,
       background: paper.card, flexShrink: 0,
     }}>
       <div style={{
         fontFamily: '"Instrument Serif", Georgia, serif',
         fontSize: 22, fontStyle: 'italic', letterSpacing: -0.3,
+        flexShrink: 0,
       }}>DrawnQurve</div>
 
-      <div style={{ width: 1, height: 20, background: paper.rule }} />
+      <div style={{ width: 1, height: 20, background: paper.rule, flexShrink: 0 }} />
 
-      {/* Playback */}
+      {/* Playback direction + transport */}
       <PlaybackControl direction={eng.direction} setDirection={eng.setDirection}
         playing={eng.playing} setPlaying={eng.setPlaying} paper={paper} />
 
-      {/* Sync + rate */}
+      {/* Sync mode + rate */}
       <Btn active={eng.syncOn} onClick={() => eng.setSyncOn(!eng.syncOn)} paper={paper} small>
         {eng.syncOn ? 'Sync' : 'Free'}
       </Btn>
@@ -386,46 +404,16 @@ function JuceTopBar({ eng, paper, h, midiGhostOn, setMidiGhostOn, pluginSync, se
         />
         <span style={{
           fontFamily: '"Instrument Serif", Georgia, serif',
-          fontStyle: 'italic', fontSize: 16, minWidth: 64,
+          fontStyle: 'italic', fontSize: 16, minWidth: 60,
+          flexShrink: 0,
         }}>{eng.syncOn ? `${eng.beats} beats` : `${eng.speed.toFixed(2)}×`}</span>
       </div>
 
       <div style={{ flex: 1 }} />
 
-      {/* Preview toggles — UI placeholders for unimplemented features
-          (MIDI input ghosting, ScalePlugin sync).  Audit F-09: styled
-          differently from real controls (dashed border, italic, ink30
-          colour, "soon" pill) so users understand they're previews.
-          Wire to real behaviour in roadmap rounds F.3 / F.4. */}
-      <button onClick={() => setMidiGhostOn(!midiGhostOn)}
-        title="MIDI input ghosting (preview)" style={{
-        padding: '4px 8px 4px 10px', borderRadius: 2,
-        border: `1px dashed ${midiGhostOn ? paper.amberInk : paper.ink30}`,
-        background: midiGhostOn ? 'oklch(90% 0.06 65)' : 'transparent',
-        color: midiGhostOn ? paper.amberInk : paper.ink30,
-        fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 0.8,
-        textTransform: 'uppercase', cursor: 'pointer',
-        fontStyle: 'italic',
-        display: 'flex', alignItems: 'center', gap: 5,
-      }}>MIDI in <span style={{ fontSize: 8, opacity: 0.7 }}>soon</span></button>
-
-      <button onClick={() => setPluginSync(!pluginSync)}
-        title="ScalePlugin sync (preview)" style={{
-        padding: '4px 8px 4px 10px', borderRadius: 2,
-        border: `1px dashed ${pluginSync ? paper.amberInk : paper.ink30}`,
-        background: pluginSync ? 'oklch(90% 0.06 65)' : 'transparent',
-        color: pluginSync ? paper.amberInk : paper.ink30,
-        fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 0.8,
-        textTransform: 'uppercase', cursor: 'pointer',
-        fontStyle: 'italic',
-        display: 'flex', alignItems: 'center', gap: 5,
-      }}>plugin sync <span style={{ fontSize: 8, opacity: 0.7 }}>soon</span></button>
-
-      <div style={{ width: 1, height: 20, background: paper.rule }} />
-      {/* Chromatic notation toggle — flips every pitch-class label between
-          sharp and flat spellings (axis labels, range slider, readouts,
-          scale wheel, bottom-bar summary).  Mirrors the native editor's
-          ♯/♭ utility-bar button. */}
+      {/* Utility strip — notation toggle, destructive ops, help */}
+      <div style={{ width: 1, height: 20, background: paper.rule, flexShrink: 0 }} />
+      {/* Chromatic notation: ♯/♭ toggle */}
       <button
         onClick={() => eng.setUseFlats(!eng.useFlats)}
         title={eng.useFlats ? 'Show sharps' : 'Show flats'}
@@ -435,15 +423,19 @@ function JuceTopBar({ eng, paper, h, midiGhostOn, setMidiGhostOn, pluginSync, se
           border: `1px solid ${paper.rule}`, borderRadius: 2,
           cursor: 'pointer',
           fontFamily: '"Instrument Serif", Georgia, serif',
-          fontSize: 16, fontStyle: 'italic',
-          color: paper.ink,
+          fontSize: 16, fontStyle: 'italic', color: paper.ink,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0,
         }}>{eng.useFlats ? '♭' : '♯'}</button>
       <ConfirmBtn paper={paper} onConfirm={eng.clearAll}
         label="Clear" armedLabel="Tap to confirm"
         title="Clear all lanes" />
-      <IconBtn paper={paper} size={32} onClick={eng.panic} title="Panic — all notes off"><span style={{ fontSize: 13 }}>!</span></IconBtn>
-      <IconBtn paper={paper} size={32} title="Help"><span style={{ fontSize: 13 }}>?</span></IconBtn>
+      <IconBtn paper={paper} size={36} onClick={eng.panic} title="Panic — all notes off (Space key = play/pause, 1–4 = select lane)">
+        <span style={{ fontSize: 14 }}>!</span>
+      </IconBtn>
+      <IconBtn paper={paper} size={36} title="Help">
+        <span style={{ fontSize: 14 }}>?</span>
+      </IconBtn>
     </div>
   );
 }
@@ -601,6 +593,19 @@ function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
   const MAX_LANES = 4;
   const canAdd = eng.lanes.length < MAX_LANES;
 
+  // F-21: Brief disabled window after add/remove so the button can't be
+  // double-fired before the C++ round-trip (stateSnapshot) settles the lane
+  // count.  500 ms is enough for the bridge echo to arrive; the button
+  // re-enables automatically.
+  const [addPending, setAddPending] = React.useState(false);
+  const handleAddLane = React.useCallback((e) => {
+    e.stopPropagation();
+    if (addPending || !canAdd) return;
+    setAddPending(true);
+    eng.addLane?.();
+    setTimeout(() => setAddPending(false), 500);
+  }, [addPending, canAdd, eng.addLane]);
+
   // Collapsed mode — show only a vertical "▸ lanes" tab so the user can
   // reclaim canvas width.  Mirrors JuceShapeWell's collapsed handle.
   if (!open) {
@@ -649,17 +654,21 @@ function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
           {canAdd && (
             <button
               onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); eng.addLane?.(); }}
+              onClick={handleAddLane}
               title="Add lane"
+              disabled={addPending}
               style={{
                 width: 32, height: 32, padding: 0,
                 border: `1px solid ${paper.rule}`,
                 background: paper.bg, borderRadius: 2,
-                color: paper.ink70, cursor: 'pointer',
+                color: addPending ? paper.ink30 : paper.ink70,
+                cursor: addPending ? 'default' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontFamily: 'Inter Tight', fontSize: 16, lineHeight: 1,
                 position: 'relative', zIndex: 5,
-              }}>+</button>
+                opacity: addPending ? 0.5 : 1,
+                transition: 'opacity 150ms',
+              }}>{addPending ? '…' : '+'}</button>
           )}
           <button
             onPointerDown={(e) => e.stopPropagation()}
@@ -1176,32 +1185,44 @@ function XAxisGutter({ eng, paper, focusLane, gridX, setGridX, height, cornerW,
         )}
       </div>
       <div style={{ flex: 1 }} />
+      {/* F-07: "qurves" renamed to "Shelf" — more descriptive.  Available
+          regardless of lane type so users can browse/load at any time. */}
       <button
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => { e.stopPropagation(); setShelfOpen(!shelfOpen); }}
+        title="Qurve library — save &amp; load curve shapes"
         style={{
           padding: '4px 10px', height: 28, marginRight: 6,
-          background: paper.card, border: `1px solid ${paper.rule}`,
+          background: shelfOpen ? paper.ink : paper.card,
+          color: shelfOpen ? paper.bg : paper.ink50,
+          border: `1px solid ${shelfOpen ? paper.ink : paper.rule}`,
           borderRadius: 2, cursor: 'pointer',
           fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 1,
-          color: paper.ink50, textTransform: 'uppercase',
+          textTransform: 'uppercase',
           position: 'relative', zIndex: 5,
-        }}>{shelfOpen ? '▾ qurves' : '▸ qurves'}</button>
-      {focusLane?.target === 'Note' && (
-        <button
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => { e.stopPropagation(); setScaleOpen(!scaleOpen); }}
-          style={{
-            padding: '4px 12px', height: 28, marginRight: 8,
-            background: scaleOpen ? paper.ink : paper.card,
-            color: scaleOpen ? paper.bg : paper.ink50,
-            border: `1px solid ${scaleOpen ? paper.ink : paper.rule}`,
-            borderRadius: 2, cursor: 'pointer',
-            fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 1,
-            textTransform: 'uppercase',
-            position: 'relative', zIndex: 5,
-          }}>{scaleOpen ? '▾ scale' : '▴ scale'}</button>
-      )}
+        }}>{shelfOpen ? '▾ shelf' : '▸ shelf'}</button>
+      {/* Scale panel button — shown for Note lanes.  When closed, shows the
+          current recognised scale name so the user knows a scale is active
+          without having to open the panel (F-07 discoverability). */}
+      {focusLane?.target === 'Note' && (() => {
+        const scaleName = (window.SCALES.find(s => s.id === focusLane.scaleId) || { name: 'Scale' }).name;
+        return (
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); setScaleOpen(!scaleOpen); }}
+            title="Scale / pitch-class set editor"
+            style={{
+              padding: '4px 12px', height: 28, marginRight: 8,
+              background: scaleOpen ? paper.ink : paper.card,
+              color: scaleOpen ? paper.bg : paper.ink50,
+              border: `1px solid ${scaleOpen ? paper.ink : paper.rule}`,
+              borderRadius: 2, cursor: 'pointer',
+              fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 1,
+              textTransform: 'uppercase',
+              position: 'relative', zIndex: 5,
+            }}>{scaleOpen ? `▾ scale` : `▴ ${scaleName}`}</button>
+        );
+      })()}
     </div>
   );
 }

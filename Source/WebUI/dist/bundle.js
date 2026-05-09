@@ -25236,8 +25236,27 @@
       }
       prevTarget.current = focusLane?.target;
     }, [focusLane?.target]);
-    const [midiGhostOn, setMidiGhostOn] = React.useState(false);
-    const [pluginSync, setPluginSync] = React.useState(false);
+    const engRef = React.useRef(eng);
+    React.useEffect(() => {
+      engRef.current = eng;
+    });
+    React.useEffect(() => {
+      const onKey = (e) => {
+        const tag = document.activeElement?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        if (e.key === " ") {
+          e.preventDefault();
+          engRef.current.setPlaying((p) => !p);
+        }
+        const n = parseInt(e.key, 10);
+        if (n >= 1 && n <= engRef.current.lanes.length) {
+          e.preventDefault();
+          engRef.current.setFocus(engRef.current.lanes[n - 1].id);
+        }
+      };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, []);
     const Y_GUTTER_W = 60;
     const X_GUTTER_H = 48;
     const canvasW = width - LEFT_W - RIGHT_W - Y_GUTTER_W;
@@ -25273,18 +25292,7 @@
         radial-gradient(circle at 15% 30%, oklch(94% 0.02 65 / 0.4) 0, transparent 50%),
         radial-gradient(circle at 80% 70%, oklch(95% 0.025 90 / 0.3) 0, transparent 40%)
       `
-    } }, /* @__PURE__ */ React.createElement(
-      JuceTopBar,
-      {
-        eng,
-        paper,
-        h: TOP_H,
-        midiGhostOn,
-        setMidiGhostOn,
-        pluginSync,
-        setPluginSync
-      }
-    ), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", minHeight: 0 } }, /* @__PURE__ */ React.createElement(
+    } }, /* @__PURE__ */ React.createElement(JuceTopBar, { eng, paper, h: TOP_H }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", minHeight: 0 } }, /* @__PURE__ */ React.createElement(
       JuceShapeWell,
       {
         open: leftOpen,
@@ -25323,7 +25331,7 @@
         quantizeY: !!focusLane?.quantizeY,
         useFlats: eng.useFlats
       }
-    ), midiGhostOn && /* @__PURE__ */ React.createElement(MidiGhostOverlay, { w: canvasSize.w, h: canvasSize.h, paper }), /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement(
       TypoReadout,
       {
         focusLane,
@@ -25402,15 +25410,17 @@
       display: "flex",
       alignItems: "center",
       gap: 10
-    } }, "Mask", pluginSync && /* @__PURE__ */ React.createElement("span", { style: {
-      fontSize: 10,
+    } }, "Mask", /* @__PURE__ */ React.createElement("span", { style: {
+      fontSize: 9,
       padding: "2px 8px",
       borderRadius: 10,
-      border: `1px solid ${paper.amberInk}`,
-      color: paper.amberInk,
+      border: `1px solid ${paper.rule}`,
+      color: paper.ink50,
       fontFamily: "Inter Tight",
-      letterSpacing: 0.5
-    } }, "\u2193 synced from ScalePlugin")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: () => eng.updateLane(focusLane.id, {
+      letterSpacing: 0.6,
+      textTransform: "uppercase",
+      fontStyle: "normal"
+    } }, "global \xB7 all Note lanes")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: () => eng.updateLane(focusLane.id, {
       scaleMask: 4095,
       scaleId: "chromatic"
     }) }, "All"), /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: () => {
@@ -25447,13 +25457,13 @@
       }
     )), /* @__PURE__ */ React.createElement(JuceBottomBar, { eng, paper, h: BOTTOM_H }));
   }
-  function JuceTopBar({ eng, paper, h, midiGhostOn, setMidiGhostOn, pluginSync, setPluginSync }) {
+  function JuceTopBar({ eng, paper, h }) {
     return /* @__PURE__ */ React.createElement("div", { style: {
       height: h,
       display: "flex",
       alignItems: "center",
       padding: "0 14px",
-      gap: 12,
+      gap: 10,
       borderBottom: `1px solid ${paper.rule}`,
       background: paper.card,
       flexShrink: 0
@@ -25461,8 +25471,9 @@
       fontFamily: '"Instrument Serif", Georgia, serif',
       fontSize: 22,
       fontStyle: "italic",
-      letterSpacing: -0.3
-    } }, "DrawnQurve"), /* @__PURE__ */ React.createElement("div", { style: { width: 1, height: 20, background: paper.rule } }), /* @__PURE__ */ React.createElement(
+      letterSpacing: -0.3,
+      flexShrink: 0
+    } }, "DrawnQurve"), /* @__PURE__ */ React.createElement("div", { style: { width: 1, height: 20, background: paper.rule, flexShrink: 0 } }), /* @__PURE__ */ React.createElement(
       PlaybackControl,
       {
         direction: eng.direction,
@@ -25486,56 +25497,9 @@
       fontFamily: '"Instrument Serif", Georgia, serif',
       fontStyle: "italic",
       fontSize: 16,
-      minWidth: 64
-    } }, eng.syncOn ? `${eng.beats} beats` : `${eng.speed.toFixed(2)}\xD7`)), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }), /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        onClick: () => setMidiGhostOn(!midiGhostOn),
-        title: "MIDI input ghosting (preview)",
-        style: {
-          padding: "4px 8px 4px 10px",
-          borderRadius: 2,
-          border: `1px dashed ${midiGhostOn ? paper.amberInk : paper.ink30}`,
-          background: midiGhostOn ? "oklch(90% 0.06 65)" : "transparent",
-          color: midiGhostOn ? paper.amberInk : paper.ink30,
-          fontFamily: "Inter Tight",
-          fontSize: 10,
-          letterSpacing: 0.8,
-          textTransform: "uppercase",
-          cursor: "pointer",
-          fontStyle: "italic",
-          display: "flex",
-          alignItems: "center",
-          gap: 5
-        }
-      },
-      "MIDI in ",
-      /* @__PURE__ */ React.createElement("span", { style: { fontSize: 8, opacity: 0.7 } }, "soon")
-    ), /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        onClick: () => setPluginSync(!pluginSync),
-        title: "ScalePlugin sync (preview)",
-        style: {
-          padding: "4px 8px 4px 10px",
-          borderRadius: 2,
-          border: `1px dashed ${pluginSync ? paper.amberInk : paper.ink30}`,
-          background: pluginSync ? "oklch(90% 0.06 65)" : "transparent",
-          color: pluginSync ? paper.amberInk : paper.ink30,
-          fontFamily: "Inter Tight",
-          fontSize: 10,
-          letterSpacing: 0.8,
-          textTransform: "uppercase",
-          cursor: "pointer",
-          fontStyle: "italic",
-          display: "flex",
-          alignItems: "center",
-          gap: 5
-        }
-      },
-      "plugin sync ",
-      /* @__PURE__ */ React.createElement("span", { style: { fontSize: 8, opacity: 0.7 } }, "soon")
-    ), /* @__PURE__ */ React.createElement("div", { style: { width: 1, height: 20, background: paper.rule } }), /* @__PURE__ */ React.createElement(
+      minWidth: 60,
+      flexShrink: 0
+    } }, eng.syncOn ? `${eng.beats} beats` : `${eng.speed.toFixed(2)}\xD7`)), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }), /* @__PURE__ */ React.createElement("div", { style: { width: 1, height: 20, background: paper.rule, flexShrink: 0 } }), /* @__PURE__ */ React.createElement(
       "button",
       {
         onClick: () => eng.setUseFlats(!eng.useFlats),
@@ -25554,7 +25518,8 @@
           color: paper.ink,
           display: "flex",
           alignItems: "center",
-          justifyContent: "center"
+          justifyContent: "center",
+          flexShrink: 0
         }
       },
       eng.useFlats ? "\u266D" : "\u266F"
@@ -25567,7 +25532,7 @@
         armedLabel: "Tap to confirm",
         title: "Clear all lanes"
       }
-    ), /* @__PURE__ */ React.createElement(IconBtn, { paper, size: 32, onClick: eng.panic, title: "Panic \u2014 all notes off" }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13 } }, "!")), /* @__PURE__ */ React.createElement(IconBtn, { paper, size: 32, title: "Help" }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13 } }, "?")));
+    ), /* @__PURE__ */ React.createElement(IconBtn, { paper, size: 36, onClick: eng.panic, title: "Panic \u2014 all notes off (Space key = play/pause, 1\u20134 = select lane)" }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14 } }, "!")), /* @__PURE__ */ React.createElement(IconBtn, { paper, size: 36, title: "Help" }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14 } }, "?")));
   }
   function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
     return /* @__PURE__ */ React.createElement("div", { style: {
@@ -25732,6 +25697,14 @@
   function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
     const MAX_LANES = 4;
     const canAdd = eng.lanes.length < MAX_LANES;
+    const [addPending, setAddPending] = React.useState(false);
+    const handleAddLane = React.useCallback((e) => {
+      e.stopPropagation();
+      if (addPending || !canAdd) return;
+      setAddPending(true);
+      eng.addLane?.();
+      setTimeout(() => setAddPending(false), 500);
+    }, [addPending, canAdd, eng.addLane]);
     if (!open) {
       return /* @__PURE__ */ React.createElement("div", { style: {
         width,
@@ -25795,11 +25768,9 @@
       "button",
       {
         onPointerDown: (e) => e.stopPropagation(),
-        onClick: (e) => {
-          e.stopPropagation();
-          eng.addLane?.();
-        },
+        onClick: handleAddLane,
         title: "Add lane",
+        disabled: addPending,
         style: {
           width: 32,
           height: 32,
@@ -25807,8 +25778,8 @@
           border: `1px solid ${paper.rule}`,
           background: paper.bg,
           borderRadius: 2,
-          color: paper.ink70,
-          cursor: "pointer",
+          color: addPending ? paper.ink30 : paper.ink70,
+          cursor: addPending ? "default" : "pointer",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -25816,10 +25787,12 @@
           fontSize: 16,
           lineHeight: 1,
           position: "relative",
-          zIndex: 5
+          zIndex: 5,
+          opacity: addPending ? 0.5 : 1,
+          transition: "opacity 150ms"
         }
       },
-      "+"
+      addPending ? "\u2026" : "+"
     ), /* @__PURE__ */ React.createElement(
       "button",
       {
@@ -26416,51 +26389,56 @@
           e.stopPropagation();
           setShelfOpen(!shelfOpen);
         },
+        title: "Qurve library \u2014 save & load curve shapes",
         style: {
           padding: "4px 10px",
           height: 28,
           marginRight: 6,
-          background: paper.card,
-          border: `1px solid ${paper.rule}`,
+          background: shelfOpen ? paper.ink : paper.card,
+          color: shelfOpen ? paper.bg : paper.ink50,
+          border: `1px solid ${shelfOpen ? paper.ink : paper.rule}`,
           borderRadius: 2,
           cursor: "pointer",
           fontFamily: "Inter Tight",
           fontSize: 10,
           letterSpacing: 1,
-          color: paper.ink50,
           textTransform: "uppercase",
           position: "relative",
           zIndex: 5
         }
       },
-      shelfOpen ? "\u25BE qurves" : "\u25B8 qurves"
-    ), focusLane?.target === "Note" && /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        onPointerDown: (e) => e.stopPropagation(),
-        onClick: (e) => {
-          e.stopPropagation();
-          setScaleOpen(!scaleOpen);
+      shelfOpen ? "\u25BE shelf" : "\u25B8 shelf"
+    ), focusLane?.target === "Note" && (() => {
+      const scaleName = (window.SCALES.find((s) => s.id === focusLane.scaleId) || { name: "Scale" }).name;
+      return /* @__PURE__ */ React.createElement(
+        "button",
+        {
+          onPointerDown: (e) => e.stopPropagation(),
+          onClick: (e) => {
+            e.stopPropagation();
+            setScaleOpen(!scaleOpen);
+          },
+          title: "Scale / pitch-class set editor",
+          style: {
+            padding: "4px 12px",
+            height: 28,
+            marginRight: 8,
+            background: scaleOpen ? paper.ink : paper.card,
+            color: scaleOpen ? paper.bg : paper.ink50,
+            border: `1px solid ${scaleOpen ? paper.ink : paper.rule}`,
+            borderRadius: 2,
+            cursor: "pointer",
+            fontFamily: "Inter Tight",
+            fontSize: 10,
+            letterSpacing: 1,
+            textTransform: "uppercase",
+            position: "relative",
+            zIndex: 5
+          }
         },
-        style: {
-          padding: "4px 12px",
-          height: 28,
-          marginRight: 8,
-          background: scaleOpen ? paper.ink : paper.card,
-          color: scaleOpen ? paper.bg : paper.ink50,
-          border: `1px solid ${scaleOpen ? paper.ink : paper.rule}`,
-          borderRadius: 2,
-          cursor: "pointer",
-          fontFamily: "Inter Tight",
-          fontSize: 10,
-          letterSpacing: 1,
-          textTransform: "uppercase",
-          position: "relative",
-          zIndex: 5
-        }
-      },
-      scaleOpen ? "\u25BE scale" : "\u25B4 scale"
-    ));
+        scaleOpen ? `\u25BE scale` : `\u25B4 ${scaleName}`
+      );
+    })());
   }
   function DiscoveryChip({ paper, onOpen }) {
     return /* @__PURE__ */ React.createElement("div", { style: {
