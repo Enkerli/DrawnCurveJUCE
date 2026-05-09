@@ -282,17 +282,21 @@ function DrawnDial({ value, min = 0, max = 1, defaultValue, onChange, size = 56,
 //
 // ticks : [{ value, label? }] — hairline marks + optional label below the track.
 //         label='' draws the tick mark with no text.
-// snapTo: number[] — values the thumb locks to on a single click (pointer-down
-//         with no subsequent move).  Dragging is always continuous / unsnapped.
+// snapTo: number[] — values the thumb locks to when released within SNAP_PX
+//         pixels.  Both pure clicks and drag-releases can snap.
 //
-// Architecture — why local display state:
-//   Calling onChange on every pointer-move triggers updateLane → sendParam →
-//   JUCE echoes the new value back → React state update overrides the current
-//   drag position with whatever JUCE last received (always one frame behind).
-//   The rubber-band effect is caused by that stale echo, not by the slider code.
-//   Fix: maintain a local displayValue during the drag.  onChange fires only on
-//   pointer-down (immediate click feedback) and pointer-up (commit).  JUCE never
-//   receives intermediate values so there are no echoes to fight mid-drag.
+// Architecture — why local display state + commit only on pointer-up:
+//   onChange on every pointer-move triggers updateLane → sendParam → JUCE
+//   echoes the new value back → React state update overrides the current drag
+//   position with whatever JUCE last received (always one frame behind).
+//   Fix: maintain localValue during the gesture.  onChange fires ONCE on
+//   pointer-up (commit).  JUCE receives no intermediate values so there are no
+//   echoes to fight mid-drag, and the thumb never rubber-bands.
+//
+//   Corollary: do NOT call onChange on pointer-down.  Even for a pure click
+//   (no move), firing sendParam eagerly and then setLocalValue(null) on
+//   pointer-up causes a frame where displayValue = value (old prop) while the
+//   JUCE echo hasn't arrived yet, producing a visible snap-back.
 function LogSlider({
   value, min, max, onChange,
   ticks = [], snapTo = [],
@@ -300,12 +304,13 @@ function LogSlider({
 }) {
   const ref      = React.useRef(null);
   const isDrag   = React.useRef(false);
-  const hasMoved = React.useRef(false);
-  // Local display value — non-null only while dragging.
+  // Local display value — non-null while the pointer is held down.
   // Using state (not just a ref) so the thumb re-renders on every pointer-move.
   const [localValue, setLocalValue] = React.useState(null);
-  // Ref copy of localValue so pointer-up can read the latest without stale closure.
+  // Ref copy so pointer-up can read the latest value without a stale closure.
   const latestLocal = React.useRef(null);
+
+  const SNAP_PX = 8;   // snap radius in pixels — wide enough for imprecise touch
 
   const logMin  = Math.log(min);
   const logSpan = Math.log(max) - logMin;
@@ -313,14 +318,13 @@ function LogSlider({
   const toFrac   = (v) => (Math.log(Math.max(min, Math.min(max, v))) - logMin) / logSpan;
   const fromFrac = (f)  => Math.exp(logMin + Math.max(0, Math.min(1, f)) * logSpan);
 
-  const calcValue = (e, snap) => {
+  const calcValue = (e) => {
     const r = ref.current.getBoundingClientRect();
     const f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
     let v = fromFrac(f);
-    if (snap) {
-      for (const s of snapTo)
-        if (Math.abs((toFrac(s) - f) * r.width) < 3) { v = s; break; }
-    }
+    // Snap to nearest snap point if within SNAP_PX pixels.
+    for (const s of snapTo)
+      if (Math.abs((toFrac(s) - f) * r.width) < SNAP_PX) { v = s; break; }
     return v;
   };
 
@@ -329,8 +333,7 @@ function LogSlider({
   const trackY = (H - 2) / 2;
   const thumbY = (H - 12) / 2;
 
-  // During drag use the local value; otherwise follow the prop (which reflects
-  // committed JUCE state).  Both use the same `width` prop so they agree.
+  // During gesture use localValue; otherwise follow the prop (committed JUCE state).
   const displayValue = localValue !== null ? localValue : value;
   const thumbX = toFrac(displayValue) * width;
 
@@ -339,26 +342,32 @@ function LogSlider({
       ref={ref}
       onPointerDown={(e) => {
         e.currentTarget.setPointerCapture(e.pointerId);
-        isDrag.current   = true;
-        hasMoved.current = false;
-        const v = calcValue(e, true);   // snap on click
+        isDrag.current = true;
+        const v = calcValue(e);
         latestLocal.current = v;
         setLocalValue(v);
-        onChange(v);                    // immediate feedback on click
+        // Do NOT call onChange here.  Calling sendParam eagerly and then
+        // clearing localValue on pointer-up causes a race with the JUCE echo
+        // that snaps the thumb back to the old value for one frame.
+        // All commits happen in onPointerUp / onPointerCancel.
       }}
       onPointerMove={(e) => {
         if (!isDrag.current) return;
-        hasMoved.current = true;
-        const v = calcValue(e, false);  // no snap while dragging
+        const v = calcValue(e);
         latestLocal.current = v;
-        setLocalValue(v);               // re-renders slider only — no onChange
+        setLocalValue(v);               // visual update only — no onChange
       }}
       onPointerUp={() => {
         isDrag.current = false;
-        if (hasMoved.current && latestLocal.current !== null)
-          onChange(latestLocal.current); // commit final drag position
+        if (latestLocal.current !== null)
+          onChange(latestLocal.current); // single commit — click or drag
         latestLocal.current = null;
         setLocalValue(null);             // hand display back to prop
+      }}
+      onPointerCancel={() => {
+        isDrag.current = false;
+        latestLocal.current = null;
+        setLocalValue(null);             // abort — discard, do not commit
       }}
       style={{ width, flexShrink: 0, height: H + TICK_H, position: 'relative', cursor: 'pointer', touchAction: 'none' }}
     >

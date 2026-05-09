@@ -24305,24 +24305,22 @@
   }) {
     const ref = React.useRef(null);
     const isDrag = React.useRef(false);
-    const hasMoved = React.useRef(false);
     const [localValue, setLocalValue] = React.useState(null);
     const latestLocal = React.useRef(null);
+    const SNAP_PX = 8;
     const logMin = Math.log(min);
     const logSpan = Math.log(max) - logMin;
     const toFrac = (v) => (Math.log(Math.max(min, Math.min(max, v))) - logMin) / logSpan;
     const fromFrac = (f) => Math.exp(logMin + Math.max(0, Math.min(1, f)) * logSpan);
-    const calcValue = (e, snap) => {
+    const calcValue = (e) => {
       const r = ref.current.getBoundingClientRect();
       const f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
       let v = fromFrac(f);
-      if (snap) {
-        for (const s of snapTo)
-          if (Math.abs((toFrac(s) - f) * r.width) < 3) {
-            v = s;
-            break;
-          }
-      }
+      for (const s of snapTo)
+        if (Math.abs((toFrac(s) - f) * r.width) < SNAP_PX) {
+          v = s;
+          break;
+        }
       return v;
     };
     const H = 44;
@@ -24338,23 +24336,25 @@
         onPointerDown: (e) => {
           e.currentTarget.setPointerCapture(e.pointerId);
           isDrag.current = true;
-          hasMoved.current = false;
-          const v = calcValue(e, true);
+          const v = calcValue(e);
           latestLocal.current = v;
           setLocalValue(v);
-          onChange(v);
         },
         onPointerMove: (e) => {
           if (!isDrag.current) return;
-          hasMoved.current = true;
-          const v = calcValue(e, false);
+          const v = calcValue(e);
           latestLocal.current = v;
           setLocalValue(v);
         },
         onPointerUp: () => {
           isDrag.current = false;
-          if (hasMoved.current && latestLocal.current !== null)
+          if (latestLocal.current !== null)
             onChange(latestLocal.current);
+          latestLocal.current = null;
+          setLocalValue(null);
+        },
+        onPointerCancel: () => {
+          isDrag.current = false;
           latestLocal.current = null;
           setLocalValue(null);
         },
@@ -25213,16 +25213,20 @@
       (v) => ["fwd", "rev", "pp"].indexOf(v) / 2
     ],
     // normalised to 0-1
-    // laneSpeedMul: range 0.1–10.0, skew 0.5.  Normalised via JUCE formula:
-    //   normalised = ((x - 0.1) / 9.9) ^ (1/0.5) = ((x - 0.1) / 9.9) ^ 2
+    // laneSpeedMul: range 0.1–10.0, skew 0.5.  Normalised via JUCE's convertTo0to1:
+    //   convertTo0to1(v) = proportion ^ skew   where proportion = (v - start) / range
+    //   = ((v - 0.1) / 9.9) ^ 0.5   (square root, NOT square)
+    // Note: convertFrom0to1 uses ^ (1/skew) = ^ 2 — the INVERSE formula.
+    // Using ^ 2 here would send values through convertFrom0to1 twice and collapse
+    // everything to near 0.1 (the minimum), which is the "snaps to 0.10×" bug.
     [
       "laneSpeedMul",
       "laneSpeedMul",
       (v) => v,
       // raw: actual value (0.1-10.0)
-      (v) => Math.pow(Math.max(0, (v - 0.1) / 9.9), 2)
+      (v) => Math.pow(Math.max(0, (v - 0.1) / 9.9), 0.5)
     ]
-    // normalised (matches NormalisableRange skew=0.5)
+    // normalised: sqrt = ^ skew (skew=0.5)
   ];
   var GLOBAL_PARAM_MAP = [
     // (empty — all React lane fields now map to per-lane l<n>_... APVTS params)

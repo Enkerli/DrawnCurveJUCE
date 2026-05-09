@@ -101,11 +101,15 @@ const LANE_MAP = [
   ['laneDirection', 'laneDirection',
    v => (['fwd','rev','pp'])[Math.round(v)] ?? 'fwd',         // raw: 0/1/2
    v => ['fwd','rev','pp'].indexOf(v) / 2],                   // normalised to 0-1
-  // laneSpeedMul: range 0.1–10.0, skew 0.5.  Normalised via JUCE formula:
-  //   normalised = ((x - 0.1) / 9.9) ^ (1/0.5) = ((x - 0.1) / 9.9) ^ 2
+  // laneSpeedMul: range 0.1–10.0, skew 0.5.  Normalised via JUCE's convertTo0to1:
+  //   convertTo0to1(v) = proportion ^ skew   where proportion = (v - start) / range
+  //   = ((v - 0.1) / 9.9) ^ 0.5   (square root, NOT square)
+  // Note: convertFrom0to1 uses ^ (1/skew) = ^ 2 — the INVERSE formula.
+  // Using ^ 2 here would send values through convertFrom0to1 twice and collapse
+  // everything to near 0.1 (the minimum), which is the "snaps to 0.10×" bug.
   ['laneSpeedMul', 'laneSpeedMul',
    v => v,                                                     // raw: actual value (0.1-10.0)
-   v => Math.pow(Math.max(0, (v - 0.1) / 9.9), 2)],          // normalised (matches NormalisableRange skew=0.5)
+   v => Math.pow(Math.max(0, (v - 0.1) / 9.9), 0.5)],        // normalised: sqrt = ^ skew (skew=0.5)
 ];
 
 // ── Global APVTS params ───────────────────────────────────────────────────────
