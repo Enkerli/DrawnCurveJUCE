@@ -1,7 +1,7 @@
-import { useRef } from 'react'
 import { MessageType, type LaneParams } from '../engine/types'
 import { midiNoteName } from '../engine/scaleData'
 import { ScaleLattice } from './ScaleLattice'
+import { RangeSlider } from './primitives'
 
 // Format the contextual min/max readout for the range slider.
 // Output values shown depend on message type.
@@ -28,113 +28,6 @@ function rangeUnitLabel(msgType: MessageType): string {
   }
 }
 
-interface RangeSliderProps {
-  min: number  // 0..1
-  max: number  // 0..1
-  color: string
-  dark: boolean
-  onChange: (min: number, max: number) => void
-}
-
-function RangeSlider({ min, max, color, dark, onChange }: RangeSliderProps) {
-  const trackRef = useRef<HTMLDivElement>(null)
-  const dragRef = useRef<'min' | 'max' | null>(null)
-
-  const startDrag = (which: 'min' | 'max') => (e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    dragRef.current = which
-    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-  }
-
-  const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragRef.current || !trackRef.current) return
-    const rect = trackRef.current.getBoundingClientRect()
-    const v = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-    if (dragRef.current === 'min') onChange(Math.min(v, max - 0.005), max)
-    else                            onChange(min, Math.max(v, min + 0.005))
-  }
-
-  const endDrag = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (dragRef.current) {
-      dragRef.current = null
-      try { (e.target as HTMLElement).releasePointerCapture(e.pointerId) } catch { /* noop */ }
-    }
-  }
-
-  const trackBg = dark ? '#3a3a3a' : 'var(--paper-rule)'
-  const handleSize = 14
-
-  return (
-    <div style={{ position: 'relative', height: 22, padding: '0 8px' }}>
-      <div
-        ref={trackRef}
-        style={{
-          position: 'absolute',
-          left: 8,
-          right: 8,
-          top: '50%',
-          height: 3,
-          marginTop: -1.5,
-          background: trackBg,
-          borderRadius: 2,
-        }}
-      >
-        {/* active span */}
-        <div
-          style={{
-            position: 'absolute',
-            left: `${min * 100}%`,
-            width: `${(max - min) * 100}%`,
-            top: 0,
-            height: '100%',
-            background: color,
-            borderRadius: 2,
-          }}
-        />
-        {/* min handle */}
-        <div
-          onPointerDown={startDrag('min')}
-          onPointerMove={onMove}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-          style={{
-            position: 'absolute',
-            left: `calc(${min * 100}% - ${handleSize / 2}px)`,
-            top: -((handleSize - 3) / 2),
-            width: handleSize,
-            height: handleSize,
-            borderRadius: '50%',
-            background: dark ? '#1a1a1a' : 'var(--paper-card)',
-            border: `2px solid ${color}`,
-            boxShadow: dark ? 'none' : '0 1px 2px rgba(0,0,0,0.12)',
-            cursor: 'grab',
-            touchAction: 'none',
-          }}
-        />
-        {/* max handle */}
-        <div
-          onPointerDown={startDrag('max')}
-          onPointerMove={onMove}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-          style={{
-            position: 'absolute',
-            left: `calc(${max * 100}% - ${handleSize / 2}px)`,
-            top: -((handleSize - 3) / 2),
-            width: handleSize,
-            height: handleSize,
-            borderRadius: '50%',
-            background: dark ? '#1a1a1a' : 'var(--paper-card)',
-            border: `2px solid ${color}`,
-            boxShadow: dark ? 'none' : '0 1px 2px rgba(0,0,0,0.12)',
-            cursor: 'grab',
-            touchAction: 'none',
-          }}
-        />
-      </div>
-    </div>
-  )
-}
 
 const LANE_LABELS = ['Lane 1', 'Lane 2', 'Lane 3']
 const LANE_COLORS_DARK = ['#4a90e2', '#e8a838', '#5cb85c']
