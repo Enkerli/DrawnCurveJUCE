@@ -25227,6 +25227,7 @@
     const setGridY = (v) => focusLane && eng.updateLane(focusLane.id, {
       yDivisions: Math.max(2, Math.min(24, typeof v === "function" ? v(gridY) : v))
     });
+    const [helpOpen, setHelpOpen] = React.useState(false);
     const [discoveryVisible, setDiscoveryVisible] = React.useState(false);
     const prevTarget = React.useRef(focusLane?.target);
     React.useEffect(() => {
@@ -25240,10 +25241,23 @@
     React.useEffect(() => {
       engRef.current = eng;
     });
+    const helpOpenRef = React.useRef(helpOpen);
+    React.useEffect(() => {
+      helpOpenRef.current = helpOpen;
+    }, [helpOpen]);
     React.useEffect(() => {
       const onKey = (e) => {
         const tag = document.activeElement?.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA") return;
+        if (e.key === "Escape") {
+          setHelpOpen(false);
+          return;
+        }
+        if (e.key === "?") {
+          setHelpOpen((o) => !o);
+          return;
+        }
+        if (helpOpenRef.current) return;
         if (e.key === " ") {
           e.preventDefault();
           engRef.current.setPlaying((p) => !p);
@@ -25292,7 +25306,16 @@
         radial-gradient(circle at 15% 30%, oklch(94% 0.02 65 / 0.4) 0, transparent 50%),
         radial-gradient(circle at 80% 70%, oklch(95% 0.025 90 / 0.3) 0, transparent 40%)
       `
-    } }, /* @__PURE__ */ React.createElement(JuceTopBar, { eng, paper, h: TOP_H }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", minHeight: 0 } }, /* @__PURE__ */ React.createElement(
+    } }, /* @__PURE__ */ React.createElement(
+      JuceTopBar,
+      {
+        eng,
+        paper,
+        h: TOP_H,
+        helpOpen,
+        setHelpOpen
+      }
+    ), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", minHeight: 0 } }, /* @__PURE__ */ React.createElement(
       JuceShapeWell,
       {
         open: leftOpen,
@@ -25455,9 +25478,9 @@
         open: rightOpen,
         setOpen: setRightOpen
       }
-    )), /* @__PURE__ */ React.createElement(JuceBottomBar, { eng, paper, h: BOTTOM_H }));
+    )), /* @__PURE__ */ React.createElement(JuceBottomBar, { eng, paper, h: BOTTOM_H }), helpOpen && /* @__PURE__ */ React.createElement(HelpOverlay, { paper, onClose: () => setHelpOpen(false) }));
   }
-  function JuceTopBar({ eng, paper, h }) {
+  function JuceTopBar({ eng, paper, h, helpOpen, setHelpOpen }) {
     return /* @__PURE__ */ React.createElement("div", { style: {
       height: h,
       display: "flex",
@@ -25532,7 +25555,17 @@
         armedLabel: "Tap to confirm",
         title: "Clear all lanes"
       }
-    ), /* @__PURE__ */ React.createElement(IconBtn, { paper, size: 36, onClick: eng.panic, title: "Panic \u2014 all notes off (Space key = play/pause, 1\u20134 = select lane)" }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14 } }, "!")), /* @__PURE__ */ React.createElement(IconBtn, { paper, size: 36, title: "Help" }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14 } }, "?")));
+    ), /* @__PURE__ */ React.createElement(IconBtn, { paper, size: 36, onClick: eng.panic, title: "Panic \u2014 all notes off" }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14 } }, "!")), /* @__PURE__ */ React.createElement(
+      IconBtn,
+      {
+        paper,
+        size: 36,
+        active: helpOpen,
+        onClick: () => setHelpOpen(!helpOpen),
+        title: "Quick reference (? key)"
+      },
+      /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14 } }, "?")
+    ));
   }
   function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
     return /* @__PURE__ */ React.createElement("div", { style: {
@@ -26717,7 +26750,162 @@
       textTransform: "uppercase"
     } }, children);
   }
-  Object.assign(window, { JuceIPadStudio, QurveShelf, MidiGhostOverlay, DiscoveryChip });
+  function HelpOverlay({ paper, onClose }) {
+    const entries = [
+      [
+        "DRAW",
+        "Draw a curve on the canvas. Left \u2192 right = time (0\u2013100%). Bottom \u2192 top = value (min \u2192 max output)."
+      ],
+      [
+        "PLAY / PAUSE",
+        "Tap a direction segment (\u25C0 \u27F7 \u25B6) to select direction; tap the active segment again to pause/resume."
+      ],
+      [
+        "LANES",
+        "Each lane = independent MIDI stream. Tap a lane row in the right panel to focus it. Coloured dots = live playheads."
+      ],
+      [
+        "+ (Add lane)",
+        "Add a lane (up to 4). Each lane has its own curve, routing, grid and quantization."
+      ],
+      [
+        "SHAPE PANEL",
+        "Left panel: output type (CC / Aftertouch / PitchBend / Note), CC#, channel, velocity, smoothing, output range."
+      ],
+      [
+        "MUTE",
+        "Silences a lane without erasing its curve. Hollow dot + strikethrough in the lane panel."
+      ],
+      [
+        "SCALE",
+        "Note lanes only. Tap the \u25B4 Scale button (bottom of canvas, right side) to open the scale editor. Tap pitch-class circles to toggle; double-tap to set root. Pick a preset or type a decimal mask (0\u20134095)."
+      ],
+      [
+        "SHELF",
+        "Curve library \u2014 \u25B8 Shelf button. Browse saved shapes and tap to load onto the focused lane."
+      ],
+      [
+        "FREE / SYNC",
+        "Free = manual speed (\xD70.25\u2013\xD74). Sync = loop length in host beats (1\u201332). The slider controls speed in Free mode and beat count in Sync mode."
+      ],
+      [
+        "GRID",
+        "Y-gutter buttons adjust vertical grid density; X-gutter adjusts horizontal. Lock padlock (\u{1F512}) snaps playback phase (X) or output value (Y) to grid steps \u2014 visible as a dashed staircase."
+      ],
+      [
+        "SMOOTH",
+        "Per-lane output smoothing 0\u20131. 0 = instant response. Bypassed for pitch-change detection in Note mode."
+      ],
+      [
+        "RANGE",
+        "Per-lane output min/max. Drag the filled band to transpose; spread handles to expand. In Note mode, displays note names (e.g. C3\u2013G5)."
+      ],
+      [
+        "CLEAR",
+        "Erase all curves and stop playback. Requires a second tap to confirm."
+      ],
+      [
+        "! (Panic)",
+        "All Notes Off on every MIDI channel. Use if notes get stuck."
+      ],
+      [
+        "Space",
+        "Toggle play / pause (keyboard shortcut). Ignored when a text field has focus."
+      ],
+      [
+        "1 \u2013 4",
+        "Select lane 1\u20134 (keyboard shortcut). Ignored when a text field has focus."
+      ],
+      [
+        "? / Escape",
+        "Open or close this reference. You are here."
+      ]
+    ];
+    return /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        onClick: onClose,
+        style: {
+          position: "absolute",
+          inset: 0,
+          zIndex: 100,
+          background: "oklch(20% 0.01 60 / 0.55)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backdropFilter: "blur(2px)"
+        }
+      },
+      /* @__PURE__ */ React.createElement(
+        "div",
+        {
+          onClick: (e) => e.stopPropagation(),
+          style: {
+            background: paper.card,
+            border: `1px solid ${paper.rule}`,
+            borderRadius: 6,
+            boxShadow: "0 16px 48px rgba(0,0,0,0.18)",
+            padding: "24px 28px",
+            maxWidth: 640,
+            width: "92%",
+            maxHeight: "88vh",
+            overflowY: "auto"
+          }
+        },
+        /* @__PURE__ */ React.createElement("div", { style: {
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          marginBottom: 20
+        } }, /* @__PURE__ */ React.createElement("div", { style: {
+          fontFamily: '"Instrument Serif", Georgia, serif',
+          fontStyle: "italic",
+          fontSize: 22,
+          color: paper.ink
+        } }, "DrawnQurve \xB7 Quick Reference"), /* @__PURE__ */ React.createElement("button", { onClick: onClose, style: {
+          background: "transparent",
+          border: "none",
+          cursor: "pointer",
+          fontSize: 18,
+          color: paper.ink50,
+          padding: "0 4px",
+          lineHeight: 1
+        } }, "\u2715")),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, entries.map(([label, desc]) => /* @__PURE__ */ React.createElement("div", { key: label, style: {
+          display: "grid",
+          gridTemplateColumns: "120px 1fr",
+          gap: 12,
+          alignItems: "baseline"
+        } }, /* @__PURE__ */ React.createElement("div", { style: {
+          fontFamily: "Inter Tight",
+          fontSize: 10,
+          fontWeight: 600,
+          letterSpacing: 1,
+          textTransform: "uppercase",
+          color: paper.amberInk,
+          textAlign: "right",
+          paddingTop: 2
+        } }, label), /* @__PURE__ */ React.createElement("div", { style: {
+          fontFamily: "Inter Tight",
+          fontSize: 12,
+          color: paper.ink70,
+          lineHeight: 1.55
+        } }, desc)))),
+        /* @__PURE__ */ React.createElement("div", { style: {
+          marginTop: 20,
+          paddingTop: 14,
+          borderTop: `1px dashed ${paper.rule}`,
+          fontFamily: "Inter Tight",
+          fontSize: 10,
+          color: paper.ink30,
+          letterSpacing: 0.8,
+          textAlign: "center",
+          textTransform: "uppercase"
+        } }, "Tap outside \xB7 press ? \xB7 press Escape to close")
+      )
+    );
+  }
+  Object.assign(window, { JuceIPadStudio, QurveShelf, MidiGhostOverlay, DiscoveryChip, HelpOverlay });
 
   // main.jsx
   (function patchEngine() {

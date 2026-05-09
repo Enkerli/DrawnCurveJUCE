@@ -25,6 +25,20 @@ import { initJuceBridge, sendCurve, sendParam, sendFocus,
 // JUCE-driven state (phase, lane params) on top of the demo animation state.
 // Falls back gracefully to pure demo mode when __JUCE__ is not present.
 
+// ── patchEngine — JUCE bridge overlay ────────────────────────────────────────
+// Wraps the demo hook so every UI mutation also drives JUCE's APVTS, and
+// every incoming JUCE event (phase tick, paramChange, stateSnapshot) flows
+// back into React state.
+//
+// Design rule: this IIFE must finish executing BEFORE juce-ipad.jsx is
+// imported.  esbuild preserves import order in the output bundle, so the
+// IIFE runs first automatically — do not reorder the imports.
+//
+// Layering:
+//   design/engine.jsx   — pure demo hook  (no JUCE knowledge)
+//   main.jsx            — JUCE-aware wrapper  (this block)
+//   design/juce-ipad.jsx — layout; calls useDrawnQurveEngine() which by
+//                          the time it runs is already the wrapped version
 (function patchEngine() {
   const demoEngine = window.useDrawnQurveEngine;
 

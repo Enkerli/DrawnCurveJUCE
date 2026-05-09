@@ -1,6 +1,30 @@
-// JUCE iPad Studio variant — 1024×768, V2 direction, touch-optimised
-// Canvas-fills-all, right lane panel (always visible), left shape well,
-// bottom qurve shelf, scale discovery, MIDI ghost, plugin comms badge.
+// juce-ipad.jsx — full-screen Studio layout for DrawnQurve
+//
+// Target: 1024×768 iPad landscape (AUv3 / AU / Standalone).
+// Renders as a single React tree rooted at <JuceIPadStudio>.
+//
+// Layout regions (all sizes in CSS px):
+//   TOP_H   (52)  — title, transport, sync, utility buttons, help
+//   LEFT_W (256/44) — Shape well: output routing, smooth, range, velocity
+//   Y_GUTTER_W (60) — Y-axis: grid density steppers + quantize lock
+//   Canvas           — CurveCanvas (ResizeObserver-sized, touch-draw)
+//   X_GUTTER_H (48) — X-axis: grid + quantize + shelf/scale toggles
+//   SCALE_H (0/310)  — Scale editor panel (slides up)
+//   SHELF_H (0/180)  — Qurve shelf panel (slides up)
+//   RIGHT_W (148/44) — Lane panel: focus, mute, readout
+//   BOTTOM_H (38)   — Status bar: lane summary, bridge indicator
+//
+// Key behaviours:
+//   • All interactive helpers are MODULE-SCOPE (not nested functions) so
+//     React reconciles to stable DOM nodes at the 30 Hz phase-tick rate.
+//     Inner-function components unmount/remount every frame → no click.
+//   • Scale and Shelf panels are mutually exclusive (F-14).
+//   • Left panel defaults open (F-05); right panel always visible.
+//   • Keyboard shortcuts (F-24): Space = play/pause, 1–4 = lane select,
+//     ? / Escape = toggle help.
+//   • Scale quantization applies globally to all Note lanes (F-20 callout).
+
+// ── Range formatter — real MIDI values per output mode ───────
 
 // ── Range formatter — real MIDI values per output mode ───────
 // useFlats: when true, chromatic pitch classes use flat names (D♭/E♭/G♭/…)
@@ -105,6 +129,9 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
     yDivisions: Math.max(2, Math.min(24, typeof v === 'function' ? v(gridY) : v)),
   });
 
+  // Help overlay — toggled by the '?' button; also closed by Escape
+  const [helpOpen, setHelpOpen] = React.useState(false);
+
   // Scale discovery moment — fires once when Note mode first selected
   const [discoveryVisible, setDiscoveryVisible] = React.useState(false);
   const prevTarget = React.useRef(focusLane?.target);
@@ -119,12 +146,19 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
   // F-24: Keyboard navigation — stable ref so the handler never needs to
   // re-attach.  Space = play/pause; 1–4 = select lane N.
   // Guard: skip when the user is typing in an input field.
+  // F-24: Keyboard navigation — stable ref so the handler never needs to
+  // re-attach.  Reads current engine state via ref to avoid stale closures.
   const engRef = React.useRef(eng);
   React.useEffect(() => { engRef.current = eng; });
+  const helpOpenRef = React.useRef(helpOpen);
+  React.useEffect(() => { helpOpenRef.current = helpOpen; }, [helpOpen]);
   React.useEffect(() => {
     const onKey = (e) => {
       const tag = document.activeElement?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.key === 'Escape') { setHelpOpen(false); return; }
+      if (e.key === '?') { setHelpOpen(o => !o); return; }
+      if (helpOpenRef.current) return; // swallow other keys when help is open
       if (e.key === ' ') {
         e.preventDefault();
         engRef.current.setPlaying(p => !p);
@@ -137,7 +171,7 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []); // stable — reads engine state via ref
+  }, []); // stable — reads all state via refs
 
   // Gutter geometry — Y gutter on the left, X gutter on the bottom of the
   // canvas area, intersecting at the '#' corner cell.  Width must match
@@ -193,7 +227,8 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
     }}>
 
       {/* ── Top bar ── */}
-      <JuceTopBar eng={eng} paper={paper} h={TOP_H} />
+      <JuceTopBar eng={eng} paper={paper} h={TOP_H}
+        helpOpen={helpOpen} setHelpOpen={setHelpOpen} />
 
       {/* ── Main row ── */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
@@ -361,6 +396,9 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
 
       {/* ── Bottom bar ── */}
       <JuceBottomBar eng={eng} paper={paper} h={BOTTOM_H} />
+
+      {/* ── Help overlay — rendered last so it sits on top of everything ── */}
+      {helpOpen && <HelpOverlay paper={paper} onClose={() => setHelpOpen(false)} />}
     </div>
   );
 }
@@ -370,7 +408,7 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
 // and "ScalePlugin sync" placeholder buttons (F.3/F.4 roadmap items) were
 // removed — they consumed ~150 px and drove no real behaviour.  They will
 // return as real controls when the features are implemented.
-function JuceTopBar({ eng, paper, h }) {
+function JuceTopBar({ eng, paper, h, helpOpen, setHelpOpen }) {
   return (
     <div style={{
       height: h, display: 'flex', alignItems: 'center',
@@ -430,10 +468,11 @@ function JuceTopBar({ eng, paper, h }) {
       <ConfirmBtn paper={paper} onConfirm={eng.clearAll}
         label="Clear" armedLabel="Tap to confirm"
         title="Clear all lanes" />
-      <IconBtn paper={paper} size={36} onClick={eng.panic} title="Panic — all notes off (Space key = play/pause, 1–4 = select lane)">
+      <IconBtn paper={paper} size={36} onClick={eng.panic} title="Panic — all notes off">
         <span style={{ fontSize: 14 }}>!</span>
       </IconBtn>
-      <IconBtn paper={paper} size={36} title="Help">
+      <IconBtn paper={paper} size={36} active={helpOpen}
+        onClick={() => setHelpOpen(!helpOpen)} title="Quick reference (? key)">
         <span style={{ fontSize: 14 }}>?</span>
       </IconBtn>
     </div>
@@ -1524,4 +1563,125 @@ function Label({ children, paper = window.PAPER }) {
   );
 }
 
-Object.assign(window, { JuceIPadStudio, QurveShelf, MidiGhostOverlay, DiscoveryChip });
+// ── Help overlay — quick reference ───────────────────────────
+// Port of the native editor's HelpOverlay (PluginEditor.cpp).
+// Full-screen semi-transparent backdrop + centred card.
+// Dismiss: tap backdrop, press Escape, or press ?.
+// Module-scope so React keeps stable identity across phase-driven re-renders.
+function HelpOverlay({ paper, onClose }) {
+  const entries = [
+    ['DRAW',
+     'Draw a curve on the canvas. Left → right = time (0–100%). Bottom → top = value (min → max output).'],
+    ['PLAY / PAUSE',
+     'Tap a direction segment (◀ ⟷ ▶) to select direction; tap the active segment again to pause/resume.'],
+    ['LANES',
+     'Each lane = independent MIDI stream. Tap a lane row in the right panel to focus it. Coloured dots = live playheads.'],
+    ['+ (Add lane)',
+     'Add a lane (up to 4). Each lane has its own curve, routing, grid and quantization.'],
+    ['SHAPE PANEL',
+     'Left panel: output type (CC / Aftertouch / PitchBend / Note), CC#, channel, velocity, smoothing, output range.'],
+    ['MUTE',
+     'Silences a lane without erasing its curve. Hollow dot + strikethrough in the lane panel.'],
+    ['SCALE',
+     'Note lanes only. Tap the ▴ Scale button (bottom of canvas, right side) to open the scale editor. '
+     + 'Tap pitch-class circles to toggle; double-tap to set root. Pick a preset or type a decimal mask (0–4095).'],
+    ['SHELF',
+     'Curve library — ▸ Shelf button. Browse saved shapes and tap to load onto the focused lane.'],
+    ['FREE / SYNC',
+     'Free = manual speed (×0.25–×4). Sync = loop length in host beats (1–32). '
+     + 'The slider controls speed in Free mode and beat count in Sync mode.'],
+    ['GRID',
+     'Y-gutter buttons adjust vertical grid density; X-gutter adjusts horizontal. '
+     + 'Lock padlock (🔒) snaps playback phase (X) or output value (Y) to grid steps — visible as a dashed staircase.'],
+    ['SMOOTH',
+     'Per-lane output smoothing 0–1. 0 = instant response. Bypassed for pitch-change detection in Note mode.'],
+    ['RANGE',
+     'Per-lane output min/max. Drag the filled band to transpose; spread handles to expand. '
+     + 'In Note mode, displays note names (e.g. C3–G5).'],
+    ['CLEAR',
+     'Erase all curves and stop playback. Requires a second tap to confirm.'],
+    ['! (Panic)',
+     'All Notes Off on every MIDI channel. Use if notes get stuck.'],
+    ['Space',
+     'Toggle play / pause (keyboard shortcut). Ignored when a text field has focus.'],
+    ['1 – 4',
+     'Select lane 1–4 (keyboard shortcut). Ignored when a text field has focus.'],
+    ['? / Escape',
+     'Open or close this reference. You are here.'],
+  ];
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'absolute', inset: 0, zIndex: 100,
+        background: 'oklch(20% 0.01 60 / 0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        backdropFilter: 'blur(2px)',
+      }}
+    >
+      {/* Card — stop propagation so clicks inside don't close */}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: paper.card,
+          border: `1px solid ${paper.rule}`,
+          borderRadius: 6,
+          boxShadow: '0 16px 48px rgba(0,0,0,0.18)',
+          padding: '24px 28px',
+          maxWidth: 640, width: '92%',
+          maxHeight: '88vh', overflowY: 'auto',
+        }}
+      >
+        {/* Title row */}
+        <div style={{
+          display: 'flex', alignItems: 'baseline',
+          justifyContent: 'space-between', marginBottom: 20,
+        }}>
+          <div style={{
+            fontFamily: '"Instrument Serif", Georgia, serif',
+            fontStyle: 'italic', fontSize: 22, color: paper.ink,
+          }}>DrawnQurve · Quick Reference</div>
+          <button onClick={onClose} style={{
+            background: 'transparent', border: 'none',
+            cursor: 'pointer', fontSize: 18, color: paper.ink50,
+            padding: '0 4px', lineHeight: 1,
+          }}>✕</button>
+        </div>
+
+        {/* Entry table */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {entries.map(([label, desc]) => (
+            <div key={label} style={{
+              display: 'grid',
+              gridTemplateColumns: '120px 1fr',
+              gap: 12, alignItems: 'baseline',
+            }}>
+              <div style={{
+                fontFamily: 'Inter Tight', fontSize: 10,
+                fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase',
+                color: paper.amberInk, textAlign: 'right',
+                paddingTop: 2,
+              }}>{label}</div>
+              <div style={{
+                fontFamily: 'Inter Tight', fontSize: 12,
+                color: paper.ink70, lineHeight: 1.55,
+              }}>{desc}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          marginTop: 20, paddingTop: 14,
+          borderTop: `1px dashed ${paper.rule}`,
+          fontFamily: 'Inter Tight', fontSize: 10,
+          color: paper.ink30, letterSpacing: 0.8, textAlign: 'center',
+          textTransform: 'uppercase',
+        }}>Tap outside · press ? · press Escape to close</div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { JuceIPadStudio, QurveShelf, MidiGhostOverlay, DiscoveryChip, HelpOverlay });

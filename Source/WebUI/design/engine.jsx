@@ -1,5 +1,26 @@
-// Curve engine — drawing, playback, quantization
-// React hook that owns lane state, playhead, and scale quantization.
+// engine.jsx — DrawnQurve curve engine (demo / design mode)
+//
+// Exports one React hook and several pure utility functions.  The hook
+// owns all UI-visible state; the utilities are shared by curve-canvas.jsx,
+// juce-ipad.jsx and main.jsx.
+//
+// ┌─────────────────────────────────────────────────────────┐
+// │  useDrawnQurveEngine (this file)                        │
+// │    Demo / design mode — pure JS animation via RAF.      │
+// │    addLane / removeLane are NOT in this layer;          │
+// │    they're fire-and-forget JUCE RPCs added in           │
+// │    main.jsx's patchEngine() wrapper.                    │
+// ├─────────────────────────────────────────────────────────┤
+// │  patchEngine() wrapper  (main.jsx)                      │
+// │    Overlays JUCE bridge onto this hook:                 │
+// │    • phase overridden by ~30 Hz C++ heartbeat           │
+// │    • lane mutations forwarded to APVTS via sendParam()  │
+// │    • stateSnapshot hydrates lanes from C++ on load      │
+// └─────────────────────────────────────────────────────────┘
+//
+// Quantization note: sampleLaneQuantized() mirrors C++ GestureEngine::
+// processLane() step-for-step so every JS display (staircase overlay,
+// TypoReadout, lane readouts) shows the value actually emitted by MIDI.
 
 function useDrawnQurveEngine(initial = {}) {
   const [lanes, setLanes] = React.useState(() => [
