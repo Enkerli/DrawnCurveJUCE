@@ -23738,10 +23738,15 @@
         quantizeY: false,
         xDivisions: 4,
         yDivisions: 4,
+        // Playback behaviour
+        oneShot: false,
+        legato: false,
+        phaseOffset: 0,
         // Per-lane playback overrides (useGlobalPlayback=true → follow global transport)
         useGlobalPlayback: true,
         laneDirection: "fwd",
-        laneSpeedMul: 1
+        laneSpeedMul: 1,
+        visible: true
       },
       {
         id: 1,
@@ -23765,9 +23770,13 @@
         quantizeY: false,
         xDivisions: 4,
         yDivisions: 4,
+        oneShot: false,
+        legato: false,
+        phaseOffset: 0,
         useGlobalPlayback: true,
         laneDirection: "fwd",
-        laneSpeedMul: 1
+        laneSpeedMul: 1,
+        visible: true
       },
       {
         id: 2,
@@ -23790,9 +23799,13 @@
         quantizeY: false,
         xDivisions: 4,
         yDivisions: 4,
+        oneShot: false,
+        legato: false,
+        phaseOffset: 0,
         useGlobalPlayback: true,
         laneDirection: "fwd",
-        laneSpeedMul: 1
+        laneSpeedMul: 1,
+        visible: true
       }
     ]);
     const [focus, setFocus] = React.useState(0);
@@ -24684,7 +24697,7 @@
           );
         }),
         lanes.map((l) => {
-          if (l.id === focus || !l.curve || !l.enabled) return null;
+          if (l.id === focus || !l.curve || !l.enabled || l.visible === false) return null;
           return /* @__PURE__ */ React.createElement(CurvePath2, { key: "g" + l.id, curve: l.curve, w: width, h: height, stroke: l.color, opacity: 0.25, width: 1.5, dash: l.dash });
         }),
         focusLane?.curve && /* @__PURE__ */ React.createElement(CurvePath2, { curve: focusLane.curve, w: width, h: height, stroke: focusLane.color, opacity: 0.95, width: 2.5, dash: focusLane.dash }),
@@ -24728,7 +24741,7 @@
           }
         ),
         lanes.map((l) => {
-          if (!l.curve || !l.enabled) return null;
+          if (!l.curve || !l.enabled || l.id !== focus && l.visible === false) return null;
           const lPhase = lanePhases && lanePhases[l.id] != null ? lanePhases[l.id] : phase;
           let xPhase = lPhase;
           if (l.quantizeX && l.xDivisions >= 2) {
@@ -25185,6 +25198,15 @@
     // raw: 0-1
     ["velocity", "noteVelocity", (v) => Math.round(v), (v) => v / 127],
     // raw: 1-127
+    // Playback behaviour — loop mode and legato tie.
+    ["oneShot", "loopMode", (v) => v > 0.5, (v) => v ? 1 : 0],
+    // raw: 0=loop, 1=one-shot
+    ["legato", "legatoMode", (v) => v > 0.5, (v) => v ? 1 : 0],
+    // raw: 0/1 (Note mode only)
+    // Phase offset — curve lookup start point.  APVTS stores 0–100 (percent);
+    // JS stores the same 0–100 value.  Normalise to 0-1 for setValueNotifyingHost.
+    ["phaseOffset", "phaseOffset", (v) => v, (v) => v / 100],
+    // raw: 0-100
     // Quantization — per-lane bool/int params used by the audio engine.
     ["quantizeX", "xQuantize", (v) => v > 0.5, (v) => v ? 1 : 0],
     // raw: 0/1
@@ -25310,6 +25332,12 @@
   }
   function sendPanic() {
     juceEmit("panic", {});
+  }
+  function sendBeginTeach(lane) {
+    juceEmit("beginTeach", { lane });
+  }
+  function sendCancelTeach() {
+    juceEmit("cancelTeach", {});
   }
 
   // design/juce-ipad.jsx
@@ -25770,6 +25798,28 @@
     ));
   }
   function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
+    const [teaching, setTeaching] = React.useState(false);
+    const prevDetailRef = React.useRef(null);
+    React.useEffect(() => {
+      if (!teaching) {
+        prevDetailRef.current = null;
+        return;
+      }
+      if (prevDetailRef.current === null) {
+        prevDetailRef.current = focusLane?.targetDetail;
+        return;
+      }
+      if (focusLane?.targetDetail !== prevDetailRef.current) {
+        setTeaching(false);
+        prevDetailRef.current = null;
+      }
+    }, [teaching, focusLane?.targetDetail]);
+    React.useEffect(() => {
+      if (teaching && focusLane?.target !== "CC") {
+        eng.cancelTeach?.();
+        setTeaching(false);
+      }
+    }, [focusLane?.id, focusLane?.target, teaching]);
     return /* @__PURE__ */ React.createElement("div", { style: {
       width,
       flexShrink: 0,
@@ -25823,7 +25873,19 @@
       fontStyle: "italic",
       minWidth: 36,
       fontVariantNumeric: "tabular-nums"
-    } }, focusLane.targetDetail))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Label, { paper }, "MIDI channel"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 6 } }, /* @__PURE__ */ React.createElement(
+    } }, focusLane.targetDetail)), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 8 } }, teaching ? /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("span", { style: {
+      fontFamily: "Inter Tight",
+      fontSize: 11,
+      color: paper.amberInk,
+      letterSpacing: 0.3,
+      animation: "dq-pulse 1s ease-in-out infinite"
+    } }, "\u25CF Listening for CC\u2026"), /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: () => {
+      eng.cancelTeach?.();
+      setTeaching(false);
+    } }, "\u2715")) : /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: () => {
+      eng.beginTeach?.(focusLane.id);
+      setTeaching(true);
+    } }, "Teach CC \u2192"))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Label, { paper }, "MIDI channel"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 6 } }, /* @__PURE__ */ React.createElement(
       Slider,
       {
         value: focusLane.channel,
@@ -26013,7 +26075,44 @@
       fontStyle: "italic",
       fontVariantNumeric: "tabular-nums",
       minWidth: 38
-    } }, (focusLane.laneSpeedMul ?? 1).toFixed(2), "\xD7"))))), /* @__PURE__ */ React.createElement("div", { style: { borderTop: `1px dashed ${paper.rule}`, paddingTop: 10 } }, /* @__PURE__ */ React.createElement(Btn, { paper, small: true }, "Teach CC \u2192"))), /* @__PURE__ */ React.createElement(
+    } }, (focusLane.laneSpeedMul ?? 1).toFixed(2), "\xD7"))))), /* @__PURE__ */ React.createElement("div", { style: { borderTop: `1px dashed ${paper.rule}`, paddingTop: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement(
+      Btn,
+      {
+        paper,
+        small: true,
+        active: focusLane.oneShot,
+        title: "One-shot: play once and hold final value",
+        onClick: () => eng.updateLane(focusLane.id, { oneShot: !focusLane.oneShot })
+      },
+      focusLane.oneShot ? "1\xD7 shot" : "loop"
+    ), focusLane.target === "Note" && /* @__PURE__ */ React.createElement(
+      Btn,
+      {
+        paper,
+        small: true,
+        active: focusLane.legato,
+        title: "Legato: send Note On before Note Off (no gap between notes)",
+        onClick: () => eng.updateLane(focusLane.id, { legato: !focusLane.legato })
+      },
+      "legato"
+    ))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Label, { paper }, "Phase offset"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 6 } }, /* @__PURE__ */ React.createElement(
+      Slider,
+      {
+        value: focusLane.phaseOffset ?? 0,
+        min: 0,
+        max: 100,
+        step: 1,
+        onChange: (v) => eng.updateLane(focusLane.id, { phaseOffset: Math.round(v) }),
+        paper,
+        width: 140
+      }
+    ), /* @__PURE__ */ React.createElement("span", { style: {
+      fontFamily: '"Instrument Serif", Georgia, serif',
+      fontSize: 18,
+      fontStyle: "italic",
+      minWidth: 38,
+      fontVariantNumeric: "tabular-nums"
+    } }, Math.round(focusLane.phaseOffset ?? 0), "%")))), /* @__PURE__ */ React.createElement(
       "button",
       {
         onPointerDown: (e) => e.stopPropagation(),
@@ -26211,10 +26310,32 @@
           fontSize: 18,
           color: focused ? paper.ink : paper.ink70,
           lineHeight: 1,
+          flex: 1,
           // Single-property shorthand to avoid React's "mix shorthand
           // and longhand" warning (line / colour combined here).
           textDecoration: l.enabled ? "none" : `line-through ${paper.ink30}`
-        } }, "Lane ", l.id + 1)),
+        } }, "Lane ", l.id + 1), /* @__PURE__ */ React.createElement(
+          "button",
+          {
+            title: l.visible === false ? "Show on canvas" : "Hide from canvas",
+            onPointerDown: (e) => e.stopPropagation(),
+            onClick: (e) => {
+              e.stopPropagation();
+              eng.updateLane(l.id, { visible: l.visible === false ? true : false });
+            },
+            style: {
+              background: "none",
+              border: "none",
+              padding: "4px 2px",
+              cursor: "pointer",
+              color: l.visible === false ? paper.ink30 : paper.ink50,
+              fontSize: 14,
+              lineHeight: 1,
+              flexShrink: 0
+            }
+          },
+          l.visible === false ? "\u25CB" : "\u25CF"
+        )),
         /* @__PURE__ */ React.createElement("div", { style: {
           fontFamily: "Inter Tight",
           fontSize: 10,
@@ -27297,6 +27418,9 @@
                     patch.scaleMask = Math.round(value);
                     patch.scaleId = window.recognizeScaleId?.(patch.scaleMask) ?? "custom";
                   }
+                  if (suffix === "loopMode") patch.oneShot = value > 0.5;
+                  if (suffix === "legatoMode") patch.legato = value > 0.5;
+                  if (suffix === "phaseOffset") patch.phaseOffset = value;
                   if (suffix === "useGlobalPlayback") patch.useGlobalPlayback = value > 0.5;
                   if (suffix === "laneDirection") patch.laneDirection = ["fwd", "rev", "pp"][Math.round(value)] ?? "fwd";
                   if (suffix === "laneSpeedMul") patch.laneSpeedMul = value;
@@ -27389,7 +27513,9 @@
         addLane,
         removeLane,
         applyScaleToAll,
-        panic: sendPanic
+        panic: sendPanic,
+        beginTeach: sendBeginTeach,
+        cancelTeach: sendCancelTeach
       };
     };
   })();

@@ -520,6 +520,33 @@ function JuceTopBar({ eng, paper, h, helpOpen, setHelpOpen }) {
 
 // ── Left shape well ──────────────────────────────────────────
 function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
+  // Teach CC — local UI state only.  C++ auto-clears once a CC arrives;
+  // JS detects completion by watching focusLane.targetDetail change while
+  // teaching.  Switching lane or target type also exits teach mode.
+  const [teaching, setTeaching] = React.useState(false);
+  const prevDetailRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!teaching) { prevDetailRef.current = null; return; }
+    if (prevDetailRef.current === null) {
+      prevDetailRef.current = focusLane?.targetDetail;
+      return;
+    }
+    // A change in targetDetail while armed means the CC was captured.
+    if (focusLane?.targetDetail !== prevDetailRef.current) {
+      setTeaching(false);
+      prevDetailRef.current = null;
+    }
+  }, [teaching, focusLane?.targetDetail]);
+
+  // Exit teach mode if focus moves to a non-CC lane, or if the panel closes.
+  React.useEffect(() => {
+    if (teaching && focusLane?.target !== 'CC') {
+      eng.cancelTeach?.();
+      setTeaching(false);
+    }
+  }, [focusLane?.id, focusLane?.target, teaching]);
+
   return (
     <div style={{
       width, flexShrink: 0, display: 'flex',
@@ -568,6 +595,30 @@ function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
                   fontSize: 22, fontStyle: 'italic', minWidth: 36,
                   fontVariantNumeric: 'tabular-nums',
                 }}>{focusLane.targetDetail}</span>
+              </div>
+              {/* Teach CC — arm this lane to capture the next incoming CC#.
+                  Button shows "Listening… ✕" while armed; C++ solos the lane
+                  and waits for one CC.  The paramChange echo for ccNumber exits
+                  teach mode automatically; ✕ cancels without changing the CC#. */}
+              <div style={{ marginTop: 8 }}>
+                {teaching ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{
+                      fontFamily: 'Inter Tight', fontSize: 11,
+                      color: paper.amberInk, letterSpacing: 0.3,
+                      animation: 'dq-pulse 1s ease-in-out infinite',
+                    }}>● Listening for CC…</span>
+                    <Btn paper={paper} small onClick={() => {
+                      eng.cancelTeach?.();
+                      setTeaching(false);
+                    }}>✕</Btn>
+                  </div>
+                ) : (
+                  <Btn paper={paper} small onClick={() => {
+                    eng.beginTeach?.(focusLane.id);
+                    setTeaching(true);
+                  }}>Teach CC →</Btn>
+                )}
               </div>
             </div>
           )}
@@ -764,8 +815,48 @@ function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
             )}
           </div>
 
+          {/* ── Loop / one-shot + legato ───────────────────────────────── */}
           <div style={{ borderTop: `1px dashed ${paper.rule}`, paddingTop: 10 }}>
-            <Btn paper={paper} small>Teach CC →</Btn>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {/* One-shot: plays the curve once then holds the last value.
+                  Loop (default) cycles continuously. */}
+              <Btn paper={paper} small
+                active={focusLane.oneShot}
+                title="One-shot: play once and hold final value"
+                onClick={() => eng.updateLane(focusLane.id, { oneShot: !focusLane.oneShot })}>
+                {focusLane.oneShot ? '1× shot' : 'loop'}
+              </Btn>
+              {/* Legato: Note-On fires before Note-Off so consecutive notes
+                  tie without silence.  Shown only in Note mode. */}
+              {focusLane.target === 'Note' && (
+                <Btn paper={paper} small
+                  active={focusLane.legato}
+                  title="Legato: send Note On before Note Off (no gap between notes)"
+                  onClick={() => eng.updateLane(focusLane.id, { legato: !focusLane.legato })}>
+                  legato
+                </Btn>
+              )}
+            </div>
+          </div>
+
+          {/* ── Phase offset ─────────────────────────────────────────────── */}
+          {/* Shifts the curve lookup start point.  The playhead still advances
+              from 0→1, but the curve is sampled with a wrap-around offset so
+              lane 1 at 0% and lane 2 at 50% are always a half-cycle apart. */}
+          <div>
+            <Label paper={paper}>Phase offset</Label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+              <Slider
+                value={focusLane.phaseOffset ?? 0}
+                min={0} max={100} step={1}
+                onChange={v => eng.updateLane(focusLane.id, { phaseOffset: Math.round(v) })}
+                paper={paper} width={140} />
+              <span style={{
+                fontFamily: '"Instrument Serif", Georgia, serif',
+                fontSize: 18, fontStyle: 'italic', minWidth: 38,
+                fontVariantNumeric: 'tabular-nums',
+              }}>{Math.round(focusLane.phaseOffset ?? 0)}%</span>
+            </div>
           </div>
         </div>
       )}
@@ -924,10 +1015,28 @@ function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
                 fontFamily: '"Instrument Serif", Georgia, serif',
                 fontStyle: 'italic', fontSize: 18,
                 color: focused ? paper.ink : paper.ink70, lineHeight: 1,
+                flex: 1,
                 // Single-property shorthand to avoid React's "mix shorthand
                 // and longhand" warning (line / colour combined here).
                 textDecoration: l.enabled ? 'none' : `line-through ${paper.ink30}`,
               }}>Lane {l.id + 1}</span>
+              {/* Visibility eye — JS-only; hides ghost lane on canvas without
+                  muting MIDI output.  Always shown so any lane can be hidden
+                  regardless of focus, without expanding the row. */}
+              <button
+                title={l.visible === false ? 'Show on canvas' : 'Hide from canvas'}
+                onPointerDown={e => e.stopPropagation()}
+                onClick={e => {
+                  e.stopPropagation();
+                  eng.updateLane(l.id, { visible: l.visible === false ? true : false });
+                }}
+                style={{
+                  background: 'none', border: 'none', padding: '4px 2px',
+                  cursor: 'pointer', color: l.visible === false ? paper.ink30 : paper.ink50,
+                  fontSize: 14, lineHeight: 1, flexShrink: 0,
+                }}>
+                {l.visible === false ? '○' : '●'}
+              </button>
             </div>
             <div style={{
               fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 0.8,

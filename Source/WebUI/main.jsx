@@ -14,7 +14,8 @@ import './design/scale-editor.jsx';
 // ── JUCE bridge ───────────────────────────────────────────────────────────────
 import { initJuceBridge, sendCurve, sendParam, sendFocus,
          sendPlaying, sendDirection, sendEnabled, sendGlobalActual,
-         sendClearLane, sendAddLane, sendRemoveLane, sendPanic } from './juce-bridge.js';
+         sendClearLane, sendAddLane, sendRemoveLane, sendPanic,
+         sendBeginTeach, sendCancelTeach } from './juce-bridge.js';
 
 // ── Patch useDrawnQurveEngine ─────────────────────────────────────────────────
 // Must run before juce-ipad.jsx is imported (esbuild preserves import order in
@@ -122,10 +123,14 @@ import { initJuceBridge, sendCurve, sendParam, sendFocus,
                   // Re-derive scaleId so the picker stays in sync with the mask.
                   patch.scaleId   = window.recognizeScaleId?.(patch.scaleMask) ?? 'custom';
                 }
+                // Playback behaviour
+                if (suffix === 'loopMode')          patch.oneShot          = value > 0.5;
+                if (suffix === 'legatoMode')        patch.legato           = value > 0.5;
+                if (suffix === 'phaseOffset')       patch.phaseOffset      = value;                   // 0-100
                 // Per-lane playback overrides
                 if (suffix === 'useGlobalPlayback') patch.useGlobalPlayback = value > 0.5;
                 if (suffix === 'laneDirection')     patch.laneDirection    = ['fwd','rev','pp'][Math.round(value)] ?? 'fwd';
-                if (suffix === 'laneSpeedMul')      patch.laneSpeedMul     = value;                   // 0.25-4.0
+                if (suffix === 'laneSpeedMul')      patch.laneSpeedMul     = value;                   // 0.1-10.0
                 if (Object.keys(patch).length) {
                   next[L] = { ...next[L], ...patch };
                   return next;
@@ -251,6 +256,8 @@ import { initJuceBridge, sendCurve, sendParam, sendFocus,
       removeLane,
       applyScaleToAll,
       panic: sendPanic,
+      beginTeach: sendBeginTeach,
+      cancelTeach: sendCancelTeach,
     };
   };
 })();

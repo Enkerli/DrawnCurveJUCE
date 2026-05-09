@@ -211,6 +211,23 @@ juce::WebBrowserComponent::Options WebCurveEditor::buildOptions (WebCurveEditor*
         .withEventListener ("panic", [owner] (const Array<var>&)
         {
             owner->proc.sendPanic();
+        })
+
+        // "beginTeach" — { lane } — arm the lane to capture the next incoming CC#.
+        // The engine isolates the lane (soloLane), waits for one CC message,
+        // writes it to l<n>_ccNumber, then clears the pending flag automatically.
+        // The paramChange echo for ccNumber tells the JS side to exit teach mode.
+        .withEventListener ("beginTeach", [owner] (const Array<var>& args)
+        {
+            if (args.isEmpty()) return;
+            const int lane = static_cast<int> (args[0]["lane"]);
+            owner->proc.beginTeach (lane);
+        })
+
+        // "cancelTeach" — {} — disarm without changing the CC number.
+        .withEventListener ("cancelTeach", [owner] (const Array<var>&)
+        {
+            owner->proc.cancelTeach();
         });
 }
 
@@ -402,6 +419,10 @@ void WebCurveEditor::sendStateSnapshot()
         lane->setProperty ("rangeMax",     raw ("maxOutput"));                     // 0-1
         lane->setProperty ("velocity",     static_cast<int> (raw ("noteVelocity")));// 1-127
         lane->setProperty ("enabled",      raw ("enabled") > 0.5f);
+        // Playback behaviour — loop mode and legato tie.
+        lane->setProperty ("oneShot",     raw (ParamID::loopMode)    > 0.5f);  // false=loop, true=one-shot
+        lane->setProperty ("legato",      raw (ParamID::legatoMode)  > 0.5f);  // Note mode only
+        lane->setProperty ("phaseOffset", raw (ParamID::phaseOffset));          // 0-100 percent
         // Per-lane quantization (mirrors xQuantize/yQuantize/xDivisions/yDivisions APVTS).
         lane->setProperty ("quantizeX",    raw ("xQuantize") > 0.5f);
         lane->setProperty ("quantizeY",    raw ("yQuantize") > 0.5f);

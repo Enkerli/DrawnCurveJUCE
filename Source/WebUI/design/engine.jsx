@@ -46,10 +46,15 @@ function useDrawnQurveEngine(initial = {}) {
       quantizeY: false,
       xDivisions: 4,
       yDivisions: 4,
+      // Playback behaviour
+      oneShot: false,
+      legato: false,
+      phaseOffset: 0,
       // Per-lane playback overrides (useGlobalPlayback=true → follow global transport)
       useGlobalPlayback: true,
       laneDirection: 'fwd',
       laneSpeedMul: 1.0,
+      visible: true,
     },
     {
       id: 1,
@@ -72,9 +77,13 @@ function useDrawnQurveEngine(initial = {}) {
       quantizeY: false,
       xDivisions: 4,
       yDivisions: 4,
+      oneShot: false,
+      legato: false,
+      phaseOffset: 0,
       useGlobalPlayback: true,
       laneDirection: 'fwd',
       laneSpeedMul: 1.0,
+      visible: true,
     },
     {
       id: 2,
@@ -97,9 +106,13 @@ function useDrawnQurveEngine(initial = {}) {
       quantizeY: false,
       xDivisions: 4,
       yDivisions: 4,
+      oneShot: false,
+      legato: false,
+      phaseOffset: 0,
       useGlobalPlayback: true,
       laneDirection: 'fwd',
       laneSpeedMul: 1.0,
+      visible: true,
     },
   ]);
   const [focus, setFocus] = React.useState(0);   // focused lane id

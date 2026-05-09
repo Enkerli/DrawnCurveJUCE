@@ -85,6 +85,12 @@ const LANE_MAP = [
   ['rangeMin',    'minOutput',   v => v,                      v => v],           // raw: 0-1
   ['rangeMax',    'maxOutput',   v => v,                      v => v],           // raw: 0-1
   ['velocity',    'noteVelocity',v => Math.round(v),          v => v / 127],    // raw: 1-127
+  // Playback behaviour — loop mode and legato tie.
+  ['oneShot',     'loopMode',    v => v > 0.5,                v => v ? 1.0 : 0.0],   // raw: 0=loop, 1=one-shot
+  ['legato',      'legatoMode',  v => v > 0.5,                v => v ? 1.0 : 0.0],   // raw: 0/1 (Note mode only)
+  // Phase offset — curve lookup start point.  APVTS stores 0–100 (percent);
+  // JS stores the same 0–100 value.  Normalise to 0-1 for setValueNotifyingHost.
+  ['phaseOffset', 'phaseOffset', v => v,                      v => v / 100],         // raw: 0-100
   // Quantization — per-lane bool/int params used by the audio engine.
   ['quantizeX',   'xQuantize',   v => v > 0.5,                v => v ? 1.0 : 0.0],   // raw: 0/1
   ['quantizeY',   'yQuantize',   v => v > 0.5,                v => v ? 1.0 : 0.0],   // raw: 0/1
@@ -254,6 +260,10 @@ export function sendClearLane(lane)      { juceEmit('clearLane',    { lane }); }
 export function sendAddLane()            { juceEmit('addLane',      {}); }
 export function sendRemoveLane(lane)     { juceEmit('removeLane',   { lane }); }
 export function sendPanic()              { juceEmit('panic',        {}); }
+// Teach CC — arm a lane to capture the next incoming CC number.
+// cancelTeach disarms without changing the CC number.
+export function sendBeginTeach(lane)     { juceEmit('beginTeach',   { lane }); }
+export function sendCancelTeach()        { juceEmit('cancelTeach',  {}); }
 
 // Export the LANE_MAP for use in C++ param-change dispatching
 export { LANE_MAP, laneParamId };

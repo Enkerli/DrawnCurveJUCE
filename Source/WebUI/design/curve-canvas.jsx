@@ -192,7 +192,7 @@ function CurveCanvas({
 
         {/* Ghost lanes (inactive or unfocused) */}
         {lanes.map(l => {
-          if (l.id === focus || !l.curve || !l.enabled) return null;
+          if (l.id === focus || !l.curve || !l.enabled || l.visible === false) return null;
           return <CurvePath key={'g' + l.id} curve={l.curve} w={width} h={height} stroke={l.color} opacity={0.25} width={1.5} dash={l.dash} />;
         })}
 
@@ -248,7 +248,7 @@ function CurveCanvas({
 
         {/* Per-lane playheads */}
         {lanes.map(l => {
-          if (!l.curve || !l.enabled) return null;
+          if (!l.curve || !l.enabled || (l.id !== focus && l.visible === false)) return null;
           // Use per-lane phase when available (JUCE override-transport mode);
           // fall back to the shared global phase in demo / sync mode.
           const lPhase = (lanePhases && lanePhases[l.id] != null) ? lanePhases[l.id] : phase;
