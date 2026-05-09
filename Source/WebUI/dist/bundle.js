@@ -25434,7 +25434,7 @@
       // engine; root-only is what the native editor used.
       scaleMask: 2048,
       scaleId: "custom"
-    }) }, "None"), pluginSync && /* @__PURE__ */ React.createElement(Btn, { paper, small: true, tone: "active" }, "Re-sync \u21BA")), /* @__PURE__ */ React.createElement(ScaleMaskInput, { lane: focusLane, updateLane: eng.updateLane, paper }), /* @__PURE__ */ React.createElement("div", { style: {
+    }) }, "None")), /* @__PURE__ */ React.createElement(ScaleMaskInput, { lane: focusLane, updateLane: eng.updateLane, paper }), /* @__PURE__ */ React.createElement("div", { style: {
       fontSize: 11,
       color: paper.ink70,
       lineHeight: 1.5,

@@ -323,7 +323,7 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
                       // engine; root-only is what the native editor used.
                       scaleMask: 0x800, scaleId: 'custom',
                     })}>None</Btn>
-                    {pluginSync && <Btn paper={paper} small tone="active">Re-sync ↺</Btn>}
+                    {/* Re-sync button appears here when ScalePlugin sync is wired (roadmap F.4) */}
                   </div>
 
                   {/* Editable decimal bitmask — type a value 0..4095 (e.g.
