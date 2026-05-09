@@ -23896,6 +23896,9 @@
       const tickWidth = 1 / lane.xDivisions;
       p = Math.floor(p / tickWidth) * tickWidth;
     }
+    if (lane.phaseOffset) {
+      p = ((p + lane.phaseOffset / 100) % 1 + 1) % 1;
+    }
     let v = sampleCurve(lane.curve, p);
     if (lane.quantizeY && lane.yDivisions >= 2) {
       const step = 1 / lane.yDivisions;
@@ -24698,9 +24701,9 @@
         }),
         lanes.map((l) => {
           if (l.id === focus || !l.curve || !l.enabled || l.visible === false) return null;
-          return /* @__PURE__ */ React.createElement(CurvePath2, { key: "g" + l.id, curve: l.curve, w: width, h: height, stroke: l.color, opacity: 0.25, width: 1.5, dash: l.dash });
+          return /* @__PURE__ */ React.createElement(CurvePath2, { key: "g" + l.id, curve: l.curve, w: width, h: height, stroke: l.color, opacity: 0.25, width: 1.5, dash: l.dash, phaseOffset: l.phaseOffset });
         }),
-        focusLane?.curve && /* @__PURE__ */ React.createElement(CurvePath2, { curve: focusLane.curve, w: width, h: height, stroke: focusLane.color, opacity: 0.95, width: 2.5, dash: focusLane.dash }),
+        focusLane?.curve && /* @__PURE__ */ React.createElement(CurvePath2, { curve: focusLane.curve, w: width, h: height, stroke: focusLane.color, opacity: 0.95, width: 2.5, dash: focusLane.dash, phaseOffset: focusLane.phaseOffset }),
         focusLane?.curve && (focusLane.quantizeX || focusLane.quantizeY) && (() => {
           const xDiv = focusLane.quantizeX && focusLane.xDivisions >= 2 ? focusLane.xDivisions : null;
           const N = xDiv ?? 256;
@@ -24804,12 +24807,18 @@
       } }, "draw a curve \u2192")
     );
   }
-  function CurvePath2({ curve, w, h, stroke, opacity = 1, width = 2, dash = "0" }) {
+  function CurvePath2({ curve, w, h, stroke, opacity = 1, width = 2, dash = "0", phaseOffset = 0 }) {
     const n = curve.length;
     let d = "";
+    const offsetFrac = (phaseOffset || 0) / 100;
     for (let i = 0; i < n; i++) {
       const x = i / (n - 1) * w;
-      const y = (1 - curve[i]) * h;
+      const sampleFrac = offsetFrac ? (i / (n - 1) + offsetFrac) % 1 : i / (n - 1);
+      const rawIdx = sampleFrac * (n - 1);
+      const i0 = Math.floor(rawIdx);
+      const i1 = Math.min(n - 1, i0 + 1);
+      const frac = rawIdx - i0;
+      const y = (1 - (curve[i0] + frac * (curve[i1] - curve[i0]))) * h;
       d += (i === 0 ? "M" : "L") + x.toFixed(1) + "," + y.toFixed(1);
     }
     return /* @__PURE__ */ React.createElement("path", { d, fill: "none", stroke, strokeWidth: width, strokeLinecap: "round", strokeLinejoin: "round", opacity, strokeDasharray: dash });
@@ -26075,17 +26084,7 @@
       fontStyle: "italic",
       fontVariantNumeric: "tabular-nums",
       minWidth: 38
-    } }, (focusLane.laneSpeedMul ?? 1).toFixed(2), "\xD7"))))), /* @__PURE__ */ React.createElement("div", { style: { borderTop: `1px dashed ${paper.rule}`, paddingTop: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement(
-      Btn,
-      {
-        paper,
-        small: true,
-        active: focusLane.oneShot,
-        title: "One-shot: play once and hold final value",
-        onClick: () => eng.updateLane(focusLane.id, { oneShot: !focusLane.oneShot })
-      },
-      focusLane.oneShot ? "1\xD7 shot" : "loop"
-    ), focusLane.target === "Note" && /* @__PURE__ */ React.createElement(
+    } }, (focusLane.laneSpeedMul ?? 1).toFixed(2), "\xD7"))))), /* @__PURE__ */ React.createElement("div", { style: { borderTop: `1px dashed ${paper.rule}`, paddingTop: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } }, focusLane.target === "Note" && /* @__PURE__ */ React.createElement(
       Btn,
       {
         paper,

@@ -193,13 +193,15 @@ function CurveCanvas({
         {/* Ghost lanes (inactive or unfocused) */}
         {lanes.map(l => {
           if (l.id === focus || !l.curve || !l.enabled || l.visible === false) return null;
-          return <CurvePath key={'g' + l.id} curve={l.curve} w={width} h={height} stroke={l.color} opacity={0.25} width={1.5} dash={l.dash} />;
+          return <CurvePath key={'g' + l.id} curve={l.curve} w={width} h={height} stroke={l.color} opacity={0.25} width={1.5} dash={l.dash} phaseOffset={l.phaseOffset} />;
         })}
 
-        {/* Focused lane curve — original drawn shape, kept visible underneath
-            the quantized staircase as a "source" reference. */}
+        {/* Focused lane curve — drawn with phaseOffset rotation so the curve
+            shape matches what the engine actually samples.  The playhead dot
+            (using sampleLaneQuantized which also applies phaseOffset) will then
+            sit correctly ON the displayed curve at the raw playback phase. */}
         {focusLane?.curve && (
-          <CurvePath curve={focusLane.curve} w={width} h={height} stroke={focusLane.color} opacity={0.95} width={2.5} dash={focusLane.dash} />
+          <CurvePath curve={focusLane.curve} w={width} h={height} stroke={focusLane.color} opacity={0.95} width={2.5} dash={focusLane.dash} phaseOffset={focusLane.phaseOffset} />
         )}
 
         {/* Staircase overlay — shows the *actual* emitted playback curve when
@@ -339,12 +341,32 @@ function CurveCanvas({
   );
 }
 
-function CurvePath({ curve, w, h, stroke, opacity = 1, width = 2, dash = '0' }) {
+// CurvePath renders the curve table as an SVG polyline.
+//
+// phaseOffset (0–100, matching lane.phaseOffset) rotates the displayed curve
+// so the shape matches what the C++ engine actually samples.  At canvas X=t,
+// the curve is drawn at curve[(t + phaseOffset/100) % 1] — the same formula
+// the engine uses.  This makes the playhead dot (at raw phase X, Y from
+// sampleLaneQuantized which also applies phaseOffset) sit correctly ON the
+// displayed curve instead of floating above or below it.
+//
+// When phaseOffset is non-zero there will be a small "stitch" discontinuity
+// in the path at x = (1 − phaseOffset/100) × w where the sampling wraps.
+// This is visually informative (marks the rotation boundary) and acceptable.
+function CurvePath({ curve, w, h, stroke, opacity = 1, width = 2, dash = '0', phaseOffset = 0 }) {
   const n = curve.length;
   let d = '';
+  const offsetFrac = (phaseOffset || 0) / 100;
   for (let i = 0; i < n; i++) {
     const x = (i / (n - 1)) * w;
-    const y = (1 - curve[i]) * h;
+    // Rotate sampling by phaseOffset so the displayed curve matches C++ sampling.
+    const sampleFrac = offsetFrac ? ((i / (n - 1) + offsetFrac) % 1) : i / (n - 1);
+    // Map fraction → table index with linear interpolation at the boundary.
+    const rawIdx = sampleFrac * (n - 1);
+    const i0 = Math.floor(rawIdx);
+    const i1 = Math.min(n - 1, i0 + 1);
+    const frac = rawIdx - i0;
+    const y = (1 - (curve[i0] + frac * (curve[i1] - curve[i0]))) * h;
     d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
   }
   return <path d={d} fill="none" stroke={stroke} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" opacity={opacity} strokeDasharray={dash} />;

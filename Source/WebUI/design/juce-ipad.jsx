@@ -815,17 +815,17 @@ function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
             )}
           </div>
 
-          {/* ── Loop / one-shot + legato ───────────────────────────────── */}
+          {/* ── Legato (one-shot toggle hidden — see roadmap C.1) ─────────── */}
+          {/* One-shot (loopMode APVTS param) is wired but the engine doesn't
+              hold the sentinel reliably: the lane restarts in sync with other
+              lanes immediately after the single run ends.  Root cause unclear —
+              likely the standalone timer or the sync-group reset path clearing
+              rt.playheadSeconds before the next heartbeat.  Hidden from UI
+              until the engine fix is confirmed.  The APVTS param, bridge
+              handler, and JS state field (lane.oneShot) are all in place so
+              re-exposing the button is a one-line change here. */}
           <div style={{ borderTop: `1px dashed ${paper.rule}`, paddingTop: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              {/* One-shot: plays the curve once then holds the last value.
-                  Loop (default) cycles continuously. */}
-              <Btn paper={paper} small
-                active={focusLane.oneShot}
-                title="One-shot: play once and hold final value"
-                onClick={() => eng.updateLane(focusLane.id, { oneShot: !focusLane.oneShot })}>
-                {focusLane.oneShot ? '1× shot' : 'loop'}
-              </Btn>
               {/* Legato: Note-On fires before Note-Off so consecutive notes
                   tie without silence.  Shown only in Note mode. */}
               {focusLane.target === 'Note' && (

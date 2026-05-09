@@ -802,6 +802,13 @@ void DrawnCurveProcessor::updateLaneSnapshot (int lane)
     updateEngineScale (lane);
 }
 
+void DrawnCurveProcessor::resetLanePlayhead (int lane)
+{
+    if (lane < 0 || lane >= kMaxLanes) return;
+    juce::SpinLock::ScopedLockType lock (_engineLock);
+    _engine.resetLane (lane);
+}
+
 void DrawnCurveProcessor::clearSnapshot (int lane)
 {
     {

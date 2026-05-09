@@ -202,6 +202,12 @@ function sampleLaneQuantized(lane, phase) {
     const tickWidth = 1 / lane.xDivisions;
     p = Math.floor(p / tickWidth) * tickWidth;
   }
+  // Apply phase offset after X-quantize, mirroring C++ GestureEngine::processLane.
+  // This shifts which portion of the curve is sampled without affecting the playhead
+  // position shown on-canvas, so displays (staircase, value readouts) match MIDI output.
+  if (lane.phaseOffset) {
+    p = ((p + lane.phaseOffset / 100) % 1 + 1) % 1;
+  }
   let v = sampleCurve(lane.curve, p);
   if (lane.quantizeY && lane.yDivisions >= 2) {
     const step = 1 / lane.yDivisions;

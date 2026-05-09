@@ -300,8 +300,13 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
     // ── Advance playhead ──────────────────────────────────────────────────────
     // One-shot sentinel: playheadSeconds == -1 means "already completed this pass".
     // reset() / resetLane() clear the sentinel by setting playheadSeconds = 0.
+    // Park the UI playhead at 0 so the dot rests at the start rather than
+    // wherever it was when the sentinel fired.
     if (snap->oneShot && rt.playheadSeconds < 0.0)
+    {
+        _lanePhases[static_cast<size_t>(lane)].store (0.0f, std::memory_order_relaxed);
         return;   // one-shot complete — lane is silent until next reset
+    }
 
     rt.playheadSeconds += static_cast<double> (frameCount) / sampleRate;
 
@@ -336,6 +341,7 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
                 if (snap->messageType == MessageType::Note)
                     _noteOffNeeded[static_cast<size_t>(lane)].store (true, std::memory_order_release);
                 rt.playheadSeconds = -1.0;   // sentinel: skip on future blocks
+                _lanePhases[static_cast<size_t>(lane)].store (0.0f, std::memory_order_relaxed);
                 return;
             }
             rt.playheadSeconds = std::fmod (rt.playheadSeconds, effectiveDur);
@@ -353,6 +359,7 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
                 if (snap->messageType == MessageType::Note)
                     _noteOffNeeded[static_cast<size_t>(lane)].store (true, std::memory_order_release);
                 rt.playheadSeconds = -1.0;
+                _lanePhases[static_cast<size_t>(lane)].store (0.0f, std::memory_order_relaxed);
                 return;
             }
             rt.playheadSeconds = std::fmod (rt.playheadSeconds, ppDur);
@@ -371,6 +378,7 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
                 if (snap->messageType == MessageType::Note)
                     _noteOffNeeded[static_cast<size_t>(lane)].store (true, std::memory_order_release);
                 rt.playheadSeconds = -1.0;
+                _lanePhases[static_cast<size_t>(lane)].store (0.0f, std::memory_order_relaxed);
                 return;
             }
             rt.playheadSeconds = std::fmod (rt.playheadSeconds, effectiveDur);

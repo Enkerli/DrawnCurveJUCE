@@ -175,6 +175,11 @@ public:
     /// existing snapshot table without requiring a redraw.  No-op if no curve exists.
     void updateLaneSnapshot (int lane);
 
+    /// Rewind the one-shot playhead to the start (clears the -1 sentinel).
+    /// Call after toggling loopMode to one-shot so the lane triggers from the
+    /// beginning of the curve, not from wherever it currently is.
+    void resetLanePlayhead (int lane);
+
     /// Install a curve directly from a float array (called by the WebView bridge).
     /// Reads current APVTS values for CC#, channel, smoothing, etc.
     void setSnapshotFromArray (int lane, const float* data, int size);

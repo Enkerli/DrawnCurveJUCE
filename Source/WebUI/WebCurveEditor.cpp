@@ -371,6 +371,13 @@ void WebCurveEditor::parameterChanged (const juce::String& paramID, float newVal
                         proc.updateEngineScale (lane);
                     else
                         proc.updateLaneSnapshot (lane);
+                        // Note: do NOT call resetLanePlayhead here for loopMode.
+                        // The one-shot sentinel (playheadSeconds == -1) must hold
+                        // until an explicit global reset (play button / host transport
+                        // restart).  Calling resetLane from parameterChanged risks
+                        // clearing the sentinel on a delayed APVTS echo — which would
+                        // restart the lane and produce the "briefly pauses then loops"
+                        // symptom.  If the user wants a retrigger they press Play.
                 }
             }
         }
