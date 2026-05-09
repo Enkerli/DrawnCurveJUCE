@@ -22,7 +22,11 @@
 //   • Left panel defaults open (F-05); right panel always visible.
 //   • Keyboard shortcuts (F-24): Space = play/pause, 1–4 = lane select,
 //     ? / Escape = toggle help.
-//   • Scale quantization applies globally to all Note lanes (F-20 callout).
+//   • Scale quantization is PER-LANE (l<n>_scaleRoot / l<n>_scaleMask APVTS).
+//     Scale panel shows the focused lane's scale; "↕ All" copies it to every lane.
+//   • Per-lane playback direction/speed (DC_HAVE_PER_LANE_PLAYBACK_PARAMS) is wired in
+//     C++ but NOT exposed in the UI yet — the canvas shows only a single global phase,
+//     so per-lane speed/direction would appear broken even when MIDI output is correct.
 
 // ── Range formatter — real MIDI values per output mode ───────
 
@@ -252,6 +256,7 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
               <CurveCanvas
                 width={canvasSize.w} height={canvasSize.h}
                 lanes={eng.lanes} focus={eng.focus} phase={eng.phase}
+                lanePhases={eng.lanePhases}
                 setCurve={eng.setCurve}
                 variant="studio"
                 showScaleBanding={focusLane?.target === 'Note'}
@@ -262,10 +267,15 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
                 useFlats={eng.useFlats}
               />
 
-              {/* Typographic readout */}
-              <TypoReadout focusLane={focusLane} phase={eng.phase}
-                canvasW={canvasSize.w} canvasH={canvasSize.h} paper={paper}
-                useFlats={eng.useFlats} />
+              {/* Typographic readout — use focused lane's own phase */}
+              {(() => {
+                const focusPhase = eng.lanePhases?.[focusLane?.id] ?? eng.phase;
+                return (
+                  <TypoReadout focusLane={focusLane} phase={focusPhase}
+                    canvasW={canvasSize.w} canvasH={canvasSize.h} paper={paper}
+                    useFlats={eng.useFlats} />
+                );
+              })()}
 
               {/* Scale discovery chip */}
               {discoveryVisible && <DiscoveryChip paper={paper} onOpen={() => setScaleOpen(true)} />}
@@ -329,15 +339,21 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
                     display: 'flex', alignItems: 'center', gap: 10,
                   }}>
                     Mask
-                    {/* F-20: make it clear scale settings are shared across
-                        all Note lanes until per-lane scale is implemented. */}
+                    {/* Scale is now per-lane — badge shows the focused lane's colour dot */}
                     <span style={{
                       fontSize: 9, padding: '2px 8px', borderRadius: 10,
                       border: `1px solid ${paper.rule}`,
                       color: paper.ink50, fontFamily: 'Inter Tight',
                       letterSpacing: 0.6, textTransform: 'uppercase',
-                      fontStyle: 'normal',
-                    }}>global · all Note lanes</span>
+                      fontStyle: 'normal', display: 'flex', alignItems: 'center', gap: 5,
+                    }}>
+                      <span style={{
+                        width: 7, height: 7, borderRadius: '50%',
+                        background: focusLane?.color ?? paper.ink30,
+                        display: 'inline-block', flexShrink: 0,
+                      }} />
+                      Lane {(focusLane?.id ?? 0) + 1}
+                    </span>
                   </div>
 
                   {/* Action row — All / Invert / None set the mask directly,
@@ -358,7 +374,16 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
                       // engine; root-only is what the native editor used.
                       scaleMask: 0x800, scaleId: 'custom',
                     })}>None</Btn>
-                    {/* Re-sync button appears here when ScalePlugin sync is wired (roadmap F.4) */}
+                    {/* "Apply to all" — copies this lane's root + mask to
+                        every lane.  Native editor had one shared scale; now
+                        lanes can differ, but you can broadcast on demand. */}
+                    {eng.lanes.length > 1 && (
+                      <Btn paper={paper} small
+                        title="Copy this scale root + mask to all lanes"
+                        onClick={() => eng.applyScaleToAll(
+                          focusLane.scaleRoot, focusLane.scaleMask
+                        )}>↕ All</Btn>
+                    )}
                   </div>
 
                   {/* Editable decimal bitmask — type a value 0..4095 (e.g.
@@ -428,23 +453,37 @@ function JuceTopBar({ eng, paper, h, helpOpen, setHelpOpen }) {
       <PlaybackControl direction={eng.direction} setDirection={eng.setDirection}
         playing={eng.playing} setPlaying={eng.setPlaying} paper={paper} />
 
-      {/* Sync mode + rate */}
+      {/* Sync mode + duration/beat-count.
+          Free mode: slider controls duration in seconds (= 1 / speed ratio).
+          Sync mode: slider controls loop length in beats.
+          C++ stores playbackSpeed (a ratio); we convert to/from seconds on the JS side. */}
       <Btn active={eng.syncOn} onClick={() => eng.setSyncOn(!eng.syncOn)} paper={paper} small>
         {eng.syncOn ? 'Sync' : 'Free'}
       </Btn>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <Slider
-          value={eng.syncOn ? eng.beats : eng.speed}
-          min={eng.syncOn ? 1 : 0.25} max={eng.syncOn ? 32 : 4}
-          step={eng.syncOn ? 1 : 0.25}
-          onChange={v => eng.syncOn ? eng.setBeats(v) : eng.setSpeed(v)}
-          paper={paper} width={96}
-        />
+        {eng.syncOn ? (
+          <Slider
+            value={eng.beats}
+            min={1} max={32} step={1}
+            onChange={v => eng.setBeats(v)}
+            paper={paper} width={96}
+          />
+        ) : (
+          /* Duration slider: value in seconds = 1/speed.
+             Range 0.25 s (speed 4×, very fast) → 20 s (speed 0.05×, slow).
+             Step 0.1 s gives fine-enough control; user sees seconds not a multiplier. */
+          <Slider
+            value={parseFloat((1.0 / eng.speed).toFixed(2))}
+            min={0.25} max={20} step={0.1}
+            onChange={v => eng.setSpeed(1.0 / Math.max(0.05, v))}
+            paper={paper} width={96}
+          />
+        )}
         <span style={{
           fontFamily: '"Instrument Serif", Georgia, serif',
           fontStyle: 'italic', fontSize: 16, minWidth: 60,
           flexShrink: 0,
-        }}>{eng.syncOn ? `${eng.beats} beats` : `${eng.speed.toFixed(2)}×`}</span>
+        }}>{eng.syncOn ? `${eng.beats} beats` : `${(1.0 / eng.speed).toFixed(1)} s`}</span>
       </div>
 
       <div style={{ flex: 1 }} />
@@ -490,7 +529,9 @@ function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
       position: 'relative', overflow: 'hidden',
     }}>
       {open && focusLane && (
-        <div style={{ width: 256, padding: '14px 12px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        // paddingRight: 48 keeps all content clear of the 36 px collapse-tab handle
+        // that is absolutely positioned at the right edge of this 256 px panel.
+        <div style={{ width: 256, padding: '14px 48px 14px 12px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{
             fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 1.5,
             color: paper.ink50, textTransform: 'uppercase', marginBottom: 2,
@@ -597,6 +638,131 @@ function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
               </div>
             </div>
           )}
+
+          {/* ── Per-lane transport override ─────────────────────────────── */}
+          {/* Default: useGlobalPlayback=true — lane tracks the global transport.
+              When overridden, this lane's MIDI output runs at its own direction
+              and speed multiplier.  The canvas still shows a single global
+              playhead (per-lane phase display is a future improvement). */}
+          <div style={{ borderTop: `1px dashed ${paper.rule}`, paddingTop: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Label paper={paper}>Per-lane transport</Label>
+              <Btn paper={paper} small
+                active={!focusLane.useGlobalPlayback}
+                onClick={() => {
+                  const turningOn = focusLane.useGlobalPlayback; // true = currently global, switching to override
+                  eng.updateLane(focusLane.id, {
+                    useGlobalPlayback: !focusLane.useGlobalPlayback,
+                    ...(turningOn
+                      // Turning override ON: seed from global so the lane doesn't jump.
+                      ? { laneDirection: eng.direction,
+                          laneSpeedMul: eng.syncOn ? 1.0 : eng.speed }
+                      // Turning override OFF: resume the lane if it was paused.
+                      // Without this, a lane paused via override stays disabled
+                      // even after returning to the global transport.
+                      : { enabled: true }
+                    ),
+                  });
+                }}>
+                {focusLane.useGlobalPlayback ? 'global' : 'override'}
+              </Btn>
+            </div>
+
+            {!focusLane.useGlobalPlayback && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {/* Direction — mirrors PlaybackControl exactly:
+                    • tap a non-active segment → change direction (re-enables if paused)
+                    • tap the active segment → toggle pause for this lane only
+                    • dot on active segment: green = playing, grey = paused
+                    Pause uses enabled=false; processLane() bails before advancing the
+                    phase, so the playhead freezes and resumes from the same spot. */}
+                <div>
+                  <Label paper={paper}>Direction</Label>
+                  <div style={{
+                    display: 'inline-flex', marginTop: 6,
+                    border: `1px solid ${paper.ink}`, borderRadius: 2,
+                    overflow: 'hidden', background: paper.card,
+                  }}>
+                    {[
+                      { id: 'rev', title: 'Reverse — tap again to pause',
+                        icon: <svg width="16" height="16" viewBox="0 0 16 16"><path d="M10 3L4 8l6 5V3z" fill="currentColor"/></svg> },
+                      { id: 'pp',  title: 'Ping-Pong — tap again to pause',
+                        icon: <svg width="20" height="16" viewBox="0 0 20 16"><path d="M6 3L2 8l4 5V3zm8 0v10l4-5-4-5z" fill="currentColor"/></svg> },
+                      { id: 'fwd', title: 'Forward — tap again to pause',
+                        icon: <svg width="16" height="16" viewBox="0 0 16 16"><path d="M6 3l6 5-6 5V3z" fill="currentColor"/></svg> },
+                    ].map((s, i) => {
+                      const isThisDir = (focusLane.laneDirection ?? 'fwd') === s.id;
+                      const active = isThisDir;  // highlight whichever direction is set
+                      const playing = focusLane.enabled;
+                      return (
+                        <button key={s.id}
+                          title={s.title}
+                          onPointerDown={e => e.stopPropagation()}
+                          onClick={() => {
+                            if (isThisDir) {
+                              // tap active segment → toggle pause
+                              eng.updateLane(focusLane.id, { enabled: !playing });
+                            } else {
+                              // tap different segment → change direction, resume if paused
+                              eng.updateLane(focusLane.id, {
+                                laneDirection: s.id,
+                                ...(!playing ? { enabled: true } : {}),
+                              });
+                            }
+                          }}
+                          style={{
+                            border: 'none',
+                            borderLeft: i > 0 ? `1px solid ${paper.ink}` : 'none',
+                            background: active ? paper.ink : 'transparent',
+                            color: active ? paper.bg : paper.ink70,
+                            padding: '6px 10px', cursor: 'pointer', minWidth: 36,
+                            position: 'relative',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}>
+                          {s.icon}
+                          {active && (
+                            <span style={{
+                              position: 'absolute', bottom: 2, right: 2,
+                              width: 8, height: 8, borderRadius: '50%',
+                              background: playing ? 'oklch(80% 0.15 140)' : 'oklch(80% 0.05 60)',
+                              border: `1.5px solid ${paper.ink}`,
+                            }} />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {/* Speed multiplier — applies on top of global speed in both free and
+                    sync modes, so it is never disabled.  Log-scale slider keeps the
+                    musically useful 0.5×–2× region centred and equally spread. */}
+                <div>
+                  <Label paper={paper}>Speed ×</Label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                    <LogSlider
+                      value={focusLane.laneSpeedMul ?? 1}
+                      min={0.1} max={10}
+                      snapTo={[0.25, 0.5, 1, 2, 4]}
+                      ticks={[
+                        { value: 0.25, label: '¼' },
+                        { value: 0.5,  label: '½' },
+                        { value: 1,    label: '1' },
+                        { value: 2,    label: '2' },
+                        { value: 4,    label: '4' },
+                        { value: 8,    label: '' },   // unlabelled — just a mark
+                      ]}
+                      onChange={v => eng.updateLane(focusLane.id, { laneSpeedMul: v })}
+                      paper={paper} width={150} />
+                    <span style={{
+                      fontFamily: '"Instrument Serif", Georgia, serif',
+                      fontSize: 18, fontStyle: 'italic',
+                      fontVariantNumeric: 'tabular-nums', minWidth: 38,
+                    }}>{(focusLane.laneSpeedMul ?? 1).toFixed(2)}×</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div style={{ borderTop: `1px dashed ${paper.rule}`, paddingTop: 10 }}>
             <Btn paper={paper} small>Teach CC →</Btn>
@@ -793,8 +959,9 @@ function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
       }}>
         {eng.lanes.filter(l => l.curve && l.enabled).map(l => {
           // Display the quantized output value (what MIDI actually emits),
-          // not the smooth curve underneath.
-          const raw = sampleLaneQuantized(l, eng.phase);
+          // not the smooth curve underneath.  Use per-lane phase when available.
+          const lPhase = eng.lanePhases?.[l.id] ?? eng.phase;
+          const raw = sampleLaneQuantized(l, lPhase);
           const { value, semitone } = applyLane(l, raw);
           let val;
           if (l.target === 'Note' && semitone != null) {

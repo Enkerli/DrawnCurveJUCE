@@ -23737,7 +23737,11 @@
         quantizeX: false,
         quantizeY: false,
         xDivisions: 4,
-        yDivisions: 4
+        yDivisions: 4,
+        // Per-lane playback overrides (useGlobalPlayback=true → follow global transport)
+        useGlobalPlayback: true,
+        laneDirection: "fwd",
+        laneSpeedMul: 1
       },
       {
         id: 1,
@@ -23760,7 +23764,10 @@
         quantizeX: false,
         quantizeY: false,
         xDivisions: 4,
-        yDivisions: 4
+        yDivisions: 4,
+        useGlobalPlayback: true,
+        laneDirection: "fwd",
+        laneSpeedMul: 1
       },
       {
         id: 2,
@@ -23782,7 +23789,10 @@
         quantizeX: false,
         quantizeY: false,
         xDivisions: 4,
-        yDivisions: 4
+        yDivisions: 4,
+        useGlobalPlayback: true,
+        laneDirection: "fwd",
+        laneSpeedMul: 1
       }
     ]);
     const [focus, setFocus] = React.useState(0);
@@ -24282,6 +24292,129 @@
       color: paper.ink
     } }, sublabel));
   }
+  function LogSlider2({
+    value,
+    min,
+    max,
+    onChange,
+    ticks = [],
+    snapTo = [],
+    width = 140,
+    paper = window.PAPER,
+    accent
+  }) {
+    const ref = React.useRef(null);
+    const isDrag = React.useRef(false);
+    const hasMoved = React.useRef(false);
+    const [localValue, setLocalValue] = React.useState(null);
+    const latestLocal = React.useRef(null);
+    const logMin = Math.log(min);
+    const logSpan = Math.log(max) - logMin;
+    const toFrac = (v) => (Math.log(Math.max(min, Math.min(max, v))) - logMin) / logSpan;
+    const fromFrac = (f) => Math.exp(logMin + Math.max(0, Math.min(1, f)) * logSpan);
+    const calcValue = (e, snap) => {
+      const r = ref.current.getBoundingClientRect();
+      const f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+      let v = fromFrac(f);
+      if (snap) {
+        for (const s of snapTo)
+          if (Math.abs((toFrac(s) - f) * r.width) < 3) {
+            v = s;
+            break;
+          }
+      }
+      return v;
+    };
+    const H = 44;
+    const TICK_H = ticks.length ? 18 : 0;
+    const trackY = (H - 2) / 2;
+    const thumbY = (H - 12) / 2;
+    const displayValue = localValue !== null ? localValue : value;
+    const thumbX = toFrac(displayValue) * width;
+    return /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        ref,
+        onPointerDown: (e) => {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          isDrag.current = true;
+          hasMoved.current = false;
+          const v = calcValue(e, true);
+          latestLocal.current = v;
+          setLocalValue(v);
+          onChange(v);
+        },
+        onPointerMove: (e) => {
+          if (!isDrag.current) return;
+          hasMoved.current = true;
+          const v = calcValue(e, false);
+          latestLocal.current = v;
+          setLocalValue(v);
+        },
+        onPointerUp: () => {
+          isDrag.current = false;
+          if (hasMoved.current && latestLocal.current !== null)
+            onChange(latestLocal.current);
+          latestLocal.current = null;
+          setLocalValue(null);
+        },
+        style: { width, flexShrink: 0, height: H + TICK_H, position: "relative", cursor: "pointer", touchAction: "none" }
+      },
+      /* @__PURE__ */ React.createElement("div", { style: {
+        position: "absolute",
+        top: trackY,
+        left: 0,
+        right: 0,
+        height: 2,
+        background: paper.rule,
+        borderRadius: 1
+      } }),
+      /* @__PURE__ */ React.createElement("div", { style: {
+        position: "absolute",
+        top: trackY,
+        left: 0,
+        width: thumbX,
+        height: 2,
+        background: accent || paper.ink,
+        borderRadius: 1
+      } }),
+      /* @__PURE__ */ React.createElement("div", { style: {
+        position: "absolute",
+        top: thumbY,
+        left: thumbX - 6,
+        width: 12,
+        height: 12,
+        borderRadius: "50%",
+        background: paper.card,
+        border: `1.5px solid ${accent || paper.ink}`,
+        boxShadow: "0 1px 2px rgba(0,0,0,0.10)",
+        pointerEvents: "none"
+      } }),
+      ticks.map(({ value: tv, label }) => {
+        const tx = toFrac(tv) * width;
+        return /* @__PURE__ */ React.createElement(React.Fragment, { key: tv }, /* @__PURE__ */ React.createElement("div", { style: {
+          position: "absolute",
+          top: trackY + 5,
+          left: tx,
+          width: 1,
+          height: 5,
+          background: paper.ink30,
+          transform: "translateX(-0.5px)"
+        } }), label !== void 0 && label !== "" && /* @__PURE__ */ React.createElement("div", { style: {
+          position: "absolute",
+          top: trackY + 12,
+          left: tx,
+          transform: "translateX(-50%)",
+          fontSize: 8,
+          fontFamily: "Inter Tight, Inter, sans-serif",
+          letterSpacing: 0.2,
+          color: paper.ink50,
+          whiteSpace: "nowrap",
+          userSelect: "none"
+        } }, label));
+      })
+    );
+  }
   function PlaybackControl2({ direction, setDirection, playing, setPlaying, paper = window.PAPER }) {
     const segs = [
       { id: "rev", label: /* @__PURE__ */ React.createElement("svg", { width: "16", height: "16", viewBox: "0 0 16 16" }, /* @__PURE__ */ React.createElement("path", { d: "M10 3L4 8l6 5V3z", fill: "currentColor" })), title: "Reverse" },
@@ -24349,7 +24482,7 @@
       background: color || paper.ink
     } }, children);
   }
-  Object.assign(window, { Btn: Btn2, IconBtn: IconBtn2, Slider: Slider2, RangeSlider: RangeSlider2, DrawnDial: DrawnDial2, PlaybackControl: PlaybackControl2, Tag });
+  Object.assign(window, { Btn: Btn2, IconBtn: IconBtn2, Slider: Slider2, LogSlider: LogSlider2, RangeSlider: RangeSlider2, DrawnDial: DrawnDial2, PlaybackControl: PlaybackControl2, Tag });
 
   // design/curve-canvas.jsx
   init_react_globals();
@@ -24359,6 +24492,8 @@
     lanes,
     focus,
     phase,
+    lanePhases = null,
+    // optional array indexed by lane.id for per-lane playheads
     setCurve,
     gridX = 8,
     gridY = 8,
@@ -24594,13 +24729,14 @@
         ),
         lanes.map((l) => {
           if (!l.curve || !l.enabled) return null;
-          let xPhase = phase;
+          const lPhase = lanePhases && lanePhases[l.id] != null ? lanePhases[l.id] : phase;
+          let xPhase = lPhase;
           if (l.quantizeX && l.xDivisions >= 2) {
             const tickWidth = 1 / l.xDivisions;
             xPhase = Math.floor(xPhase / tickWidth) * tickWidth;
           }
           const x = xPhase * width;
-          const v = sampleLaneQuantized(l, phase);
+          const v = sampleLaneQuantized(l, lPhase);
           const y = (1 - v) * height;
           const isFocus = l.id === focus;
           return /* @__PURE__ */ React.createElement("g", { key: "p" + l.id }, isFocus && /* @__PURE__ */ React.createElement("line", { x1: x, x2: x, y1: 0, y2: height, stroke: l.color, strokeWidth: 1, strokeDasharray: "3 3", opacity: 0.5 }), /* @__PURE__ */ React.createElement("circle", { cx: x, cy: y, r: isFocus ? 6 : 4, fill: l.color, stroke: paper.bg, strokeWidth: 2 }));
@@ -25056,22 +25192,43 @@
     // raw: 0/1
     ["xDivisions", "xDivisions", (v) => Math.round(v), (v) => (v - 2) / 30],
     // raw: 2-32
-    ["yDivisions", "yDivisions", (v) => Math.round(v), (v) => (v - 2) / 22]
+    ["yDivisions", "yDivisions", (v) => Math.round(v), (v) => (v - 2) / 22],
     // raw: 2-24
-    // (scaleRoot / scaleMask handled separately — see GLOBAL_PARAM_MAP below.)
-  ];
-  var GLOBAL_PARAM_MAP = [
-    // [reactField, paramId, rawToReact, reactToRaw]
+    // Scale quantization — now per-lane (l<n>_scaleRoot, l<n>_scaleMask).
+    // Moved from GLOBAL_PARAM_MAP; each lane can target an independent scale.
     ["scaleRoot", "scaleRoot", (v) => Math.round(v), (v) => v / 11],
     // raw: 0-11
-    ["scaleMask", "scaleMask", (v) => Math.round(v), (v) => v / 4095]
+    ["scaleMask", "scaleMask", (v) => Math.round(v), (v) => v / 4095],
     // raw: 0-4095
+    // Per-lane playback overrides (exposed via "Override Transport" toggle in shape well).
+    // useGlobalPlayback defaults true — lanes follow global transport until overridden.
+    ["useGlobalPlayback", "useGlobalPlayback", (v) => v > 0.5, (v) => v ? 1 : 0],
+    // raw: bool
+    // laneDirection: APVTS choice index 0/1/2; stored as 'fwd'/'rev'/'pp' in React.
+    [
+      "laneDirection",
+      "laneDirection",
+      (v) => ["fwd", "rev", "pp"][Math.round(v)] ?? "fwd",
+      // raw: 0/1/2
+      (v) => ["fwd", "rev", "pp"].indexOf(v) / 2
+    ],
+    // normalised to 0-1
+    // laneSpeedMul: range 0.1–10.0, skew 0.5.  Normalised via JUCE formula:
+    //   normalised = ((x - 0.1) / 9.9) ^ (1/0.5) = ((x - 0.1) / 9.9) ^ 2
+    [
+      "laneSpeedMul",
+      "laneSpeedMul",
+      (v) => v,
+      // raw: actual value (0.1-10.0)
+      (v) => Math.pow(Math.max(0, (v - 0.1) / 9.9), 2)
+    ]
+    // normalised (matches NormalisableRange skew=0.5)
+  ];
+  var GLOBAL_PARAM_MAP = [
+    // (empty — all React lane fields now map to per-lane l<n>_... APVTS params)
   ];
   function findGlobal(field) {
     return GLOBAL_PARAM_MAP.find(([f]) => f === field) || null;
-  }
-  function findGlobalById(paramId) {
-    return GLOBAL_PARAM_MAP.find(([, id]) => id === paramId) || null;
   }
   function initJuceBridge(onEvent) {
     juceOn("stateSnapshot", (snap) => {
@@ -25079,12 +25236,15 @@
         const palette = window.LANES || [];
         const lanes = snap.lanes.map((l) => {
           const fallback = palette[l.id] || palette[l.id % (palette.length || 1)] || {};
+          const mask = typeof l.scaleMask === "number" ? l.scaleMask : 4095;
+          const scaleId = window.recognizeScaleId ? window.recognizeScaleId(mask) : "custom";
           return {
             ...l,
             color: l.color ?? fallback.color,
             name: l.name ?? fallback.name ?? `Lane ${l.id + 1}`,
             dash: fallback.dash ?? "0",
-            curve: l.curve ? arrayToF32(l.curve) : null
+            curve: l.curve ? arrayToF32(l.curve) : null,
+            scaleId
           };
         });
         onEvent({ type: "setLanes", lanes });
@@ -25098,7 +25258,7 @@
       if (snap.activeLaneCount !== void 0)
         onEvent({ type: "setActiveLaneCount", count: snap.activeLaneCount });
     });
-    juceOn("phase", ({ phase }) => onEvent({ type: "setPhase", phase }));
+    juceOn("phase", ({ phase, lanes: lanePhases }) => onEvent({ type: "setPhase", phase, lanePhases: lanePhases ?? null }));
     juceOn("paramChange", ({ id, value }) => onEvent({ type: "paramChange", id, value }));
     juceOn("curveData", ({ lane, data }) => onEvent({ type: "curveData", lane, curve: data ? arrayToF32(data) : null }));
     juceEmit("uiReady", {});
@@ -25119,10 +25279,6 @@
         return;
       }
     }
-  }
-  function globalFieldForParamId(paramId) {
-    const g = findGlobalById(paramId);
-    return g ? { field: g[0], rawToReact: g[2] } : null;
   }
   function sendEnabled(lane, enabled) {
     juceEmit("setParam", { id: laneParamId(lane, "enabled"), value: enabled ? 1 : 0 });
@@ -25343,6 +25499,7 @@
         lanes: eng.lanes,
         focus: eng.focus,
         phase: eng.phase,
+        lanePhases: eng.lanePhases,
         setCurve: eng.setCurve,
         variant: "studio",
         showScaleBanding: focusLane?.target === "Note",
@@ -25354,17 +25511,20 @@
         quantizeY: !!focusLane?.quantizeY,
         useFlats: eng.useFlats
       }
-    ), /* @__PURE__ */ React.createElement(
-      TypoReadout,
-      {
-        focusLane,
-        phase: eng.phase,
-        canvasW: canvasSize.w,
-        canvasH: canvasSize.h,
-        paper,
-        useFlats: eng.useFlats
-      }
-    ), discoveryVisible && /* @__PURE__ */ React.createElement(DiscoveryChip, { paper, onOpen: () => setScaleOpen(true) }))), /* @__PURE__ */ React.createElement(
+    ), (() => {
+      const focusPhase = eng.lanePhases?.[focusLane?.id] ?? eng.phase;
+      return /* @__PURE__ */ React.createElement(
+        TypoReadout,
+        {
+          focusLane,
+          phase: focusPhase,
+          canvasW: canvasSize.w,
+          canvasH: canvasSize.h,
+          paper,
+          useFlats: eng.useFlats
+        }
+      );
+    })(), discoveryVisible && /* @__PURE__ */ React.createElement(DiscoveryChip, { paper, onOpen: () => setScaleOpen(true) }))), /* @__PURE__ */ React.createElement(
       XAxisGutter,
       {
         eng,
@@ -25442,8 +25602,18 @@
       fontFamily: "Inter Tight",
       letterSpacing: 0.6,
       textTransform: "uppercase",
-      fontStyle: "normal"
-    } }, "global \xB7 all Note lanes")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: () => eng.updateLane(focusLane.id, {
+      fontStyle: "normal",
+      display: "flex",
+      alignItems: "center",
+      gap: 5
+    } }, /* @__PURE__ */ React.createElement("span", { style: {
+      width: 7,
+      height: 7,
+      borderRadius: "50%",
+      background: focusLane?.color ?? paper.ink30,
+      display: "inline-block",
+      flexShrink: 0
+    } }), "Lane ", (focusLane?.id ?? 0) + 1)), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: () => eng.updateLane(focusLane.id, {
       scaleMask: 4095,
       scaleId: "chromatic"
     }) }, "All"), /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: () => {
@@ -25457,7 +25627,19 @@
       // engine; root-only is what the native editor used.
       scaleMask: 2048,
       scaleId: "custom"
-    }) }, "None")), /* @__PURE__ */ React.createElement(ScaleMaskInput, { lane: focusLane, updateLane: eng.updateLane, paper }), /* @__PURE__ */ React.createElement("div", { style: {
+    }) }, "None"), eng.lanes.length > 1 && /* @__PURE__ */ React.createElement(
+      Btn,
+      {
+        paper,
+        small: true,
+        title: "Copy this scale root + mask to all lanes",
+        onClick: () => eng.applyScaleToAll(
+          focusLane.scaleRoot,
+          focusLane.scaleMask
+        )
+      },
+      "\u2195 All"
+    )), /* @__PURE__ */ React.createElement(ScaleMaskInput, { lane: focusLane, updateLane: eng.updateLane, paper }), /* @__PURE__ */ React.createElement("div", { style: {
       fontSize: 11,
       color: paper.ink70,
       lineHeight: 1.5,
@@ -25505,24 +25687,40 @@
         setPlaying: eng.setPlaying,
         paper
       }
-    ), /* @__PURE__ */ React.createElement(Btn, { active: eng.syncOn, onClick: () => eng.setSyncOn(!eng.syncOn), paper, small: true }, eng.syncOn ? "Sync" : "Free"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement(Btn, { active: eng.syncOn, onClick: () => eng.setSyncOn(!eng.syncOn), paper, small: true }, eng.syncOn ? "Sync" : "Free"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, eng.syncOn ? /* @__PURE__ */ React.createElement(
       Slider,
       {
-        value: eng.syncOn ? eng.beats : eng.speed,
-        min: eng.syncOn ? 1 : 0.25,
-        max: eng.syncOn ? 32 : 4,
-        step: eng.syncOn ? 1 : 0.25,
-        onChange: (v) => eng.syncOn ? eng.setBeats(v) : eng.setSpeed(v),
+        value: eng.beats,
+        min: 1,
+        max: 32,
+        step: 1,
+        onChange: (v) => eng.setBeats(v),
         paper,
         width: 96
       }
+    ) : (
+      /* Duration slider: value in seconds = 1/speed.
+         Range 0.25 s (speed 4×, very fast) → 20 s (speed 0.05×, slow).
+         Step 0.1 s gives fine-enough control; user sees seconds not a multiplier. */
+      /* @__PURE__ */ React.createElement(
+        Slider,
+        {
+          value: parseFloat((1 / eng.speed).toFixed(2)),
+          min: 0.25,
+          max: 20,
+          step: 0.1,
+          onChange: (v) => eng.setSpeed(1 / Math.max(0.05, v)),
+          paper,
+          width: 96
+        }
+      )
     ), /* @__PURE__ */ React.createElement("span", { style: {
       fontFamily: '"Instrument Serif", Georgia, serif',
       fontStyle: "italic",
       fontSize: 16,
       minWidth: 60,
       flexShrink: 0
-    } }, eng.syncOn ? `${eng.beats} beats` : `${eng.speed.toFixed(2)}\xD7`)), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }), /* @__PURE__ */ React.createElement("div", { style: { width: 1, height: 20, background: paper.rule, flexShrink: 0 } }), /* @__PURE__ */ React.createElement(
+    } }, eng.syncOn ? `${eng.beats} beats` : `${(1 / eng.speed).toFixed(1)} s`)), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }), /* @__PURE__ */ React.createElement("div", { style: { width: 1, height: 20, background: paper.rule, flexShrink: 0 } }), /* @__PURE__ */ React.createElement(
       "button",
       {
         onClick: () => eng.setUseFlats(!eng.useFlats),
@@ -25577,7 +25775,9 @@
       background: open ? paper.card : "transparent",
       position: "relative",
       overflow: "hidden"
-    } }, open && focusLane && /* @__PURE__ */ React.createElement("div", { style: { width: 256, padding: "14px 12px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 } }, /* @__PURE__ */ React.createElement("div", { style: {
+    } }, open && focusLane && // paddingRight: 48 keeps all content clear of the 36 px collapse-tab handle
+    // that is absolutely positioned at the right edge of this 256 px panel.
+    /* @__PURE__ */ React.createElement("div", { style: { width: 256, padding: "14px 48px 14px 12px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 } }, /* @__PURE__ */ React.createElement("div", { style: {
       fontFamily: "Inter Tight",
       fontSize: 10,
       letterSpacing: 1.5,
@@ -25696,7 +25896,120 @@
         sublabel: focusLane.velocity,
         paper
       }
-    ))), /* @__PURE__ */ React.createElement("div", { style: { borderTop: `1px dashed ${paper.rule}`, paddingTop: 10 } }, /* @__PURE__ */ React.createElement(Btn, { paper, small: true }, "Teach CC \u2192"))), /* @__PURE__ */ React.createElement(
+    ))), /* @__PURE__ */ React.createElement("div", { style: { borderTop: `1px dashed ${paper.rule}`, paddingTop: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8 } }, /* @__PURE__ */ React.createElement(Label, { paper }, "Per-lane transport"), /* @__PURE__ */ React.createElement(
+      Btn,
+      {
+        paper,
+        small: true,
+        active: !focusLane.useGlobalPlayback,
+        onClick: () => {
+          const turningOn = focusLane.useGlobalPlayback;
+          eng.updateLane(focusLane.id, {
+            useGlobalPlayback: !focusLane.useGlobalPlayback,
+            ...turningOn ? {
+              laneDirection: eng.direction,
+              laneSpeedMul: eng.syncOn ? 1 : eng.speed
+            } : { enabled: true }
+          });
+        }
+      },
+      focusLane.useGlobalPlayback ? "global" : "override"
+    )), !focusLane.useGlobalPlayback && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Label, { paper }, "Direction"), /* @__PURE__ */ React.createElement("div", { style: {
+      display: "inline-flex",
+      marginTop: 6,
+      border: `1px solid ${paper.ink}`,
+      borderRadius: 2,
+      overflow: "hidden",
+      background: paper.card
+    } }, [
+      {
+        id: "rev",
+        title: "Reverse \u2014 tap again to pause",
+        icon: /* @__PURE__ */ React.createElement("svg", { width: "16", height: "16", viewBox: "0 0 16 16" }, /* @__PURE__ */ React.createElement("path", { d: "M10 3L4 8l6 5V3z", fill: "currentColor" }))
+      },
+      {
+        id: "pp",
+        title: "Ping-Pong \u2014 tap again to pause",
+        icon: /* @__PURE__ */ React.createElement("svg", { width: "20", height: "16", viewBox: "0 0 20 16" }, /* @__PURE__ */ React.createElement("path", { d: "M6 3L2 8l4 5V3zm8 0v10l4-5-4-5z", fill: "currentColor" }))
+      },
+      {
+        id: "fwd",
+        title: "Forward \u2014 tap again to pause",
+        icon: /* @__PURE__ */ React.createElement("svg", { width: "16", height: "16", viewBox: "0 0 16 16" }, /* @__PURE__ */ React.createElement("path", { d: "M6 3l6 5-6 5V3z", fill: "currentColor" }))
+      }
+    ].map((s, i) => {
+      const isThisDir = (focusLane.laneDirection ?? "fwd") === s.id;
+      const active = isThisDir;
+      const playing = focusLane.enabled;
+      return /* @__PURE__ */ React.createElement(
+        "button",
+        {
+          key: s.id,
+          title: s.title,
+          onPointerDown: (e) => e.stopPropagation(),
+          onClick: () => {
+            if (isThisDir) {
+              eng.updateLane(focusLane.id, { enabled: !playing });
+            } else {
+              eng.updateLane(focusLane.id, {
+                laneDirection: s.id,
+                ...!playing ? { enabled: true } : {}
+              });
+            }
+          },
+          style: {
+            border: "none",
+            borderLeft: i > 0 ? `1px solid ${paper.ink}` : "none",
+            background: active ? paper.ink : "transparent",
+            color: active ? paper.bg : paper.ink70,
+            padding: "6px 10px",
+            cursor: "pointer",
+            minWidth: 36,
+            position: "relative",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center"
+          }
+        },
+        s.icon,
+        active && /* @__PURE__ */ React.createElement("span", { style: {
+          position: "absolute",
+          bottom: 2,
+          right: 2,
+          width: 8,
+          height: 8,
+          borderRadius: "50%",
+          background: playing ? "oklch(80% 0.15 140)" : "oklch(80% 0.05 60)",
+          border: `1.5px solid ${paper.ink}`
+        } })
+      );
+    }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Label, { paper }, "Speed \xD7"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 6 } }, /* @__PURE__ */ React.createElement(
+      LogSlider,
+      {
+        value: focusLane.laneSpeedMul ?? 1,
+        min: 0.1,
+        max: 10,
+        snapTo: [0.25, 0.5, 1, 2, 4],
+        ticks: [
+          { value: 0.25, label: "\xBC" },
+          { value: 0.5, label: "\xBD" },
+          { value: 1, label: "1" },
+          { value: 2, label: "2" },
+          { value: 4, label: "4" },
+          { value: 8, label: "" }
+          // unlabelled — just a mark
+        ],
+        onChange: (v) => eng.updateLane(focusLane.id, { laneSpeedMul: v }),
+        paper,
+        width: 150
+      }
+    ), /* @__PURE__ */ React.createElement("span", { style: {
+      fontFamily: '"Instrument Serif", Georgia, serif',
+      fontSize: 18,
+      fontStyle: "italic",
+      fontVariantNumeric: "tabular-nums",
+      minWidth: 38
+    } }, (focusLane.laneSpeedMul ?? 1).toFixed(2), "\xD7"))))), /* @__PURE__ */ React.createElement("div", { style: { borderTop: `1px dashed ${paper.rule}`, paddingTop: 10 } }, /* @__PURE__ */ React.createElement(Btn, { paper, small: true }, "Teach CC \u2192"))), /* @__PURE__ */ React.createElement(
       "button",
       {
         onPointerDown: (e) => e.stopPropagation(),
@@ -25928,7 +26241,8 @@
       padding: "10px",
       borderTop: `1px solid ${paper.rule}`
     } }, eng.lanes.filter((l) => l.curve && l.enabled).map((l) => {
-      const raw = sampleLaneQuantized(l, eng.phase);
+      const lPhase = eng.lanePhases?.[l.id] ?? eng.phase;
+      const raw = sampleLaneQuantized(l, lPhase);
       const { value, semitone } = applyLane(l, raw);
       let val;
       if (l.target === "Note" && semitone != null) {
@@ -26913,15 +27227,18 @@
     window.useDrawnQurveEngine = function useDrawnQurveEngine3(initial = {}) {
       const demo = demoEngine(initial);
       const [jucePhase, setJucePhase] = React.useState(null);
+      const [juceLanePhases, setJuceLanePhases] = React.useState(null);
       const jucePhaseTimeRef = React.useRef(0);
       const isJuceDriving = jucePhase != null && performance.now() - jucePhaseTimeRef.current < 200;
       const effectivePhase = isJuceDriving ? jucePhase : demo.phase;
+      const effectiveLanePhases = isJuceDriving ? juceLanePhases : null;
       React.useEffect(() => {
         initJuceBridge((action) => {
           switch (action.type) {
             case "setPhase":
               jucePhaseTimeRef.current = performance.now();
               setJucePhase(action.phase);
+              if (action.lanePhases) setJuceLanePhases(action.lanePhases);
               break;
             case "setLanes":
               demo.setLanes(action.lanes);
@@ -26952,12 +27269,6 @@
               break;
             case "paramChange": {
               const { id, value } = action;
-              const globalMap = globalFieldForParamId(id);
-              if (globalMap) {
-                const v = globalMap.rawToReact(value);
-                demo.setLanes((prev) => prev.map((l) => ({ ...l, [globalMap.field]: v })));
-                break;
-              }
               demo.setLanes((prev) => {
                 const next = [...prev];
                 for (let L = 0; L < next.length; L++) {
@@ -26977,6 +27288,14 @@
                   if (suffix === "yQuantize") patch.quantizeY = value > 0.5;
                   if (suffix === "xDivisions") patch.xDivisions = Math.round(value);
                   if (suffix === "yDivisions") patch.yDivisions = Math.round(value);
+                  if (suffix === "scaleRoot") patch.scaleRoot = Math.round(value);
+                  if (suffix === "scaleMask") {
+                    patch.scaleMask = Math.round(value);
+                    patch.scaleId = window.recognizeScaleId?.(patch.scaleMask) ?? "custom";
+                  }
+                  if (suffix === "useGlobalPlayback") patch.useGlobalPlayback = value > 0.5;
+                  if (suffix === "laneDirection") patch.laneDirection = ["fwd", "rev", "pp"][Math.round(value)] ?? "fwd";
+                  if (suffix === "laneSpeedMul") patch.laneSpeedMul = value;
                   if (Object.keys(patch).length) {
                     next[L] = { ...next[L], ...patch };
                     return next;
@@ -27041,9 +27360,18 @@
         demo.clearAll();
         demo.lanes.forEach((l) => sendClearLane(l.id));
       }, [demo.clearAll, demo.lanes]);
+      const applyScaleToAll = React.useCallback((scaleRoot, scaleMask) => {
+        const scaleId = window.recognizeScaleId?.(scaleMask) ?? "custom";
+        demo.setLanes((prev) => prev.map((l) => ({ ...l, scaleRoot, scaleMask, scaleId })));
+        demo.lanes.forEach((l) => {
+          sendParam(l.id, "scaleRoot", scaleRoot);
+          sendParam(l.id, "scaleMask", scaleMask);
+        });
+      }, [demo.setLanes, demo.lanes]);
       return {
         ...demo,
         phase: effectivePhase,
+        lanePhases: effectiveLanePhases,
         setCurve,
         setFocus,
         setPlaying,
@@ -27056,6 +27384,7 @@
         clearAll,
         addLane,
         removeLane,
+        applyScaleToAll,
         panic: sendPanic
       };
     };

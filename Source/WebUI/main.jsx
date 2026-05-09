@@ -14,7 +14,6 @@ import './design/scale-editor.jsx';
 // ── JUCE bridge ───────────────────────────────────────────────────────────────
 import { initJuceBridge, sendCurve, sendParam, sendFocus,
          sendPlaying, sendDirection, sendEnabled, sendGlobalActual,
-         globalFieldForParamId,
          sendClearLane, sendAddLane, sendRemoveLane, sendPanic } from './juce-bridge.js';
 
 // ── Patch useDrawnQurveEngine ─────────────────────────────────────────────────
@@ -54,10 +53,14 @@ import { initJuceBridge, sendCurve, sendParam, sendFocus,
     // honour it for ~200 ms — long enough to bridge between consecutive 30 Hz
     // ticks, short enough to fall back to the demo RAF when JUCE goes quiet.
     const [jucePhase, setJucePhase] = React.useState(null);
+    // Per-lane phases from C++: array indexed by lane id, or null in demo mode.
+    const [juceLanePhases, setJuceLanePhases] = React.useState(null);
     const jucePhaseTimeRef = React.useRef(0);
     const isJuceDriving =
       jucePhase != null && (performance.now() - jucePhaseTimeRef.current) < 200;
     const effectivePhase = isJuceDriving ? jucePhase : demo.phase;
+    // Effective per-lane phases: use JUCE array when driving, else null (caller falls back to global).
+    const effectiveLanePhases = isJuceDriving ? juceLanePhases : null;
 
     // Wire up the bridge on first mount
     React.useEffect(() => {
@@ -66,6 +69,7 @@ import { initJuceBridge, sendCurve, sendParam, sendFocus,
           case 'setPhase':
             jucePhaseTimeRef.current = performance.now();
             setJucePhase(action.phase);
+            if (action.lanePhases) setJuceLanePhases(action.lanePhases);
             break;
           case 'setLanes':     demo.setLanes(action.lanes);         break;
           case 'setPlaying':   demo.setPlaying(action.playing);     break;
@@ -85,15 +89,9 @@ import { initJuceBridge, sendCurve, sendParam, sendFocus,
           case 'paramChange': {
             const { id, value } = action;
 
-            // Global APVTS params (no l<n>_ prefix) — apply to every lane so
-            // any UI surface that reads lane.scaleRoot/scaleMask sees the
-            // shared value.  Mapping is owned by GLOBAL_PARAM_MAP in the bridge.
-            const globalMap = globalFieldForParamId(id);
-            if (globalMap) {
-              const v = globalMap.rawToReact(value);
-              demo.setLanes(prev => prev.map(l => ({ ...l, [globalMap.field]: v })));
-              break;
-            }
+            // All scale and playback params are now per-lane (l<n>_ prefix).
+            // GLOBAL_PARAM_MAP is empty; globalFieldForParamId() always returns
+            // null.  The block below handles all per-lane dispatch.
 
             // Per-lane params — match l<n>_ prefix and dispatch into that lane.
             demo.setLanes(prev => {
@@ -105,18 +103,29 @@ import { initJuceBridge, sendCurve, sendParam, sendFocus,
                 const patch = {};
                 // value is the ACTUAL parameter value (not 0-1 normalised):
                 //   AudioParameterChoice → index   AudioParameterInt → integer
-                if (suffix === 'enabled')      patch.enabled     = value > 0.5;
-                if (suffix === 'msgType')      patch.target      = ['CC','Aftertouch','PitchBend','Note'][Math.round(value)] ?? 'CC';
-                if (suffix === 'ccNumber')     patch.targetDetail = Math.round(value);        // 0-127
-                if (suffix === 'midiChannel')  patch.channel     = Math.round(value);         // 1-16
-                if (suffix === 'smoothing')    patch.smooth      = value;                     // 0-1
-                if (suffix === 'minOutput')    patch.rangeMin    = value;                     // 0-1
-                if (suffix === 'maxOutput')    patch.rangeMax    = value;                     // 0-1
-                if (suffix === 'noteVelocity') patch.velocity    = Math.round(value);         // 1-127
-                if (suffix === 'xQuantize')    patch.quantizeX   = value > 0.5;
-                if (suffix === 'yQuantize')    patch.quantizeY   = value > 0.5;
-                if (suffix === 'xDivisions')   patch.xDivisions  = Math.round(value);     // 2-32
-                if (suffix === 'yDivisions')   patch.yDivisions  = Math.round(value);     // 2-24
+                if (suffix === 'enabled')          patch.enabled          = value > 0.5;
+                if (suffix === 'msgType')          patch.target           = ['CC','Aftertouch','PitchBend','Note'][Math.round(value)] ?? 'CC';
+                if (suffix === 'ccNumber')         patch.targetDetail     = Math.round(value);        // 0-127
+                if (suffix === 'midiChannel')      patch.channel          = Math.round(value);         // 1-16
+                if (suffix === 'smoothing')        patch.smooth           = value;                     // 0-1
+                if (suffix === 'minOutput')        patch.rangeMin         = value;                     // 0-1
+                if (suffix === 'maxOutput')        patch.rangeMax         = value;                     // 0-1
+                if (suffix === 'noteVelocity')     patch.velocity         = Math.round(value);         // 1-127
+                if (suffix === 'xQuantize')        patch.quantizeX        = value > 0.5;
+                if (suffix === 'yQuantize')        patch.quantizeY        = value > 0.5;
+                if (suffix === 'xDivisions')       patch.xDivisions       = Math.round(value);        // 2-32
+                if (suffix === 'yDivisions')       patch.yDivisions       = Math.round(value);        // 2-24
+                // Per-lane scale quantization (moved from global to per-lane)
+                if (suffix === 'scaleRoot')        patch.scaleRoot        = Math.round(value);        // 0-11
+                if (suffix === 'scaleMask') {
+                  patch.scaleMask = Math.round(value);                                                // 0-4095
+                  // Re-derive scaleId so the picker stays in sync with the mask.
+                  patch.scaleId   = window.recognizeScaleId?.(patch.scaleMask) ?? 'custom';
+                }
+                // Per-lane playback overrides
+                if (suffix === 'useGlobalPlayback') patch.useGlobalPlayback = value > 0.5;
+                if (suffix === 'laneDirection')     patch.laneDirection    = ['fwd','rev','pp'][Math.round(value)] ?? 'fwd';
+                if (suffix === 'laneSpeedMul')      patch.laneSpeedMul     = value;                   // 0.25-4.0
                 if (Object.keys(patch).length) {
                   next[L] = { ...next[L], ...patch };
                   return next;
@@ -204,9 +213,30 @@ import { initJuceBridge, sendCurve, sendParam, sendFocus,
       demo.lanes.forEach(l => sendClearLane(l.id));
     }, [demo.clearAll, demo.lanes]);
 
+    // Apply scaleRoot + scaleMask to every active lane in one operation.
+    // Used by the "↕ All" button in the scale panel.
+    //
+    // Correctness note: calling updateLane() per-lane in a forEach inside a
+    // click handler triggers multiple demo.updateLane() → setLanes() calls.
+    // Even with React 18 batching, the updateLane closure captures demo.lanes
+    // at render time and can miss lanes that were added since.  This helper
+    // uses a single functional setLanes update (guaranteed to see latest state)
+    // + explicit sendParam broadcast, which is both atomic and correct.
+    const applyScaleToAll = React.useCallback((scaleRoot, scaleMask) => {
+      // Re-derive scaleId so all lanes show the correct scale name after copy.
+      const scaleId = window.recognizeScaleId?.(scaleMask) ?? 'custom';
+      demo.setLanes(prev => prev.map(l => ({ ...l, scaleRoot, scaleMask, scaleId })));
+      // Broadcast to C++ APVTS for every currently-known lane.
+      demo.lanes.forEach(l => {
+        sendParam(l.id, 'scaleRoot', scaleRoot);
+        sendParam(l.id, 'scaleMask', scaleMask);
+      });
+    }, [demo.setLanes, demo.lanes]);
+
     return {
       ...demo,
       phase: effectivePhase,
+      lanePhases: effectiveLanePhases,
       setCurve,
       setFocus,
       setPlaying,
@@ -219,6 +249,7 @@ import { initJuceBridge, sendCurve, sendParam, sendFocus,
       clearAll,
       addLane,
       removeLane,
+      applyScaleToAll,
       panic: sendPanic,
     };
   };

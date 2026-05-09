@@ -90,23 +90,36 @@ const LANE_MAP = [
   ['quantizeY',   'yQuantize',   v => v > 0.5,                v => v ? 1.0 : 0.0],   // raw: 0/1
   ['xDivisions',  'xDivisions',  v => Math.round(v),          v => (v - 2) / 30],    // raw: 2-32
   ['yDivisions',  'yDivisions',  v => Math.round(v),          v => (v - 2) / 22],    // raw: 2-24
-  // (scaleRoot / scaleMask handled separately — see GLOBAL_PARAM_MAP below.)
+  // Scale quantization — now per-lane (l<n>_scaleRoot, l<n>_scaleMask).
+  // Moved from GLOBAL_PARAM_MAP; each lane can target an independent scale.
+  ['scaleRoot',   'scaleRoot',   v => Math.round(v),          v => v / 11],          // raw: 0-11
+  ['scaleMask',   'scaleMask',   v => Math.round(v),          v => v / 4095],        // raw: 0-4095
+  // Per-lane playback overrides (exposed via "Override Transport" toggle in shape well).
+  // useGlobalPlayback defaults true — lanes follow global transport until overridden.
+  ['useGlobalPlayback', 'useGlobalPlayback', v => v > 0.5,   v => v ? 1.0 : 0.0],   // raw: bool
+  // laneDirection: APVTS choice index 0/1/2; stored as 'fwd'/'rev'/'pp' in React.
+  ['laneDirection', 'laneDirection',
+   v => (['fwd','rev','pp'])[Math.round(v)] ?? 'fwd',         // raw: 0/1/2
+   v => ['fwd','rev','pp'].indexOf(v) / 2],                   // normalised to 0-1
+  // laneSpeedMul: range 0.1–10.0, skew 0.5.  Normalised via JUCE formula:
+  //   normalised = ((x - 0.1) / 9.9) ^ (1/0.5) = ((x - 0.1) / 9.9) ^ 2
+  ['laneSpeedMul', 'laneSpeedMul',
+   v => v,                                                     // raw: actual value (0.1-10.0)
+   v => Math.pow(Math.max(0, (v - 0.1) / 9.9), 2)],          // normalised (matches NormalisableRange skew=0.5)
 ];
 
 // ── Global APVTS params ───────────────────────────────────────────────────────
-// Some fields the UI tracks PER-LANE (e.g. lane.scaleRoot) actually map to a
-// SINGLE shared APVTS parameter on the C++ side.  When the UI dispatches a
-// change for such a field we ignore the lane index and write to the global
-// parameter id instead.  reactToRaw is the same shape as in LANE_MAP.
+// Previously, scaleRoot/scaleMask lived here as single shared params.  They are
+// now per-lane (l<n>_scaleRoot / l<n>_scaleMask) and live in LANE_MAP above.
+// GLOBAL_PARAM_MAP is kept as an empty table so sendParam()'s findGlobal() call
+// compiles without changes.  If a genuinely global param (no lane prefix) is
+// ever needed again, add it here.
 //
-// IMPORTANT — keep in sync with the per-lane vs shared classification in
-// PluginProcessor.cpp / ParamID:: declarations.  Treating a global as per-lane
-// causes silent no-ops (getParameter("l0_scaleRoot") → null); treating a
-// per-lane as global makes lane 0 stomp every other lane.
+// IMPORTANT: keep in sync with PluginProcessor.cpp ParamID declarations.
+// Per-lane param treated as global → lane 0 stomps every lane.
+// Global param treated as per-lane → silent no-op (getParameter("l0_x") → null).
 const GLOBAL_PARAM_MAP = [
-  // [reactField, paramId, rawToReact, reactToRaw]
-  ['scaleRoot', 'scaleRoot', v => Math.round(v),         v => v / 11],     // raw: 0-11
-  ['scaleMask', 'scaleMask', v => Math.round(v),         v => v / 4095],   // raw: 0-4095
+  // (empty — all React lane fields now map to per-lane l<n>_... APVTS params)
 ];
 
 function findGlobal(field) {
@@ -131,12 +144,17 @@ export function initJuceBridge(onEvent) {
       const palette = window.LANES || [];
       const lanes = snap.lanes.map(l => {
         const fallback = palette[l.id] || palette[l.id % (palette.length || 1)] || {};
+        // Derive scaleId from scaleMask so the scale picker and name label
+        // stay correct even though C++ doesn't track this JS-only field.
+        const mask = typeof l.scaleMask === 'number' ? l.scaleMask : 0xFFF;
+        const scaleId = window.recognizeScaleId ? window.recognizeScaleId(mask) : 'custom';
         return {
           ...l,
           color: l.color ?? fallback.color,
           name:  l.name  ?? fallback.name ?? `Lane ${l.id + 1}`,
           dash:  fallback.dash ?? '0',
           curve: l.curve ? arrayToF32(l.curve) : null,
+          scaleId,
         };
       });
       onEvent({ type: 'setLanes', lanes });
@@ -156,8 +174,12 @@ export function initJuceBridge(onEvent) {
       onEvent({ type: 'setActiveLaneCount', count: snap.activeLaneCount });
   });
 
-  // Playhead phase — C++ sends at ~30 Hz from a juce::Timer
-  juceOn('phase', ({ phase }) => onEvent({ type: 'setPhase', phase }));
+  // Playhead phase — C++ sends at ~30 Hz from a juce::Timer.
+  // `lanes` is an optional array of per-lane phases (indexed by lane id) that
+  // enables each lane's CurvePath to show its own independent playhead when
+  // override-transport is active.
+  juceOn('phase', ({ phase, lanes: lanePhases }) =>
+    onEvent({ type: 'setPhase', phase, lanePhases: lanePhases ?? null }));
 
   // Single APVTS parameter changed
   juceOn('paramChange', ({ id, value }) => onEvent({ type: 'paramChange', id, value }));
@@ -181,9 +203,12 @@ export function sendGlobalActual(paramId, actualValue) {
 }
 
 export function sendParam(lane, field, value) {
-  // Global APVTS params (scaleRoot/scaleMask) — ignore lane index, write once.
+  // All params are now per-lane — look up in LANE_MAP by React field name and
+  // emit as l<lane>_<suffix> with the normalised (0-1) value.
+  // GLOBAL_PARAM_MAP is empty; findGlobal() always returns null, so the old
+  // global-dispatch branch below is kept only as documentation scaffolding.
   const g = findGlobal(field);
-  if (g) {
+  if (g) {  // always false — GLOBAL_PARAM_MAP is empty
     const [, paramId, , toRaw] = g;
     juceEmit('setParam', { id: paramId, value: toRaw(value) });
     return;

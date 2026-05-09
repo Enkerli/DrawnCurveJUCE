@@ -229,10 +229,10 @@ WebCurveEditor::WebCurveEditor (DrawnCurveProcessor& p)
     const auto& params = proc.apvts.processor.getParameters();
     for (auto* param : params)
     {
-        if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*> (param))
+        if (auto* pwid = dynamic_cast<juce::AudioProcessorParameterWithID*> (param))
         {
-            proc.apvts.addParameterListener (p->paramID, this);
-            listenedParams.add (p->paramID);
+            proc.apvts.addParameterListener (pwid->paramID, this);
+            listenedParams.add (pwid->paramID);
         }
     }
 
@@ -291,7 +291,14 @@ void WebCurveEditor::timerCallback()
         return;
     lastSentPhase = phase;
 
-    webView.emitEventIfBrowserIsVisible ("phase", makeObj ({ { "phase", phase } }));
+    // Per-lane phases let each lane show its own independent playhead when
+    // override transport is active (lane useGlobalPlayback=false).
+    juce::Array<juce::var> lanePhases;
+    for (int L = 0; L < proc.activeLaneCount; ++L)
+        lanePhases.add (proc.currentPhaseForLane (L));
+
+    webView.emitEventIfBrowserIsVisible ("phase",
+        makeObj ({ { "phase", phase }, { "lanes", juce::var (lanePhases) } }));
 }
 
 // ── Parameter listener ────────────────────────────────────────────────────────
@@ -336,7 +343,18 @@ void WebCurveEditor::parameterChanged (const juce::String& paramID, float newVal
             {
                 const int lane = paramID.substring (1, sep).getIntValue();
                 if (lane >= 0 && lane < kMaxLanes)
-                    proc.updateLaneSnapshot (lane);
+                {
+                    const juce::String suffix = paramID.substring (sep + 1);
+
+                    // Scale params must reach the engine even when no curve has
+                    // been drawn yet.  updateLaneSnapshot() returns early if
+                    // _laneSnaps[lane] is null, so calling it for scale changes
+                    // silently drops the update.  Route directly to the engine.
+                    if (suffix == ParamID::scaleRoot || suffix == ParamID::scaleMask)
+                        proc.updateEngineScale (lane);
+                    else
+                        proc.updateLaneSnapshot (lane);
+                }
             }
         }
     });
@@ -372,13 +390,7 @@ void WebCurveEditor::sendStateSnapshot()
             return 0.0f;
         };
 
-        // scaleRoot / scaleMask are global (shared by all lanes) — no lane prefix.
-        const auto globalRaw = [&] (const juce::String& id) -> float {
-            if (auto* p = proc.apvts.getRawParameterValue (id))
-                return p->load();
-            jassertfalse;
-            return 0.0f;
-        };
+        // (globalRaw helper removed — scaleRoot/scaleMask are now per-lane params)
 
         static const char* kTargets[4] = { "CC", "Aftertouch", "PitchBend", "Note" };
         const int msgType = juce::jlimit (0, 3, static_cast<int> (raw ("msgType")));
@@ -395,9 +407,26 @@ void WebCurveEditor::sendStateSnapshot()
         lane->setProperty ("quantizeY",    raw ("yQuantize") > 0.5f);
         lane->setProperty ("xDivisions",   static_cast<int> (raw ("xDivisions")));   // 2-32
         lane->setProperty ("yDivisions",   static_cast<int> (raw ("yDivisions")));   // 2-24
-        lane->setProperty ("scaleRoot",    static_cast<int> (globalRaw (ParamID::scaleRoot)));  // 0-11
-        lane->setProperty ("scaleMask",    static_cast<int> (globalRaw (ParamID::scaleMask)));  // 0-4095
-        lane->setProperty ("scaleId",      "chromatic");   // TODO: derive from mask
+        // Per-lane scale (scaleMode is a JS-side UI concept — engine uses mask directly).
+        lane->setProperty ("scaleRoot",    static_cast<int> (raw (ParamID::scaleRoot)));  // 0-11
+        lane->setProperty ("scaleMask",    static_cast<int> (raw (ParamID::scaleMask)));  // 0-4095
+        lane->setProperty ("scaleId",      "chromatic");   // JS resolves from mask via recognizeScaleId()
+
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+        // Per-lane playback overrides (surfaced in the shape well as "Override Transport").
+        // useGlobalPlayback defaults to true so lanes follow the global transport until
+        // the user explicitly enables per-lane direction/speed in the shape well.
+        lane->setProperty ("useGlobalPlayback", raw (ParamID::useGlobalPlayback) > 0.5f);
+        lane->setProperty ("laneSpeedMul",      raw (ParamID::laneSpeedMul));      // 0.25 – 4.0
+        // laneDirection: APVTS choice index 0/1/2 → JS string 'fwd'/'rev'/'pp'
+        static const char* const kLaneDirNames[] = { "fwd", "rev", "pp" };
+        const int ldIdx = juce::jlimit (0, 2, static_cast<int> (raw (ParamID::laneDirection)));
+        lane->setProperty ("laneDirection", kLaneDirNames[ldIdx]);
+#else
+        lane->setProperty ("useGlobalPlayback", true);
+        lane->setProperty ("laneSpeedMul",      1.0f);
+        lane->setProperty ("laneDirection",     "fwd");
+#endif
 
         // Curve data (Float32Array → JSON array of 256 floats)
         if (proc.hasCurve (L))

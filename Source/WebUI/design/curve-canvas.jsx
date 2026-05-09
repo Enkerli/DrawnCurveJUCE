@@ -7,6 +7,7 @@ function CurveCanvas({
   lanes,
   focus,
   phase,
+  lanePhases = null,   // optional array indexed by lane.id for per-lane playheads
   setCurve,
   gridX = 8,
   gridY = 8,
@@ -248,15 +249,18 @@ function CurveCanvas({
         {/* Per-lane playheads */}
         {lanes.map(l => {
           if (!l.curve || !l.enabled) return null;
+          // Use per-lane phase when available (JUCE override-transport mode);
+          // fall back to the shared global phase in demo / sync mode.
+          const lPhase = (lanePhases && lanePhases[l.id] != null) ? lanePhases[l.id] : phase;
           // Show the playhead at the actual playback X (snapped if quantizeX)
           // and the quantized Y, so the dot tracks what's emitted via MIDI.
-          let xPhase = phase;
+          let xPhase = lPhase;
           if (l.quantizeX && l.xDivisions >= 2) {
             const tickWidth = 1 / l.xDivisions;
             xPhase = Math.floor(xPhase / tickWidth) * tickWidth;
           }
           const x = xPhase * width;
-          const v = sampleLaneQuantized(l, phase);
+          const v = sampleLaneQuantized(l, lPhase);
           const y = (1 - v) * height;
           const isFocus = l.id === focus;
           return (

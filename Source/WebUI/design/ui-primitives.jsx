@@ -277,6 +277,120 @@ function DrawnDial({ value, min = 0, max = 1, defaultValue, onChange, size = 56,
   );
 }
 
+// Logarithmic slider — equal pixel distance = equal ratio change, so 0.5× and
+// 2× are symmetric around 1× (the geometric centre of the track).
+//
+// ticks : [{ value, label? }] — hairline marks + optional label below the track.
+//         label='' draws the tick mark with no text.
+// snapTo: number[] — values the thumb locks to on a single click (pointer-down
+//         with no subsequent move).  Dragging is always continuous / unsnapped.
+//
+// Architecture — why local display state:
+//   Calling onChange on every pointer-move triggers updateLane → sendParam →
+//   JUCE echoes the new value back → React state update overrides the current
+//   drag position with whatever JUCE last received (always one frame behind).
+//   The rubber-band effect is caused by that stale echo, not by the slider code.
+//   Fix: maintain a local displayValue during the drag.  onChange fires only on
+//   pointer-down (immediate click feedback) and pointer-up (commit).  JUCE never
+//   receives intermediate values so there are no echoes to fight mid-drag.
+function LogSlider({
+  value, min, max, onChange,
+  ticks = [], snapTo = [],
+  width = 140, paper = window.PAPER, accent,
+}) {
+  const ref      = React.useRef(null);
+  const isDrag   = React.useRef(false);
+  const hasMoved = React.useRef(false);
+  // Local display value — non-null only while dragging.
+  // Using state (not just a ref) so the thumb re-renders on every pointer-move.
+  const [localValue, setLocalValue] = React.useState(null);
+  // Ref copy of localValue so pointer-up can read the latest without stale closure.
+  const latestLocal = React.useRef(null);
+
+  const logMin  = Math.log(min);
+  const logSpan = Math.log(max) - logMin;
+
+  const toFrac   = (v) => (Math.log(Math.max(min, Math.min(max, v))) - logMin) / logSpan;
+  const fromFrac = (f)  => Math.exp(logMin + Math.max(0, Math.min(1, f)) * logSpan);
+
+  const calcValue = (e, snap) => {
+    const r = ref.current.getBoundingClientRect();
+    const f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+    let v = fromFrac(f);
+    if (snap) {
+      for (const s of snapTo)
+        if (Math.abs((toFrac(s) - f) * r.width) < 3) { v = s; break; }
+    }
+    return v;
+  };
+
+  const H      = 44;
+  const TICK_H = ticks.length ? 18 : 0;
+  const trackY = (H - 2) / 2;
+  const thumbY = (H - 12) / 2;
+
+  // During drag use the local value; otherwise follow the prop (which reflects
+  // committed JUCE state).  Both use the same `width` prop so they agree.
+  const displayValue = localValue !== null ? localValue : value;
+  const thumbX = toFrac(displayValue) * width;
+
+  return (
+    <div
+      ref={ref}
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        isDrag.current   = true;
+        hasMoved.current = false;
+        const v = calcValue(e, true);   // snap on click
+        latestLocal.current = v;
+        setLocalValue(v);
+        onChange(v);                    // immediate feedback on click
+      }}
+      onPointerMove={(e) => {
+        if (!isDrag.current) return;
+        hasMoved.current = true;
+        const v = calcValue(e, false);  // no snap while dragging
+        latestLocal.current = v;
+        setLocalValue(v);               // re-renders slider only — no onChange
+      }}
+      onPointerUp={() => {
+        isDrag.current = false;
+        if (hasMoved.current && latestLocal.current !== null)
+          onChange(latestLocal.current); // commit final drag position
+        latestLocal.current = null;
+        setLocalValue(null);             // hand display back to prop
+      }}
+      style={{ width, flexShrink: 0, height: H + TICK_H, position: 'relative', cursor: 'pointer', touchAction: 'none' }}
+    >
+      <div style={{ position: 'absolute', top: trackY, left: 0, right: 0, height: 2,
+                    background: paper.rule, borderRadius: 1 }} />
+      <div style={{ position: 'absolute', top: trackY, left: 0, width: thumbX, height: 2,
+                    background: accent || paper.ink, borderRadius: 1 }} />
+      <div style={{ position: 'absolute', top: thumbY, left: thumbX - 6, width: 12, height: 12,
+                    borderRadius: '50%', background: paper.card,
+                    border: `1.5px solid ${accent || paper.ink}`,
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.10)', pointerEvents: 'none' }} />
+      {ticks.map(({ value: tv, label }) => {
+        const tx = toFrac(tv) * width;
+        return (
+          <React.Fragment key={tv}>
+            <div style={{ position: 'absolute', top: trackY + 5, left: tx,
+                          width: 1, height: 5, background: paper.ink30,
+                          transform: 'translateX(-0.5px)' }} />
+            {label !== undefined && label !== '' && (
+              <div style={{ position: 'absolute', top: trackY + 12, left: tx,
+                            transform: 'translateX(-50%)',
+                            fontSize: 8, fontFamily: 'Inter Tight, Inter, sans-serif',
+                            letterSpacing: 0.2, color: paper.ink50,
+                            whiteSpace: 'nowrap', userSelect: 'none' }}>{label}</div>
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
 // Playback segmented control — direction + transport overlay badge
 function PlaybackControl({ direction, setDirection, playing, setPlaying, paper = window.PAPER }) {
   const segs = [
@@ -338,4 +452,4 @@ function Tag({ children, color, paper = window.PAPER, size = 'md' }) {
   );
 }
 
-Object.assign(window, { Btn, IconBtn, Slider, RangeSlider, DrawnDial, PlaybackControl, Tag });
+Object.assign(window, { Btn, IconBtn, Slider, LogSlider, RangeSlider, DrawnDial, PlaybackControl, Tag });

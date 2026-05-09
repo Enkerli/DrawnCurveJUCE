@@ -64,9 +64,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout DrawnCurveProcessor::createP
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
     // ── Shared / global parameters ────────────────────────────────────────────
+    // playbackSpeed is a loop-speed ratio: 1.0 = 1-second loop in free mode.
+    // Range extended to 0.05 so the UI can offer durations up to 20 seconds
+    // (0.05× speed = 20 s, 4.0× speed = 0.25 s).  JS presents this as
+    // "duration in seconds" (= 1.0 / speed) rather than a raw multiplier.
     layout.add (std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID { ParamID::playbackSpeed, 1 }, "Playback Speed",
-        juce::NormalisableRange<float> (0.25f, 4.0f, 0.01f, 0.5f), 1.0f));
+        juce::NormalisableRange<float> (0.05f, 4.0f, 0.0f, 0.5f), 1.0f));
 
     layout.add (std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID { ParamID::syncEnabled, 1 }, "Sync to Host", false));
@@ -153,6 +157,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout DrawnCurveProcessor::createP
             juce::ParameterID { laneParam (L, ParamID::yDivisions), 1 },
             lname + "Y Grid Divisions", 2, 24, 4));
 
+        // ── Per-lane scale quantization ───────────────────────────────────────
+        // scaleRoot and scaleMask are stored per-lane so different Note-mode
+        // lanes can target independent scales (e.g. lane 0 = Dorian melody,
+        // lane 1 = Phrygian bass).  The global params (ParamID::scaleRoot /
+        // ParamID::scaleMask) are kept in the layout for backward compatibility
+        // with saved presets but are no longer consulted by the engine.
+        layout.add (std::make_unique<juce::AudioParameterInt>(
+            juce::ParameterID { laneParam (L, ParamID::scaleRoot), 1 },
+            lname + "Scale Root", 0, 11, 0));
+
+        layout.add (std::make_unique<juce::AudioParameterInt>(
+            juce::ParameterID { laneParam (L, ParamID::scaleMask), 1 },
+            lname + "Scale Custom Mask", 0, 4095, 4095));   // default: chromatic
+
 #if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
         // TODO: add ParamID entries for per-lane playback
         // Prep: Per-lane playback controls (currently unused by engine; UI TBD)
@@ -166,10 +184,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout DrawnCurveProcessor::createP
             // default for new lanes / fresh state.
             lname + "Use Global Playback", true));
 
+        // laneSpeedMul: per-lane multiplier on top of the global speed.
+        // Range extended from (0.25–4×) to (0.1–10×) so lanes can run
+        // significantly slower or faster than the global clock.
         layout.add (std::make_unique<juce::AudioParameterFloat>(
             juce::ParameterID { laneParam (L, ParamID::laneSpeedMul), 1 },
             lname + "Speed Multiplier",
-            juce::NormalisableRange<float> (0.25f, 4.0f, 0.01f, 0.5f), 1.0f));
+            juce::NormalisableRange<float> (0.1f, 10.0f, 0.0f, 0.5f), 1.0f));
 
         layout.add (std::make_unique<juce::AudioParameterChoice>(
             juce::ParameterID { laneParam (L, ParamID::laneDirection), 1 },
@@ -197,21 +218,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout DrawnCurveProcessor::createP
     return layout;
 }
 
-// Bitmask convention: bit (11 - interval) = interval present in scale.
-// Bit 11 = root (interval 0 = C when root=C), bit 0 = major-7th (interval 11 = B).
-// Example: 0xFFF = 0b111111111111 = all 12 notes (Chromatic).
-//          0xAD5 = 0b101011010101 = C D E F G A B (Major from C).
-static constexpr uint16_t kScalePresetMasks[8] =
-{
-    0xFFF,   // 0 Chromatic       — all 12 intervals
-    0xAD5,   // 1 Major           — 0 2 4 5 7 9 11
-    0xB5A,   // 2 Natural Minor   — 0 2 3 5 7 8 10
-    0xB56,   // 3 Dorian          — 0 2 3 5 7 9 10
-    0xA94,   // 4 Pentatonic Maj  — 0 2 4 7 9
-    0x952,   // 5 Pentatonic Min  — 0 3 5 7 10
-    0x972,   // 6 Blues           — 0 3 5 6 7 10
-    0x000,   // 7 Custom          — stored in scaleMask param
-};
+// Scale mask bitmask convention:
+//   Bit 11 = root (interval 0 = C when root=C), bit 0 = major-7th (interval 11 = B).
+//   Example: 0xFFF = all 12 notes (Chromatic), 0xAD5 = C D E F G A B (Major from C).
+// The preset masks live on the JS side (tokens.jsx::SCALES) — JS writes the final mask
+// directly to l<n>_scaleMask, so no C++ preset table is needed anymore.
+static constexpr uint16_t kChromaticMask = 0x0FFFu;  // used only by fallback in getScaleConfig
 
 //==============================================================================
 // Prep: helpers to compute per-lane effective playback (currently unused by engine)
@@ -241,26 +253,24 @@ static inline PlaybackDirection laneEffectiveDirection (const juce::AudioProcess
 // TODO: lane sync groups can be handled by aligning phase across lanes that share the same non-zero group id.
 
 //==============================================================================
-// Internal helper for potential future per-lane scale support.
-// Currently, all lanes use the global scale config.
-#if 0 // TODO: replace with per-lane parameter when introduced.
-static inline bool useGlobalScaleForLane(int /*lane*/) { return true; }
-#endif
-
-ScaleConfig DrawnCurveProcessor::getScaleConfig (int /*lane*/) const noexcept
+ScaleConfig DrawnCurveProcessor::getScaleConfig (int lane) const noexcept
 {
-    // Note: lane argument ignored; all lanes share global scale config as useGlobalScaleForLane(lane) is hardcoded true.
-    const int     mode = static_cast<int> (
-        apvts.getRawParameterValue (ParamID::scaleMode)->load());
-    const uint8_t root = static_cast<uint8_t> (
-        apvts.getRawParameterValue (ParamID::scaleRoot)->load());
+    // Each lane now has its own scaleRoot and scaleMask APVTS parameters
+    // (l<n>_scaleRoot, l<n>_scaleMask).  The global ParamID::scaleRoot /
+    // ParamID::scaleMask params are retained in the layout for backward
+    // compatibility with old presets but are no longer read here.
+    //
+    // The scaleMask already encodes the full scale information (which pitch
+    // classes are active).  The JS scale picker writes directly to scaleMask,
+    // so scaleMode is a JS-side UI concept only and is not needed here.
+    const juce::String rootId = laneParam (lane, ParamID::scaleRoot);
+    const juce::String maskId = laneParam (lane, ParamID::scaleMask);
 
-    uint16_t mask;
-    if (mode == 7)
-        mask = static_cast<uint16_t> (
-            apvts.getRawParameterValue (ParamID::scaleMask)->load());
-    else
-        mask = kScalePresetMasks[std::clamp (mode, 0, 7)];
+    const auto* rootP = apvts.getRawParameterValue (rootId);
+    const auto* maskP = apvts.getRawParameterValue (maskId);
+
+    const uint8_t  root = rootP ? static_cast<uint8_t>  (rootP->load()) : 0u;
+    const uint16_t mask = maskP ? static_cast<uint16_t> (maskP->load()) : kChromaticMask;
 
     return { mask, root };
 }
