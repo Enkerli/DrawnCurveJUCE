@@ -161,6 +161,39 @@ export function App() {
     setSnapshots(new Array(NUM_LANES).fill(null))
   }, [])
 
+  // Preset shape applied from ShapeWell — build a full LaneSnapshot from the
+  // generated Float32Array table, using the lane's current params.
+  const handlePresetApplied = useCallback(
+    (lane: number, table: Float32Array) => {
+      const p = laneParams[lane]
+      const snapshot: LaneSnapshot = {
+        table,
+        durationSeconds: 1,
+        ccNumber: p.ccNumber,
+        midiChannel: p.midiChannel,
+        minOut: p.minOut,
+        maxOut: p.maxOut,
+        smoothing: p.smoothing,
+        messageType: p.messageType,
+        noteVelocity: p.noteVelocity,
+        phaseOffset: 0,
+        xDivisions: p.xDivisions,
+        yDivisions: p.yDivisions,
+        xQuantize: p.xQuantize,
+        yQuantize: p.yQuantize,
+        valid: true,
+      }
+      engineRef.current.setSnapshot(lane, snapshot)
+      engineRef.current.resetLane(lane)
+      setSnapshots(prev => {
+        const next = [...prev]
+        next[lane] = snapshot
+        return next
+      })
+    },
+    [laneParams],
+  )
+
   const handlePlayPause = useCallback(() => {
     setIsPlaying(prev => {
       const next = !prev
@@ -302,6 +335,7 @@ export function App() {
         >
           <LaneControls
             laneParams={laneParams}
+            snapshots={snapshots}
             focusedLane={focusedLane}
             hasSnapshot={hasSnapshot}
             theme={theme}
@@ -312,6 +346,7 @@ export function App() {
             }}
             onUpdateParams={handleUpdateParams}
             onClearLane={handleClearLane}
+            onPresetApplied={handlePresetApplied}
           />
         </div>
       </div>

@@ -1,7 +1,9 @@
-import { MessageType, type LaneParams } from '../engine/types'
+import type { CSSProperties } from 'react'
+import { MessageType, type LaneParams, type LaneSnapshot } from '../engine/types'
 import { midiNoteName } from '../engine/scaleData'
 import { ScaleLattice } from './ScaleLattice'
 import { RangeSlider } from './primitives'
+import { ShapeWell } from './ShapeWell'
 
 // Format the contextual min/max readout for the range slider.
 // Output values shown depend on message type.
@@ -39,6 +41,7 @@ const LANE_DASH_SWATCH = ['', '6 3', '1 2 6 2']
 
 interface LaneControlsProps {
   laneParams: LaneParams[]
+  snapshots: (LaneSnapshot | null)[]
   focusedLane: number
   hasSnapshot: boolean[]
   theme: 'light' | 'dark'
@@ -46,10 +49,12 @@ interface LaneControlsProps {
   onFocusLane: (lane: number) => void
   onUpdateParams: (lane: number, params: Partial<LaneParams>) => void
   onClearLane: (lane: number) => void
+  onPresetApplied: (lane: number, table: Float32Array) => void
 }
 
 export function LaneControls({
   laneParams,
+  snapshots,
   focusedLane,
   hasSnapshot,
   theme,
@@ -57,6 +62,7 @@ export function LaneControls({
   onFocusLane,
   onUpdateParams,
   onClearLane,
+  onPresetApplied,
 }: LaneControlsProps) {
   const dark = theme === 'dark'
   const params = laneParams[focusedLane]
@@ -65,7 +71,7 @@ export function LaneControls({
 
   const update = (partial: Partial<LaneParams>) => onUpdateParams(focusedLane, partial)
 
-  const inputStyle: React.CSSProperties = {
+  const inputStyle: CSSProperties = {
     background: dark ? '#2a2a2a' : 'var(--paper-bg)',
     color: dark ? '#e0e0e0' : 'var(--paper-ink)',
     border: `1px solid ${dark ? '#444' : 'var(--paper-rule)'}`,
@@ -77,7 +83,7 @@ export function LaneControls({
     fontFamily: 'var(--font-sans)',
   }
 
-  const labelStyle: React.CSSProperties = {
+  const labelStyle: CSSProperties = {
     fontFamily: 'var(--font-serif)',
     fontStyle: 'italic',
     fontSize: 12,
@@ -86,19 +92,19 @@ export function LaneControls({
     display: 'block',
   }
 
-  const rowStyle: React.CSSProperties = {
+  const rowStyle: CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
   }
 
-  const sectionStyle: React.CSSProperties = {
+  const sectionStyle: CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
     gap: 10,
   }
 
-  const dividerStyle: React.CSSProperties = {
+  const dividerStyle: CSSProperties = {
     borderTop: `1px dashed ${dark ? '#333' : 'var(--paper-rule)'}`,
     margin: '4px 0',
   }
@@ -166,6 +172,19 @@ export function LaneControls({
             </button>
           )
         })}
+      </div>
+
+      <div style={dividerStyle} />
+
+      {/* Shape well — miniature preview + preset generators */}
+      <div style={{ padding: '0 12px 4px' }}>
+        <ShapeWell
+          snapshot={snapshots[focusedLane]}
+          lane={focusedLane}
+          laneParams={params}
+          theme={theme}
+          onCurveApplied={onPresetApplied}
+        />
       </div>
 
       <div style={dividerStyle} />
