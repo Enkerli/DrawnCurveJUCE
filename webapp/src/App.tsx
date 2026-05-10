@@ -10,6 +10,7 @@ import { WebMidiManager, type MidiPort } from './midi/webMidi'
 import { CurveDisplay } from './components/CurveDisplay'
 import { LaneControls } from './components/LaneControls'
 import { Toolbar } from './components/Toolbar'
+import { QurveShelf, type SavedQurve } from './components/QurveShelf'
 
 const NUM_LANES = 3
 const DEFAULT_CC_NUMBERS = [74, 1, 11]
@@ -34,6 +35,7 @@ export function App() {
   const [midiSupported] = useState(() => typeof navigator !== 'undefined' && 'requestMIDIAccess' in navigator)
   const [midiEnabled, setMidiEnabled] = useState(false)
   const [isPlaying, setIsPlaying] = useState(true)
+  const [shelfOpen, setShelfOpen] = useState(false)
 
   // Refs to avoid stale closures in the tick loop
   const engineRef = useRef<GestureEngine>(new GestureEngine())
@@ -194,6 +196,51 @@ export function App() {
     [laneParams],
   )
 
+  // Apply a saved QurveShelf entry to a lane — rebuilds the snapshot from
+  // the serialised table + the entry's own saved params (range, quantize, etc.).
+  const handleShelfApply = useCallback(
+    (lane: number, saved: SavedQurve) => {
+      const p = laneParams[lane]
+      const table = new Float32Array(saved.table)
+      const snapshot: LaneSnapshot = {
+        table,
+        durationSeconds: 1,
+        ccNumber: p.ccNumber,
+        midiChannel: p.midiChannel,
+        minOut: saved.minOut,
+        maxOut: saved.maxOut,
+        smoothing: saved.smoothing,
+        messageType: saved.messageType,
+        noteVelocity: p.noteVelocity,
+        phaseOffset: 0,
+        xDivisions: saved.xDivisions,
+        yDivisions: saved.yDivisions,
+        xQuantize: saved.xQuantize,
+        yQuantize: saved.yQuantize,
+        valid: true,
+      }
+      engineRef.current.setSnapshot(lane, snapshot)
+      engineRef.current.resetLane(lane)
+      // Sync saved params back into laneParams so LaneControls reflects them
+      handleUpdateParams(lane, {
+        messageType: saved.messageType,
+        minOut: saved.minOut,
+        maxOut: saved.maxOut,
+        smoothing: saved.smoothing,
+        xDivisions: saved.xDivisions,
+        yDivisions: saved.yDivisions,
+        xQuantize: saved.xQuantize,
+        yQuantize: saved.yQuantize,
+      })
+      setSnapshots(prev => {
+        const next = [...prev]
+        next[lane] = snapshot
+        return next
+      })
+    },
+    [laneParams, handleUpdateParams],
+  )
+
   const handlePlayPause = useCallback(() => {
     setIsPlaying(prev => {
       const next = !prev
@@ -319,6 +366,35 @@ export function App() {
             onCurveDrawn={handleCurveDrawn}
             onUpdateParams={handleUpdateParams}
           />
+
+          {/* Shelf toggle button */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 2 }}>
+            <button
+              onClick={() => setShelfOpen(o => !o)}
+              style={{
+                padding: '2px 10px', height: 22, borderRadius: 3,
+                border: `1px solid ${shelfOpen ? (dark ? '#666' : 'var(--paper-ink)') : (dark ? '#333' : 'var(--paper-rule)')}`,
+                background: shelfOpen ? (dark ? '#2a2a2a' : 'var(--paper-bg)') : 'transparent',
+                color: shelfOpen ? (dark ? '#e0e0e0' : 'var(--paper-ink)') : (dark ? '#666' : 'var(--paper-ink50)'),
+                cursor: 'pointer',
+                fontFamily: 'Inter Tight, Inter, system-ui, sans-serif',
+                fontSize: 10, letterSpacing: 0.5,
+              }}
+            >
+              {shelfOpen ? '▾ shelf' : '▸ shelf'}
+            </button>
+          </div>
+
+          {/* Qurve shelf — slides in when open */}
+          {shelfOpen && (
+            <QurveShelf
+              snapshot={snapshots[focusedLane]}
+              laneParams={laneParams[focusedLane]}
+              focusedLane={focusedLane}
+              theme={theme}
+              onApply={handleShelfApply}
+            />
+          )}
         </div>
 
         {/* Right panel */}
