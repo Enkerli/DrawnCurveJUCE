@@ -3269,14 +3269,24 @@ void DrawnCurveEditor::bindPlaybackToLane (int lane)
 
     if (lane >= 0 && lane < kMaxLanes)
     {
-        const int dir = static_cast<int> (
-            proc.apvts.getRawParameterValue (laneParam (lane, ParamID::laneDirection))->load());
+        // When a lane follows the global transport (useGlobalPlayback = true, the default),
+        // the engine reads ParamID::playbackDirection — so the control must read and write
+        // that param too.  Per-lane direction override is only active when useGlobalPlayback
+        // is explicitly false (no UI for this yet; reserved for future per-lane speed tabs).
+        const bool useGlobal = proc.apvts.getRawParameterValue (
+            laneParam (lane, ParamID::useGlobalPlayback))->load() > 0.5f;
+        const juce::String dirParamID = useGlobal
+            ? ParamID::playbackDirection
+            : laneParam (lane, ParamID::laneDirection);
+        const int dir = static_cast<int> (proc.apvts.getRawParameterValue (dirParamID)->load());
         dirControl.setSelectedIndex (kDirParamToVis[juce::jlimit (0, 2, dir)],
                                      juce::dontSendNotification);
-        dirControl.onChange = [this, lane] (int vis)
+        dirControl.onChange = [this, lane, useGlobal] (int vis)
         {
-            if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (
-                    proc.apvts.getParameter (laneParam (lane, ParamID::laneDirection))))
+            const juce::String id = useGlobal
+                ? ParamID::playbackDirection
+                : laneParam (lane, ParamID::laneDirection);
+            if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (proc.apvts.getParameter (id)))
                 *p = kDirVisToParam[vis];
         };
     }
@@ -3412,10 +3422,8 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
 {
     if (paramID == ParamID::playbackDirection)
     {
-#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
-        // Only update dirControl if we're currently showing global ("*") params.
-        if (! _showingAllLanes) return;
-#endif
+        // Update dirControl in all tab views: per-lane tabs follow the global direction
+        // when useGlobalPlayback = true (the default), so they must reflect this param too.
         juce::MessageManager::callAsync ([safeThis = juce::Component::SafePointer<DrawnCurveEditor>(this)] {
             if (safeThis == nullptr) return;
             safeThis->dirControl.setSelectedIndex (

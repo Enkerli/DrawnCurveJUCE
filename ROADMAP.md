@@ -97,12 +97,12 @@ Integrates DrawnQurve with modular, DAW automation, OSC tools, and hardware. Wan
 
 Active bugs not yet resolved.
 
-| # | Issue | Effort |
-|---|-------|--------|
-| F1 | **AudioQueue -50 noise** — skip probe entirely, always use `session.sampleRate` | S |
-| F2 | **Bitmask convention** — reverse bit order (bit 11 = root/C, bit 0 = B) throughout engine, presets, and lattice | M |
-| F3 | **Playback direction in sync mode** — buttons non-functional, always ping-pong | M |
-| F4 | **Default to Light mode** — change `_lightMode { false }` to `{ true }` | Trivial |
+| # | Issue | Effort | Status |
+|---|-------|--------|--------|
+| F1 | **AudioQueue -50 noise** — skip probe entirely, always use `session.sampleRate` | S | ✅ fixed 2026-05 — `getSampleRate()` now returns `session.sampleRate` directly |
+| F2 | **Bitmask convention** — bit 11 = root/C, bit 0 = B throughout engine, presets, and lattice | M | ✅ confirmed correct — `bit (11 - pc)` convention consistent across engine, lattice, tokens.jsx |
+| F3 | **Playback direction in sync mode** — buttons non-functional | M | ✅ fixed 2026-05 — `bindPlaybackToLane` now reads/writes `playbackDirection` (global) when `useGlobalPlayback = true` |
+| F4 | **Default to Light mode** | Trivial | ✅ all `_lightMode` members default to `true` |
 
 ---
 

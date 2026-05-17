@@ -23559,7 +23559,8 @@
     // ink
     ink: "#2D2620",
     ink70: "#574E44",
-    ink50: "#857870",
+    ink50: "#6B5E55",
+    // was #857870 — lifted to meet WCAG AA (5.5:1 on bg)
     ink30: "#B3A99E",
     // accents
     amber: "#C4873A",
@@ -23567,15 +23568,39 @@
     // lanes
     laneInk: "#3A4060",
     laneRose: "#C4624A",
-    laneMoss: "#4A7A55"
+    laneMoss: "#4A7A55",
+    lanePlum: "#6B4F7C"
+  };
+  var PAPER_DARK = {
+    bg: "#1A1A24",
+    bgDeep: "#12121A",
+    card: "#22222E",
+    rule: "#484862",
+    // was #3A3A50 — brighter so borders read clearly
+    ruleFaint: "#32324A",
+    // was #2A2A3C
+    ink: "#DCDCE8",
+    ink70: "#A8A8C0",
+    ink50: "#9898B4",
+    // was #787890 — lifted to meet WCAG AA (6.1:1 on bg)
+    ink30: "#6E6E88",
+    // was #505068 — lifted for better legibility
+    amber: "#E8A838",
+    amberInk: "#E8C878",
+    laneInk: "#4A90E2",
+    laneRose: "#E8A838",
+    laneMoss: "#5CB85C",
+    lanePlum: "#B888D4"
   };
   var LANES = [
-    { id: 0, name: "One", color: PAPER.laneInk, tint: "oklch(88% 0.02 250)", dash: "0" },
+    { id: 0, name: "One", color: PAPER.laneInk, colorDark: PAPER_DARK.laneInk, tint: "oklch(88% 0.02 250)", tintDark: "rgba(74,144,226,0.13)", dash: "0" },
     // solid
-    { id: 1, name: "Two", color: PAPER.laneRose, tint: "oklch(92% 0.03  25)", dash: "10 4" },
+    { id: 1, name: "Two", color: PAPER.laneRose, colorDark: PAPER_DARK.laneRose, tint: "oklch(92% 0.03  25)", tintDark: "rgba(232,168,56,0.13)", dash: "10 4" },
     // long-dash
-    { id: 2, name: "Three", color: PAPER.laneMoss, tint: "oklch(91% 0.03 145)", dash: "6 3 2 3" }
-    // dot-dash
+    { id: 2, name: "Three", color: PAPER.laneMoss, colorDark: PAPER_DARK.laneMoss, tint: "oklch(91% 0.03 145)", tintDark: "rgba(92,184,92,0.13)", dash: "6 3 2 3" },
+    // dash-dot
+    { id: 3, name: "Four", color: PAPER.lanePlum, colorDark: PAPER_DARK.lanePlum, tint: "oklch(90% 0.03 295)", tintDark: "rgba(184,136,212,0.13)", dash: "3 4" }
+    // short-dot
   ];
   var SCALES2 = [
     // Diatonic — 7 modes of the major scale
@@ -23699,6 +23724,7 @@
   }
   Object.assign(window, {
     PAPER,
+    PAPER_DARK,
     LANES,
     SCALES: SCALES2,
     PITCH_NAMES,
@@ -23791,6 +23817,35 @@
         smooth: 0.15,
         rangeMin: 0.35,
         rangeMax: 0.65,
+        scaleId: "chromatic",
+        scaleRoot: 0,
+        scaleMask: 4095,
+        velocity: 100,
+        quantizeX: false,
+        quantizeY: false,
+        xDivisions: 4,
+        yDivisions: 4,
+        oneShot: false,
+        legato: false,
+        phaseOffset: 0,
+        useGlobalPlayback: true,
+        laneDirection: "fwd",
+        laneSpeedMul: 1,
+        visible: true
+      },
+      {
+        id: 3,
+        color: (window.LANES[3] || window.LANES[0]).color,
+        name: (window.LANES[3] || window.LANES[0]).name,
+        dash: (window.LANES[3] || window.LANES[0]).dash,
+        curve: null,
+        enabled: false,
+        target: "CC",
+        targetDetail: 1,
+        channel: 1,
+        smooth: 0.08,
+        rangeMin: 0.05,
+        rangeMax: 0.95,
         scaleId: "chromatic",
         scaleRoot: 0,
         scaleMask: 4095,
@@ -25394,14 +25449,30 @@
   }
   function JuceIPadStudio({ width = 1024, height = 768 }) {
     const eng = useDrawnQurveEngine({ mode: "standard" });
-    const paper = window.PAPER;
+    const [useDark, setUseDarkRaw] = React.useState(
+      () => typeof localStorage !== "undefined" && localStorage.getItem("dq-theme") === "dark"
+    );
+    const setUseDark = React.useCallback((next) => {
+      const dark = typeof next === "function" ? next(useDark) : next;
+      setUseDarkRaw(dark);
+      try {
+        localStorage.setItem("dq-theme", dark ? "dark" : "light");
+      } catch (_) {
+      }
+      const lanes = window.LANES || [];
+      lanes.forEach((ldef, i) => {
+        const newColor = dark ? ldef.colorDark || ldef.color : ldef.color;
+        eng.updateLane(i, { color: newColor });
+      });
+    }, [useDark, eng]);
+    const paper = useDark ? window.PAPER_DARK || window.PAPER : window.PAPER;
     const focusLane = eng.lanes.find((l) => l.id === eng.focus);
     const TOP_H = 52;
     const BOTTOM_H = 38;
     const [leftOpen, setLeftOpen] = React.useState(true);
-    const LEFT_W = leftOpen ? 256 : 44;
+    const LEFT_W = leftOpen ? 160 : 44;
     const [rightOpen, setRightOpen] = React.useState(true);
-    const RIGHT_W = rightOpen ? 148 : 44;
+    const RIGHT_W = rightOpen ? 256 : 44;
     const [shelfOpen, setShelfOpenRaw] = React.useState(false);
     const [scaleOpen, setScaleOpenRaw] = React.useState(false);
     const setShelfOpen = (next) => {
@@ -25431,6 +25502,9 @@
       if (focusLane?.target === "Note" && prevTarget.current !== "Note") {
         setDiscoveryVisible(true);
         setTimeout(() => setDiscoveryVisible(false), 4e3);
+      }
+      if (focusLane?.target !== "Note" && prevTarget.current === "Note") {
+        setScaleOpen(false);
       }
       prevTarget.current = focusLane?.target;
     }, [focusLane?.target]);
@@ -25489,221 +25563,235 @@
       ro.observe(containerRef.current);
       return () => ro.disconnect();
     }, []);
-    return /* @__PURE__ */ React.createElement("div", { style: {
-      width,
-      height,
-      background: paper.bg,
-      fontFamily: "Inter Tight, Inter, system-ui, sans-serif",
-      color: paper.ink,
-      display: "flex",
-      flexDirection: "column",
-      position: "relative",
-      overflow: "hidden",
-      backgroundImage: `
-        radial-gradient(circle at 15% 30%, oklch(94% 0.02 65 / 0.4) 0, transparent 50%),
-        radial-gradient(circle at 80% 70%, oklch(95% 0.025 90 / 0.3) 0, transparent 40%)
-      `
-    } }, /* @__PURE__ */ React.createElement(
-      JuceTopBar,
+    return /* @__PURE__ */ React.createElement(
+      "div",
       {
-        eng,
-        paper,
-        h: TOP_H,
-        helpOpen,
-        setHelpOpen
-      }
-    ), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", minHeight: 0 } }, /* @__PURE__ */ React.createElement(
-      JuceShapeWell,
-      {
-        open: leftOpen,
-        setOpen: setLeftOpen,
-        eng,
-        paper,
-        focusLane,
-        width: LEFT_W
-      }
-    ), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", minHeight: 0 } }, /* @__PURE__ */ React.createElement(
-      YAxisGutter,
-      {
-        eng,
-        paper,
-        focusLane,
-        gridY,
-        setGridY,
-        width: Y_GUTTER_W
-      }
-    ), /* @__PURE__ */ React.createElement("div", { ref: containerRef, style: { flex: 1, position: "relative", overflow: "hidden" } }, /* @__PURE__ */ React.createElement(
-      CurveCanvas,
-      {
-        width: canvasSize.w,
-        height: canvasSize.h,
-        lanes: eng.lanes,
-        focus: eng.focus,
-        phase: eng.phase,
-        lanePhases: eng.lanePhases,
-        setCurve: eng.setCurve,
-        variant: "studio",
-        showScaleBanding: focusLane?.target === "Note",
-        showAxisNotes: focusLane?.target === "Note",
-        paper,
-        gridX,
-        gridY,
-        quantizeX: !!focusLane?.quantizeX,
-        quantizeY: !!focusLane?.quantizeY,
-        useFlats: eng.useFlats
-      }
-    ), (() => {
-      const focusPhase = eng.lanePhases?.[focusLane?.id] ?? eng.phase;
-      return /* @__PURE__ */ React.createElement(
-        TypoReadout,
+        onContextMenu: (e) => e.preventDefault(),
+        style: {
+          width,
+          height,
+          background: paper.bg,
+          fontFamily: "Inter Tight, Inter, system-ui, sans-serif",
+          color: paper.ink,
+          display: "flex",
+          flexDirection: "column",
+          position: "relative",
+          overflow: "hidden",
+          backgroundImage: useDark ? `radial-gradient(circle at 15% 30%, rgba(74,100,160,0.10) 0, transparent 50%),
+           radial-gradient(circle at 80% 70%, rgba(60,80,140,0.08) 0, transparent 40%)` : `radial-gradient(circle at 15% 30%, oklch(94% 0.02 65 / 0.4) 0, transparent 50%),
+           radial-gradient(circle at 80% 70%, oklch(95% 0.025 90 / 0.3) 0, transparent 40%)`
+        }
+      },
+      /* @__PURE__ */ React.createElement(
+        JuceTopBar,
         {
-          focusLane,
-          phase: focusPhase,
-          canvasW: canvasSize.w,
-          canvasH: canvasSize.h,
+          eng,
           paper,
+          h: TOP_H,
+          helpOpen,
+          setHelpOpen,
+          useDark,
+          setUseDark
+        }
+      ),
+      /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", minHeight: 0 } }, /* @__PURE__ */ React.createElement(
+        JuceLanePanel,
+        {
+          eng,
+          paper,
+          width: LEFT_W,
+          height: height - TOP_H - BOTTOM_H,
+          open: leftOpen,
+          setOpen: setLeftOpen
+        }
+      ), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", minHeight: 0 } }, /* @__PURE__ */ React.createElement(
+        YAxisGutter,
+        {
+          eng,
+          paper,
+          focusLane,
+          gridY,
+          setGridY,
+          width: Y_GUTTER_W
+        }
+      ), /* @__PURE__ */ React.createElement("div", { ref: containerRef, style: { flex: 1, position: "relative", overflow: "hidden" } }, /* @__PURE__ */ React.createElement(
+        CurveCanvas,
+        {
+          width: canvasSize.w,
+          height: canvasSize.h,
+          lanes: eng.lanes,
+          focus: eng.focus,
+          phase: eng.phase,
+          lanePhases: eng.lanePhases,
+          setCurve: eng.setCurve,
+          variant: "studio",
+          showScaleBanding: focusLane?.target === "Note",
+          showAxisNotes: focusLane?.target === "Note",
+          paper,
+          gridX,
+          gridY,
+          quantizeX: !!focusLane?.quantizeX,
+          quantizeY: !!focusLane?.quantizeY,
           useFlats: eng.useFlats
         }
-      );
-    })(), discoveryVisible && /* @__PURE__ */ React.createElement(DiscoveryChip, { paper, onOpen: () => setScaleOpen(true) }))), /* @__PURE__ */ React.createElement(
-      XAxisGutter,
-      {
-        eng,
-        paper,
-        focusLane,
-        gridX,
-        setGridX,
-        height: X_GUTTER_H,
-        cornerW: Y_GUTTER_W,
-        shelfOpen,
-        setShelfOpen,
-        scaleOpen,
-        setScaleOpen
-      }
-    ), /* @__PURE__ */ React.createElement("div", { style: {
-      height: SCALE_H,
-      overflow: "hidden",
-      transition: "height 260ms ease-out",
-      background: paper.card,
-      borderTop: `1px solid ${paper.rule}`
-    } }, SCALE_H > 0 && focusLane?.target === "Note" && /* @__PURE__ */ React.createElement("div", { style: {
-      padding: "12px 18px",
-      display: "flex",
-      gap: 18,
-      alignItems: "stretch",
-      height: "100%",
-      boxSizing: "border-box"
-    } }, /* @__PURE__ */ React.createElement(
-      ChromaticWheel,
-      {
-        lane: focusLane,
-        updateLane: eng.updateLane,
-        paper,
-        size: Math.min(220, SCALE_H - 24),
-        useFlats: eng.useFlats
-      }
-    ), /* @__PURE__ */ React.createElement("div", { style: {
-      width: 220,
-      flexShrink: 0,
-      borderLeft: `1px dashed ${paper.rule}`,
-      paddingLeft: 18,
-      display: "flex",
-      flexDirection: "column",
-      minHeight: 0
-    } }, /* @__PURE__ */ React.createElement("div", { style: {
-      fontFamily: "Inter Tight",
-      fontSize: 10,
-      letterSpacing: 1.5,
-      color: paper.ink50,
-      textTransform: "uppercase",
-      marginBottom: 8,
-      flexShrink: 0
-    } }, "Scale"), /* @__PURE__ */ React.createElement(ScalePicker, { lane: focusLane, updateLane: eng.updateLane, paper })), /* @__PURE__ */ React.createElement("div", { style: {
-      flex: 1,
-      minWidth: 0,
-      borderLeft: `1px dashed ${paper.rule}`,
-      paddingLeft: 18,
-      display: "flex",
-      flexDirection: "column",
-      gap: 12,
-      overflowY: "auto"
-    } }, /* @__PURE__ */ React.createElement("div", { style: {
-      fontFamily: '"Instrument Serif", Georgia, serif',
-      fontStyle: "italic",
-      fontSize: 20,
-      display: "flex",
-      alignItems: "center",
-      gap: 10
-    } }, "Mask", /* @__PURE__ */ React.createElement("span", { style: {
-      fontSize: 9,
-      padding: "2px 8px",
-      borderRadius: 10,
-      border: `1px solid ${paper.rule}`,
-      color: paper.ink50,
-      fontFamily: "Inter Tight",
-      letterSpacing: 0.6,
-      textTransform: "uppercase",
-      fontStyle: "normal",
-      display: "flex",
-      alignItems: "center",
-      gap: 5
-    } }, /* @__PURE__ */ React.createElement("span", { style: {
-      width: 7,
-      height: 7,
-      borderRadius: "50%",
-      background: focusLane?.color ?? paper.ink30,
-      display: "inline-block",
-      flexShrink: 0
-    } }), "Lane ", (focusLane?.id ?? 0) + 1)), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: () => eng.updateLane(focusLane.id, {
-      scaleMask: 4095,
-      scaleId: "chromatic"
-    }) }, "All"), /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: () => {
-      const next = ~focusLane.scaleMask & 4095;
-      eng.updateLane(focusLane.id, {
-        scaleMask: next,
-        scaleId: recognizeScaleId(next)
-      });
-    } }, "Invert"), /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: () => eng.updateLane(focusLane.id, {
-      // "None" = root only.  Empty mask (0x000) would silence the
-      // engine; root-only is what the native editor used.
-      scaleMask: 2048,
-      scaleId: "custom"
-    }) }, "None"), eng.lanes.length > 1 && /* @__PURE__ */ React.createElement(
-      Btn,
-      {
-        paper,
-        small: true,
-        title: "Copy this scale root + mask to all lanes",
-        onClick: () => eng.applyScaleToAll(
-          focusLane.scaleRoot,
-          focusLane.scaleMask
-        )
-      },
-      "\u2195 All"
-    )), /* @__PURE__ */ React.createElement(ScaleMaskInput, { lane: focusLane, updateLane: eng.updateLane, paper }), /* @__PURE__ */ React.createElement("div", { style: {
-      fontSize: 11,
-      color: paper.ink70,
-      lineHeight: 1.5,
-      marginTop: "auto"
-    } }, "Tap a pitch to toggle \xB7 double-tap or hold (0.5 s) to set the root \xB7 pick a preset to overwrite the mask \xB7 type a decimal value (0\u20134095) to enter a custom set.")))), /* @__PURE__ */ React.createElement("div", { style: {
-      height: SHELF_H,
-      overflow: "hidden",
-      transition: "height 240ms ease-out",
-      background: paper.bgDeep,
-      borderTop: `1px solid ${paper.rule}`
-    } }, SHELF_H > 0 && /* @__PURE__ */ React.createElement(QurveShelf, { eng, paper, focusLane }))), /* @__PURE__ */ React.createElement(
-      JuceLanePanel,
-      {
-        eng,
-        paper,
-        width: RIGHT_W,
-        height: height - TOP_H - BOTTOM_H,
-        open: rightOpen,
-        setOpen: setRightOpen
-      }
-    )), /* @__PURE__ */ React.createElement(JuceBottomBar, { eng, paper, h: BOTTOM_H }), helpOpen && /* @__PURE__ */ React.createElement(HelpOverlay, { paper, onClose: () => setHelpOpen(false) }));
+      ), (() => {
+        const focusPhase = eng.lanePhases?.[focusLane?.id] ?? eng.phase;
+        return /* @__PURE__ */ React.createElement(
+          TypoReadout,
+          {
+            focusLane,
+            phase: focusPhase,
+            canvasW: canvasSize.w,
+            canvasH: canvasSize.h,
+            paper,
+            useFlats: eng.useFlats
+          }
+        );
+      })(), discoveryVisible && /* @__PURE__ */ React.createElement(DiscoveryChip, { paper, onOpen: () => setScaleOpen(true) }))), /* @__PURE__ */ React.createElement(
+        XAxisGutter,
+        {
+          eng,
+          paper,
+          focusLane,
+          gridX,
+          setGridX,
+          height: X_GUTTER_H,
+          cornerW: Y_GUTTER_W,
+          shelfOpen,
+          setShelfOpen,
+          scaleOpen,
+          setScaleOpen
+        }
+      ), /* @__PURE__ */ React.createElement("div", { style: {
+        height: SCALE_H,
+        overflow: "hidden",
+        transition: "height 260ms ease-out",
+        background: paper.card,
+        borderTop: `1px solid ${paper.rule}`
+      } }, SCALE_H > 0 && focusLane?.target === "Note" && /* @__PURE__ */ React.createElement("div", { style: {
+        padding: "10px 12px",
+        display: "flex",
+        gap: 12,
+        alignItems: "stretch",
+        height: "100%",
+        boxSizing: "border-box",
+        minWidth: 520,
+        overflowX: "auto"
+      } }, /* @__PURE__ */ React.createElement(
+        ChromaticWheel,
+        {
+          lane: focusLane,
+          updateLane: eng.updateLane,
+          paper,
+          size: Math.min(180, SCALE_H - 20),
+          useFlats: eng.useFlats
+        }
+      ), /* @__PURE__ */ React.createElement("div", { style: {
+        width: 170,
+        flexShrink: 0,
+        borderLeft: `1px dashed ${paper.rule}`,
+        paddingLeft: 12,
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 0,
+        overflow: "hidden"
+      } }, /* @__PURE__ */ React.createElement("div", { style: {
+        fontFamily: "Inter Tight",
+        fontSize: 10,
+        letterSpacing: 1.5,
+        color: paper.ink50,
+        textTransform: "uppercase",
+        marginBottom: 8,
+        flexShrink: 0
+      } }, "Scale"), /* @__PURE__ */ React.createElement(ScalePicker, { lane: focusLane, updateLane: eng.updateLane, paper })), /* @__PURE__ */ React.createElement("div", { style: {
+        flex: 1,
+        minWidth: 110,
+        borderLeft: `1px dashed ${paper.rule}`,
+        paddingLeft: 12,
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+        overflowY: "auto"
+      } }, /* @__PURE__ */ React.createElement("div", { style: {
+        fontFamily: '"Instrument Serif", Georgia, serif',
+        fontStyle: "italic",
+        fontSize: 20,
+        display: "flex",
+        alignItems: "center",
+        gap: 10
+      } }, "Mask", /* @__PURE__ */ React.createElement("span", { style: {
+        fontSize: 9,
+        padding: "2px 8px",
+        borderRadius: 10,
+        border: `1px solid ${paper.rule}`,
+        color: paper.ink50,
+        fontFamily: "Inter Tight",
+        letterSpacing: 0.6,
+        textTransform: "uppercase",
+        fontStyle: "normal",
+        display: "flex",
+        alignItems: "center",
+        gap: 5
+      } }, /* @__PURE__ */ React.createElement("span", { style: {
+        width: 7,
+        height: 7,
+        borderRadius: "50%",
+        background: focusLane?.color ?? paper.ink30,
+        display: "inline-block",
+        flexShrink: 0
+      } }), "Lane ", (focusLane?.id ?? 0) + 1)), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: () => eng.updateLane(focusLane.id, {
+        scaleMask: 4095,
+        scaleId: "chromatic"
+      }) }, "All"), /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: () => {
+        const next = ~focusLane.scaleMask & 4095;
+        eng.updateLane(focusLane.id, {
+          scaleMask: next,
+          scaleId: recognizeScaleId(next)
+        });
+      } }, "Invert"), /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: () => eng.updateLane(focusLane.id, {
+        // "None" = root only.  Empty mask (0x000) would silence the
+        // engine; root-only is what the native editor used.
+        scaleMask: 2048,
+        scaleId: "custom"
+      }) }, "None"), eng.lanes.length > 1 && /* @__PURE__ */ React.createElement(
+        Btn,
+        {
+          paper,
+          small: true,
+          title: "Copy this scale root + mask to all lanes",
+          onClick: () => eng.applyScaleToAll(
+            focusLane.scaleRoot,
+            focusLane.scaleMask
+          )
+        },
+        "\u2195 All"
+      )), /* @__PURE__ */ React.createElement(ScaleMaskInput, { lane: focusLane, updateLane: eng.updateLane, paper }), /* @__PURE__ */ React.createElement("div", { style: {
+        fontSize: 11,
+        color: paper.ink70,
+        lineHeight: 1.5,
+        marginTop: "auto"
+      } }, "Tap a pitch to toggle \xB7 double-tap or hold (0.5 s) to set the root \xB7 pick a preset to overwrite the mask \xB7 type a decimal value (0\u20134095) to enter a custom set.")))), /* @__PURE__ */ React.createElement("div", { style: {
+        height: SHELF_H,
+        overflow: "hidden",
+        transition: "height 240ms ease-out",
+        background: paper.bgDeep,
+        borderTop: `1px solid ${paper.rule}`
+      } }, SHELF_H > 0 && /* @__PURE__ */ React.createElement(QurveShelf, { eng, paper, focusLane }))), /* @__PURE__ */ React.createElement(
+        JuceShapeWell,
+        {
+          open: rightOpen,
+          setOpen: setRightOpen,
+          eng,
+          paper,
+          focusLane,
+          width: RIGHT_W
+        }
+      )),
+      /* @__PURE__ */ React.createElement(JuceBottomBar, { eng, paper, h: BOTTOM_H }),
+      helpOpen && /* @__PURE__ */ React.createElement(HelpOverlay, { paper, onClose: () => setHelpOpen(false) })
+    );
   }
-  function JuceTopBar({ eng, paper, h, helpOpen, setHelpOpen }) {
+  function JuceTopBar({ eng, paper, h, helpOpen, setHelpOpen, useDark, setUseDark }) {
     return /* @__PURE__ */ React.createElement("div", { style: {
       height: h,
       display: "flex",
@@ -25804,6 +25892,16 @@
         title: "Quick reference (? key)"
       },
       /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14 } }, "?")
+    ), /* @__PURE__ */ React.createElement(
+      IconBtn,
+      {
+        paper,
+        size: 36,
+        active: useDark,
+        onClick: () => setUseDark((d) => !d),
+        title: useDark ? "Switch to light mode" : "Switch to dark mode"
+      },
+      /* @__PURE__ */ React.createElement("span", { style: { fontSize: 15 } }, useDark ? "\u263C" : "\u263E")
     ));
   }
   function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
@@ -25834,38 +25932,71 @@
       flexShrink: 0,
       display: "flex",
       transition: "width 200ms ease-out",
-      borderRight: `1px solid ${paper.rule}`,
+      borderLeft: `1px solid ${paper.rule}`,
       background: open ? paper.card : "transparent",
       position: "relative",
       overflow: "hidden"
-    } }, open && focusLane && // paddingRight: 48 keeps all content clear of the 36 px collapse-tab handle
-    // that is absolutely positioned at the right edge of this 256 px panel.
-    /* @__PURE__ */ React.createElement("div", { style: { width: 256, padding: "14px 48px 14px 12px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 } }, /* @__PURE__ */ React.createElement("div", { style: {
+    } }, open && focusLane && // paddingLeft: 48 keeps all content clear of the 36 px collapse-tab handle
+    // that is absolutely positioned at the left edge of this panel.
+    /* @__PURE__ */ React.createElement("div", { style: { width: 256, padding: "14px 12px 14px 48px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 } }, /* @__PURE__ */ React.createElement("div", { style: {
       fontFamily: "Inter Tight",
       fontSize: 10,
       letterSpacing: 1.5,
       color: paper.ink50,
       textTransform: "uppercase",
       marginBottom: 2
-    } }, "Shape \xB7 Lane ", focusLane.id + 1), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Label, { paper }, "Output"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 } }, ["CC", "Aftertouch", "PitchBend", "Note"].map((t) => /* @__PURE__ */ React.createElement(
-      "button",
+    } }, "Shape \xB7 Lane ", focusLane.id + 1), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Label, { paper }, "Output"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 4, flexWrap: "nowrap", marginTop: 6 } }, [
       {
-        key: t,
-        onClick: () => eng.updateLane(focusLane.id, { target: t }),
-        style: {
-          padding: "7px 10px",
-          minHeight: 36,
-          border: `1px solid ${focusLane.target === t ? paper.ink : paper.rule}`,
-          background: focusLane.target === t ? paper.ink : "transparent",
-          color: focusLane.target === t ? paper.bg : paper.ink70,
-          borderRadius: 2,
-          fontSize: 11,
-          fontFamily: "Inter Tight",
-          cursor: "pointer"
-        }
+        key: "CC",
+        label: "CC",
+        title: "Continuous Controller",
+        icon: /* @__PURE__ */ React.createElement("svg", { width: "22", height: "12", viewBox: "0 0 22 12", fill: "none", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round" }, /* @__PURE__ */ React.createElement("path", { d: "M0,6 C2.5,6 2.5,1.5 4.5,1.5 C6.5,1.5 6.5,10.5 8.5,10.5 C10.5,10.5 10.5,1.5 12.5,1.5 C14.5,1.5 14.5,10.5 16.5,10.5 C18.5,10.5 18.5,6 22,6" }))
       },
-      t === "Aftertouch" ? "AT" : t === "PitchBend" ? "PB" : t
-    )))), focusLane.target === "CC" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Label, { paper }, "CC number"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 6 } }, /* @__PURE__ */ React.createElement(
+      {
+        key: "Aftertouch",
+        label: "AT",
+        title: "Aftertouch (channel pressure)",
+        icon: /* @__PURE__ */ React.createElement("svg", { width: "16", height: "14", viewBox: "0 0 16 14", fill: "none", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", strokeLinejoin: "round" }, /* @__PURE__ */ React.createElement("rect", { x: "1", y: "0.8", width: "14", height: "2.4", rx: "1.2", fill: "currentColor", stroke: "none" }), /* @__PURE__ */ React.createElement("line", { x1: "8", y1: "5", x2: "8", y2: "10.5" }), /* @__PURE__ */ React.createElement("polyline", { points: "5,8 8,13 11,8" }))
+      },
+      {
+        key: "PitchBend",
+        label: "PB",
+        title: "Pitch Bend",
+        icon: /* @__PURE__ */ React.createElement("svg", { width: "20", height: "14", viewBox: "0 0 20 14", fill: "none", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", strokeLinejoin: "round" }, /* @__PURE__ */ React.createElement("path", { d: "M1,13 Q6,13 10,7 Q14,1 17,1" }), /* @__PURE__ */ React.createElement("polyline", { points: "13,1 17,1 17,5" }))
+      },
+      {
+        key: "Note",
+        label: "\u2669",
+        title: "MIDI Note",
+        icon: /* @__PURE__ */ React.createElement("span", { style: { fontSize: 16, lineHeight: 1 } }, "\u2669")
+      }
+    ].map(({ key, label, title, icon }) => {
+      const active = focusLane.target === key;
+      return /* @__PURE__ */ React.createElement(
+        "button",
+        {
+          key,
+          onClick: () => eng.updateLane(focusLane.id, { target: key }),
+          title,
+          style: {
+            padding: "5px 6px",
+            minHeight: 36,
+            minWidth: 36,
+            border: `1px solid ${active ? paper.ink : paper.rule}`,
+            background: active ? paper.ink : "transparent",
+            color: active ? paper.bg : paper.ink70,
+            borderRadius: 2,
+            cursor: "pointer",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 2
+          }
+        },
+        icon,
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 9, fontFamily: "Inter Tight", letterSpacing: 0.3 } }, label)
+      );
+    }))), focusLane.target === "CC" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Label, { paper }, "CC number"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 6 } }, /* @__PURE__ */ React.createElement(
       Slider,
       {
         value: focusLane.targetDetail,
@@ -26121,25 +26252,26 @@
         },
         style: {
           position: "absolute",
-          right: 0,
+          left: 0,
           top: 0,
           bottom: 0,
           width: open ? 36 : "100%",
-          background: "transparent",
+          background: paper.bgDeep,
           border: "none",
-          borderLeft: `1px solid ${paper.rule}`,
+          borderRight: `1px solid ${paper.rule}`,
+          boxShadow: `inset -2px 0 0 ${paper.rule}`,
           cursor: "pointer",
           writingMode: "vertical-rl",
           transform: "rotate(180deg)",
           fontFamily: "Inter Tight",
-          fontSize: 10,
+          fontSize: 11,
           letterSpacing: 2,
-          color: paper.ink50,
+          color: paper.ink70,
           textTransform: "uppercase",
           padding: "14px 2px"
         }
       },
-      open ? "\u25C2" : "\u25B8 shape"
+      open ? "\u25B8" : "\u25C2 shape"
     ));
   }
   function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
@@ -26153,55 +26285,24 @@
       eng.addLane?.();
       setTimeout(() => setAddPending(false), 500);
     }, [addPending, canAdd, eng.addLane]);
-    if (!open) {
-      return /* @__PURE__ */ React.createElement("div", { style: {
-        width,
-        height,
-        flexShrink: 0,
-        borderLeft: `1px solid ${paper.rule}`,
-        background: paper.card,
-        display: "flex",
-        alignItems: "stretch",
-        position: "relative"
-      } }, /* @__PURE__ */ React.createElement(
-        "button",
-        {
-          onPointerDown: (e) => e.stopPropagation(),
-          onClick: (e) => {
-            e.stopPropagation();
-            setOpen(true);
-          },
-          title: "Show lane panel",
-          style: {
-            flex: 1,
-            background: "transparent",
-            border: "none",
-            cursor: "pointer",
-            writingMode: "vertical-rl",
-            transform: "rotate(180deg)",
-            fontFamily: "Inter Tight",
-            fontSize: 10,
-            letterSpacing: 2,
-            color: paper.ink50,
-            textTransform: "uppercase",
-            padding: "14px 2px",
-            position: "relative",
-            zIndex: 5
-          }
-        },
-        "\u25C2 lanes"
-      ));
-    }
     return /* @__PURE__ */ React.createElement("div", { style: {
       width,
       height,
       flexShrink: 0,
-      borderLeft: `1px solid ${paper.rule}`,
-      background: paper.card,
+      borderRight: `1px solid ${paper.rule}`,
+      background: open ? paper.card : "transparent",
+      position: "relative",
+      overflow: "hidden",
+      transition: "width 200ms ease-out"
+    } }, open && /* @__PURE__ */ React.createElement("div", { style: {
+      position: "absolute",
+      left: 0,
+      top: 0,
+      bottom: 0,
+      right: 36,
       display: "flex",
       flexDirection: "column",
-      overflowY: "auto",
-      position: "relative"
+      overflowY: "auto"
     } }, /* @__PURE__ */ React.createElement("div", { style: {
       padding: "10px 10px 6px",
       display: "flex",
@@ -26211,8 +26312,9 @@
       fontSize: 10,
       letterSpacing: 1.5,
       color: paper.ink50,
-      textTransform: "uppercase"
-    } }, /* @__PURE__ */ React.createElement("span", null, "Lanes"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 4 } }, canAdd && /* @__PURE__ */ React.createElement(
+      textTransform: "uppercase",
+      flexShrink: 0
+    } }, /* @__PURE__ */ React.createElement("span", null, "Lanes"), canAdd && /* @__PURE__ */ React.createElement(
       "button",
       {
         onPointerDown: (e) => e.stopPropagation(),
@@ -26220,8 +26322,8 @@
         title: "Add lane",
         disabled: addPending,
         style: {
-          width: 32,
-          height: 32,
+          width: 28,
+          height: 28,
           padding: 0,
           border: `1px solid ${paper.rule}`,
           background: paper.bg,
@@ -26241,36 +26343,7 @@
         }
       },
       addPending ? "\u2026" : "+"
-    ), /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        onPointerDown: (e) => e.stopPropagation(),
-        onClick: (e) => {
-          e.stopPropagation();
-          setOpen(false);
-        },
-        title: "Hide lane panel",
-        style: {
-          width: 32,
-          height: 32,
-          padding: 0,
-          border: `1px solid ${paper.rule}`,
-          background: paper.bg,
-          borderRadius: 2,
-          color: paper.ink70,
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontFamily: "Inter Tight",
-          fontSize: 12,
-          lineHeight: 1,
-          position: "relative",
-          zIndex: 5
-        }
-      },
-      "\u25B8"
-    ))), eng.lanes.map((l) => {
+    )), eng.lanes.map((l) => {
       const focused = eng.focus === l.id;
       return /* @__PURE__ */ React.createElement(
         "div",
@@ -26293,47 +26366,75 @@
             userSelect: "none"
           }
         },
-        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("span", { style: {
-          width: 12,
-          height: 12,
-          borderRadius: "50%",
-          flexShrink: 0,
-          background: l.enabled ? l.color : paper.bg,
-          border: l.enabled ? "none" : `2px solid ${l.color}`,
-          boxSizing: "border-box",
-          boxShadow: focused ? `0 0 0 2px ${paper.bg}, 0 0 0 3.5px ${l.color}` : "none",
-          opacity: l.enabled ? 1 : 0.7
-        } }), /* @__PURE__ */ React.createElement("span", { style: {
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ React.createElement(
+          "button",
+          {
+            onPointerDown: (e) => e.stopPropagation(),
+            onClick: (e) => {
+              e.stopPropagation();
+              eng.updateLane(l.id, { enabled: !l.enabled });
+            },
+            title: l.enabled ? "Mute lane" : "Unmute lane",
+            style: {
+              width: 16,
+              height: 16,
+              borderRadius: "50%",
+              flexShrink: 0,
+              background: l.enabled ? l.color : paper.bg,
+              border: `2px solid ${l.color}`,
+              boxSizing: "border-box",
+              boxShadow: focused ? `0 0 0 2px ${paper.bg}, 0 0 0 3.5px ${l.color}` : "none",
+              opacity: l.enabled ? 1 : 0.6,
+              cursor: "pointer",
+              padding: 0,
+              transition: "background 120ms, opacity 120ms"
+            }
+          }
+        ), /* @__PURE__ */ React.createElement("span", { style: {
           fontFamily: '"Instrument Serif", Georgia, serif',
           fontStyle: "italic",
-          fontSize: 18,
+          fontSize: 17,
           color: focused ? paper.ink : paper.ink70,
           lineHeight: 1,
           flex: 1,
-          // Single-property shorthand to avoid React's "mix shorthand
-          // and longhand" warning (line / colour combined here).
           textDecoration: l.enabled ? "none" : `line-through ${paper.ink30}`
         } }, "Lane ", l.id + 1), /* @__PURE__ */ React.createElement(
           "button",
           {
-            title: l.visible === false ? "Show on canvas" : "Hide from canvas",
             onPointerDown: (e) => e.stopPropagation(),
             onClick: (e) => {
               e.stopPropagation();
               eng.updateLane(l.id, { visible: l.visible === false ? true : false });
             },
+            title: l.visible === false ? "Show curve" : "Hide curve",
             style: {
-              background: "none",
+              flexShrink: 0,
+              padding: 2,
               border: "none",
-              padding: "4px 2px",
-              cursor: "pointer",
+              borderRadius: 2,
+              background: "transparent",
               color: l.visible === false ? paper.ink30 : paper.ink50,
-              fontSize: 14,
-              lineHeight: 1,
-              flexShrink: 0
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              transition: "color 120ms"
             }
           },
-          l.visible === false ? "\u25CB" : "\u25CF"
+          l.visible === false ? (
+            // Eye closed — upper arc + lashes
+            /* @__PURE__ */ React.createElement("svg", { width: 14, height: 10, viewBox: "0 0 14 10", fill: "none", stroke: "currentColor", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M1 4C3 1 5 0 7 0C9 0 11 1 13 4", strokeWidth: 1.3 }), /* @__PURE__ */ React.createElement("line", { x1: 3.5, y1: 6, x2: 3, y2: 8.5, strokeWidth: 1.1 }), /* @__PURE__ */ React.createElement("line", { x1: 7, y1: 6.5, x2: 7, y2: 9, strokeWidth: 1.1 }), /* @__PURE__ */ React.createElement("line", { x1: 10.5, y1: 6, x2: 11, y2: 8.5, strokeWidth: 1.1 }))
+          ) : (
+            // Eye open — almond outline + pupil
+            /* @__PURE__ */ React.createElement("svg", { width: 14, height: 10, viewBox: "0 0 14 10", fill: "none", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement(
+              "path",
+              {
+                d: "M1 5C3 1.5 5 0 7 0C9 0 11 1.5 13 5C11 8.5 9 10 7 10C5 10 3 8.5 1 5Z",
+                stroke: "currentColor",
+                strokeWidth: 1.3,
+                strokeLinejoin: "round"
+              }
+            ), /* @__PURE__ */ React.createElement("circle", { cx: 7, cy: 5, r: 2, fill: "currentColor" }))
+          )
         )),
         /* @__PURE__ */ React.createElement("div", { style: {
           fontFamily: "Inter Tight",
@@ -26341,18 +26442,12 @@
           letterSpacing: 0.8,
           color: paper.ink50,
           textTransform: "uppercase"
-        } }, l.target === "PitchBend" ? "Pitch Bend" : l.target, l.target === "CC" && ` \xB7 CC ${l.targetDetail}`, l.target === "Note" && ` \xB7 v${l.velocity}`),
+        } }, l.target === "PitchBend" ? "Pitch Bend" : l.target, l.target === "CC" && ` \xB7 CC ${l.targetDetail}`, l.target === "Note" && (() => {
+          const sc = window.SCALES?.find((s) => s.id === l.scaleId);
+          const root = window.pitchName?.(l.scaleRoot, eng.useFlats) ?? "";
+          return ` \xB7 ${root}${sc ? " " + sc.name : ""}`;
+        })()),
         focused && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 5, marginTop: 2 } }, /* @__PURE__ */ React.createElement(
-          "button",
-          {
-            onClick: (e) => {
-              e.stopPropagation();
-              eng.updateLane(l.id, { enabled: !l.enabled });
-            },
-            style: laneChip(paper, l.enabled)
-          },
-          l.enabled ? "On" : "Muted"
-        ), /* @__PURE__ */ React.createElement(
           ConfirmChip,
           {
             paper,
@@ -26399,22 +26494,38 @@
         color: l.color,
         fontVariantNumeric: "tabular-nums"
       } }, val));
-    })));
-  }
-  function laneChip(paper, active) {
-    return {
-      padding: "4px 8px",
-      minHeight: 28,
-      borderRadius: 2,
-      border: `1px solid ${paper.rule}`,
-      background: active ? paper.ink : "transparent",
-      color: active ? paper.bg : paper.ink70,
-      fontFamily: "Inter Tight",
-      fontSize: 10,
-      letterSpacing: 0.5,
-      textTransform: "uppercase",
-      cursor: "pointer"
-    };
+    }))), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onPointerDown: (e) => e.stopPropagation(),
+        onClick: (e) => {
+          e.stopPropagation();
+          setOpen(!open);
+        },
+        title: open ? "Hide lane panel" : "Show lane panel",
+        style: {
+          position: "absolute",
+          right: 0,
+          top: 0,
+          bottom: 0,
+          width: open ? 36 : "100%",
+          background: paper.bgDeep,
+          border: "none",
+          borderLeft: `1px solid ${paper.rule}`,
+          boxShadow: `inset 2px 0 0 ${paper.rule}`,
+          cursor: "pointer",
+          writingMode: "vertical-rl",
+          transform: "rotate(180deg)",
+          fontFamily: "Inter Tight",
+          fontSize: 11,
+          letterSpacing: 2,
+          color: paper.ink70,
+          textTransform: "uppercase",
+          padding: "14px 2px"
+        }
+      },
+      open ? "\u25B8" : "lanes \u25C2"
+    ));
   }
   function useConfirmTap(action, timeoutMs = 1500) {
     const [armed, setArmed] = React.useState(false);
@@ -26608,7 +26719,7 @@
           zIndex: 5
         }
       },
-      /* @__PURE__ */ React.createElement("svg", { width: 14, height: 16, viewBox: "0 0 14 16", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: 3, y: 7, width: 8, height: 8, rx: 1, fill: "currentColor", opacity: 0.9 }), /* @__PURE__ */ React.createElement("path", { d: "M3.5 7V5a3.5 3.5 0 017 0V7", fill: "none", stroke: "currentColor", strokeWidth: 1.4, strokeLinecap: "round" }), /* @__PURE__ */ React.createElement("line", { x1: 7, y1: 9, x2: 7, y2: 13, stroke: active ? "#FFFFFF" : "currentColor", strokeWidth: 0.9, opacity: 0.6 }), /* @__PURE__ */ React.createElement("line", { x1: 5, y1: 11, x2: 9, y2: 11, stroke: active ? "#FFFFFF" : "currentColor", strokeWidth: 0.9, opacity: 0.6 }))
+      /* @__PURE__ */ React.createElement("svg", { width: 14, height: 14, viewBox: "0 0 14 14", "aria-hidden": "true", fill: "none", stroke: "currentColor", strokeLinecap: "round" }, /* @__PURE__ */ React.createElement("line", { x1: 5, y1: 1, x2: 5, y2: 13, strokeWidth: 1.5 }), /* @__PURE__ */ React.createElement("line", { x1: 9, y1: 1, x2: 9, y2: 13, strokeWidth: 1.5 }), /* @__PURE__ */ React.createElement("line", { x1: 1, y1: 5, x2: 13, y2: 5, strokeWidth: 1.5 }), /* @__PURE__ */ React.createElement("line", { x1: 1, y1: 9, x2: 13, y2: 9, strokeWidth: 1.5 }))
     );
   }
   function CountPill({ value, paper }) {
@@ -26725,7 +26836,7 @@
           e.stopPropagation();
           if (onClick) onClick(e);
         },
-        title: `${axis} quantize ${active ? "on" : "off"}`,
+        title: `${axis} quantize ${active ? "on (click to unlock)" : "off (click to lock)"}`,
         style: {
           width: 36,
           height: 36,
@@ -26742,13 +26853,38 @@
           fontSize: 11,
           letterSpacing: 0.5,
           gap: 3,
-          // Own stacking context above the canvas div so spatial overlap doesn't
-          // create unexpected hit-test outcomes.
           position: "relative",
           zIndex: 5
         }
       },
-      /* @__PURE__ */ React.createElement("svg", { width: 10, height: 12, viewBox: "0 0 10 12" }, /* @__PURE__ */ React.createElement("rect", { x: 2, y: 5, width: 6, height: 7, rx: 1, fill: "currentColor", opacity: 0.9 }), /* @__PURE__ */ React.createElement("path", { d: `M2.5 5V3.5a2.5 2.5 0 015 0V5`, fill: "none", stroke: "currentColor", strokeWidth: 1.4, strokeLinecap: "round" })),
+      active ? (
+        // Closed padlock — body + U-shackle arcing upward (sweep=1 = clockwise
+        // in SVG y-down coords = visually upward from left arm to right arm)
+        /* @__PURE__ */ React.createElement("svg", { width: 14, height: 16, viewBox: "0 0 14 16", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: 1, y: 8, width: 12, height: 7, rx: 1.5, fill: "currentColor" }), /* @__PURE__ */ React.createElement(
+          "path",
+          {
+            d: "M4 8 L4 5.5 A3 3 0 0 1 10 5.5 L10 8",
+            fill: "none",
+            stroke: "currentColor",
+            strokeWidth: 2,
+            strokeLinecap: "round",
+            strokeLinejoin: "round"
+          }
+        ))
+      ) : (
+        // Open padlock — right arm raised above body, clearly unlatched
+        /* @__PURE__ */ React.createElement("svg", { width: 14, height: 16, viewBox: "0 0 14 16", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: 1, y: 8, width: 12, height: 7, rx: 1.5, fill: "currentColor", opacity: 0.55 }), /* @__PURE__ */ React.createElement(
+          "path",
+          {
+            d: "M4 8 L4 5.5 A3 3 0 0 1 10 5.5 L10 1.5",
+            fill: "none",
+            stroke: "currentColor",
+            strokeWidth: 2,
+            strokeLinecap: "round",
+            strokeLinejoin: "round"
+          }
+        ))
+      ),
       /* @__PURE__ */ React.createElement("span", null, axis)
     );
   }
@@ -26756,18 +26892,18 @@
     const noteSpan = focusLane ? Math.max(1, Math.round(((focusLane.rangeMax ?? 1) - (focusLane.rangeMin ?? 0)) * 127)) : 24;
     const yNotePresets = [
       { label: "chr", div: Math.min(127, noteSpan) },
-      { label: "oct", div: Math.max(2, Math.round(noteSpan / 12)) },
+      { label: "3rd", div: Math.max(2, Math.round(noteSpan / 4)) },
       { label: "5th", div: Math.max(2, Math.round(noteSpan / 7)) },
-      { label: "3rd", div: Math.max(2, Math.round(noteSpan / 4)) }
+      { label: "oct", div: Math.max(2, Math.round(noteSpan / 12)) }
     ];
     const yValuePresets = [
-      { label: "2", div: 2 },
-      { label: "4", div: 4 },
-      { label: "8", div: 8 },
+      { label: "24", div: 24 },
       { label: "16", div: 16 },
-      { label: "24", div: 24 }
+      { label: "8", div: 8 },
+      { label: "4", div: 4 },
+      { label: "2", div: 2 }
     ];
-    const showPresets = !!focusLane?.quantizeY;
+    const showPresets = true;
     const presets = focusLane?.target === "Note" ? yNotePresets : yValuePresets;
     const toggleY = () => focusLane && eng.updateLane(focusLane.id, { quantizeY: !focusLane.quantizeY });
     return /* @__PURE__ */ React.createElement("div", { style: {
@@ -26795,7 +26931,7 @@
         active: gridY === p.div,
         onClick: () => setGridY(p.div)
       }
-    ))), /* @__PURE__ */ React.createElement(GridBtn, { axis: "Y", denser: true, paper, onClick: () => setGridY((g) => Math.min(24, g + 2)) }), /* @__PURE__ */ React.createElement(CountPill, { value: gridY, paper }), /* @__PURE__ */ React.createElement(GridBtn, { axis: "Y", denser: false, paper, onClick: () => setGridY((g) => Math.max(2, g - 2)) }), /* @__PURE__ */ React.createElement(LockBtn, { axis: "Y", active: !!focusLane?.quantizeY, paper, onClick: toggleY }));
+    ))), /* @__PURE__ */ React.createElement(GridBtn, { axis: "Y", denser: true, paper, onClick: () => setGridY((g) => Math.min(24, g + 1)) }), /* @__PURE__ */ React.createElement(CountPill, { value: gridY, paper }), /* @__PURE__ */ React.createElement(GridBtn, { axis: "Y", denser: false, paper, onClick: () => setGridY((g) => Math.max(2, g - 1)) }), /* @__PURE__ */ React.createElement(LockBtn, { axis: "Y", active: !!focusLane?.quantizeY, paper, onClick: toggleY }));
   }
   function XAxisGutter({
     eng,
@@ -26843,7 +26979,7 @@
       justifyContent: "center",
       borderRight: `1px solid ${paper.rule}`,
       flexShrink: 0
-    } }, /* @__PURE__ */ React.createElement(BothBtn, { paper, active: bothActive, onClick: toggleBoth })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 3, padding: "0 8px" } }, /* @__PURE__ */ React.createElement(LockBtn, { axis: "X", active: !!focusLane?.quantizeX, paper, onClick: toggleX }), /* @__PURE__ */ React.createElement(GridBtn, { axis: "X", denser: false, paper, onClick: () => setGridX((g) => Math.max(2, g - 2)) }), /* @__PURE__ */ React.createElement(CountPill, { value: gridX, paper }), /* @__PURE__ */ React.createElement(GridBtn, { axis: "X", denser: true, paper, onClick: () => setGridX((g) => Math.min(32, g + 2)) }), eng.syncOn && focusLane?.quantizeX && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 3, marginLeft: 6 } }, xSyncPresets.map((p) => /* @__PURE__ */ React.createElement(
+    } }, /* @__PURE__ */ React.createElement(BothBtn, { paper, active: bothActive, onClick: toggleBoth })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 3, padding: "0 8px" } }, /* @__PURE__ */ React.createElement(LockBtn, { axis: "X", active: !!focusLane?.quantizeX, paper, onClick: toggleX }), /* @__PURE__ */ React.createElement(GridBtn, { axis: "X", denser: false, paper, onClick: () => setGridX((g) => Math.max(2, g - 1)) }), /* @__PURE__ */ React.createElement(CountPill, { value: gridX, paper }), /* @__PURE__ */ React.createElement(GridBtn, { axis: "X", denser: true, paper, onClick: () => setGridX((g) => Math.min(32, g + 1)) }), eng.syncOn && focusLane?.quantizeX && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 3, marginLeft: 6 } }, xSyncPresets.map((p) => /* @__PURE__ */ React.createElement(
       PresetBtn,
       {
         key: p.label,
@@ -27038,31 +27174,171 @@
       textTransform: "uppercase"
     } }, "MIDI IN"));
   }
+  var BUILTIN_QURVES = [
+    { id: "b0", name: "slow arch", target: "CC", curve: makeSineCurve(64, 0.5, 0.4, 0.8, 0) },
+    { id: "b1", name: "fast zigzag", target: "CC", curve: makeSineCurve(64, 0.5, 0.35, 3, 0) },
+    { id: "b2", name: "pentatonic glide", target: "Note", curve: makeSineCurve(64, 0.5, 0.3, 1.5, Math.PI / 4) },
+    { id: "b3", name: "breath swell", target: "Aftertouch", curve: makeSineCurve(64, 0.4, 0.35, 0.6, Math.PI / 6) },
+    { id: "b4", name: "stutter", target: "CC", curve: makeSineCurve(64, 0.5, 0.45, 6, 0) }
+  ];
+  var LIBRARY_KEY = "dq-library";
+  function loadLibrary() {
+    try {
+      const raw = localStorage?.getItem(LIBRARY_KEY);
+      if (!raw) return [];
+      return JSON.parse(raw).map((q) => ({
+        ...q,
+        curve: q.curve ? new Float32Array(q.curve) : null
+      }));
+    } catch {
+      return [];
+    }
+  }
+  function persistLibrary(items) {
+    try {
+      localStorage?.setItem(LIBRARY_KEY, JSON.stringify(
+        items.map((q) => ({ ...q, curve: q.curve ? Array.from(q.curve) : null }))
+      ));
+    } catch {
+    }
+  }
   function QurveShelf({ eng, paper, focusLane }) {
-    const saved = [
-      { name: "slow arch", target: "CC", curve: makeSineCurve(64, 0.5, 0.4, 0.8, 0) },
-      { name: "fast zigzag", target: "CC", curve: makeSineCurve(64, 0.5, 0.35, 3, 0) },
-      { name: "pentatonic glide", target: "Note", curve: makeSineCurve(64, 0.5, 0.3, 1.5, Math.PI / 4) },
-      { name: "breath swell", target: "Aftertouch", curve: makeSineCurve(64, 0.4, 0.35, 0.6, Math.PI / 6) },
-      { name: "stutter", target: "CC", curve: makeSineCurve(64, 0.5, 0.45, 6, 0) }
-    ];
+    const [library, setLibraryRaw] = React.useState(loadLibrary);
+    const setLibrary = React.useCallback((next) => {
+      const arr = typeof next === "function" ? next(library) : next;
+      setLibraryRaw(arr);
+      persistLibrary(arr);
+    }, [library]);
+    const [saving, setSaving] = React.useState(false);
+    const [saveName, setSaveName] = React.useState("");
+    const nameRef = React.useRef(null);
+    const canSave = !!focusLane?.curve;
+    const startSave = () => {
+      if (!canSave) return;
+      const d = /* @__PURE__ */ new Date();
+      const auto = `${focusLane.target} ${d.toLocaleDateString("en", { month: "short", day: "numeric" })}`;
+      setSaveName(auto);
+      setSaving(true);
+      setTimeout(() => {
+        nameRef.current?.select();
+      }, 0);
+    };
+    const commitSave = () => {
+      if (!focusLane?.curve) {
+        setSaving(false);
+        return;
+      }
+      const entry = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        name: saveName.trim() || "Untitled",
+        target: focusLane.target,
+        curve: focusLane.curve,
+        quantizeX: focusLane.quantizeX,
+        quantizeY: focusLane.quantizeY,
+        xDivisions: focusLane.xDivisions,
+        yDivisions: focusLane.yDivisions,
+        rangeMin: focusLane.rangeMin,
+        rangeMax: focusLane.rangeMax,
+        scaleId: focusLane.scaleId,
+        scaleRoot: focusLane.scaleRoot,
+        scaleMask: focusLane.scaleMask
+      };
+      setLibrary((prev) => [...prev, entry]);
+      setSaving(false);
+      setSaveName("");
+    };
+    const deleteItem = React.useCallback((id) => {
+      setLibrary((prev) => prev.filter((q) => q.id !== id));
+    }, [setLibrary]);
+    const allItems = [...BUILTIN_QURVES, ...library];
     return /* @__PURE__ */ React.createElement("div", { style: {
       height: "100%",
       padding: "10px 14px",
       display: "flex",
       flexDirection: "column",
       gap: 8
-    } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: {
+    } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, flexShrink: 0 } }, /* @__PURE__ */ React.createElement("div", { style: {
       fontFamily: "Inter Tight",
       fontSize: 10,
       letterSpacing: 1.5,
       color: paper.ink50,
       textTransform: "uppercase"
-    } }, "Qurve Library"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }), /* @__PURE__ */ React.createElement(Btn, { paper, small: true, tone: "active" }, "Save current +")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 } }, saved.map((q, i) => /* @__PURE__ */ React.createElement(
+    } }, "Qurve Library"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }), saving ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        ref: nameRef,
+        value: saveName,
+        onChange: (e) => setSaveName(e.target.value),
+        onKeyDown: (e) => {
+          if (e.key === "Enter") commitSave();
+          if (e.key === "Escape") {
+            setSaving(false);
+            setSaveName("");
+          }
+        },
+        placeholder: "Name\u2026",
+        style: {
+          fontFamily: '"Instrument Serif", Georgia, serif',
+          fontStyle: "italic",
+          fontSize: 13,
+          border: `1px solid ${paper.amber}`,
+          borderRadius: 2,
+          background: paper.card,
+          color: paper.ink,
+          padding: "3px 8px",
+          width: 150,
+          outline: "none"
+        }
+      }
+    ), /* @__PURE__ */ React.createElement(Btn, { paper, small: true, tone: "active", onClick: commitSave }, "Save"), /* @__PURE__ */ React.createElement(Btn, { paper, small: true, onClick: () => {
+      setSaving(false);
+      setSaveName("");
+    } }, "\u2715")) : /* @__PURE__ */ React.createElement(
+      Btn,
+      {
+        paper,
+        small: true,
+        tone: canSave ? "active" : void 0,
+        onClick: startSave,
+        title: canSave ? "Save current curve to library" : "Draw a curve first",
+        style: { opacity: canSave ? 1 : 0.4 }
+      },
+      "Save current +"
+    )), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 } }, allItems.map((q) => /* @__PURE__ */ React.createElement(
+      QurveCard,
+      {
+        key: q.id,
+        q,
+        paper,
+        focusLane,
+        onLoad: () => {
+          const patch = { curve: q.curve };
+          if (q.quantizeX != null) patch.quantizeX = q.quantizeX;
+          if (q.quantizeY != null) patch.quantizeY = q.quantizeY;
+          if (q.xDivisions != null) patch.xDivisions = q.xDivisions;
+          if (q.yDivisions != null) patch.yDivisions = q.yDivisions;
+          if (q.rangeMin != null) patch.rangeMin = q.rangeMin;
+          if (q.rangeMax != null) patch.rangeMax = q.rangeMax;
+          if (q.scaleId != null) patch.scaleId = q.scaleId;
+          if (q.scaleRoot != null) patch.scaleRoot = q.scaleRoot;
+          if (q.scaleMask != null) patch.scaleMask = q.scaleMask;
+          eng.updateLane(eng.focus, patch);
+        },
+        onDelete: q.id.startsWith("b") ? null : () => deleteItem(q.id)
+      }
+    ))));
+  }
+  function QurveCard({ q, paper, focusLane, onLoad, onDelete }) {
+    const [pendingDelete, setPendingDelete] = React.useState(false);
+    React.useEffect(() => {
+      if (!pendingDelete) return;
+      const t = setTimeout(() => setPendingDelete(false), 2e3);
+      return () => clearTimeout(t);
+    }, [pendingDelete]);
+    return /* @__PURE__ */ React.createElement(
       "div",
       {
-        key: i,
-        onClick: () => eng.setCurve(eng.focus, q.curve),
+        onClick: onLoad,
         style: {
           flexShrink: 0,
           width: 110,
@@ -27075,7 +27351,8 @@
           flexDirection: "column",
           overflow: "hidden",
           padding: "6px 6px 4px",
-          gap: 4
+          gap: 4,
+          position: "relative"
         }
       },
       /* @__PURE__ */ React.createElement("svg", { width: 98, height: 50, style: { flex: 1 } }, /* @__PURE__ */ React.createElement(
@@ -27089,36 +27366,63 @@
           width: 1.5
         }
       )),
-      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 5 } }, /* @__PURE__ */ React.createElement("div", { style: {
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 4 } }, /* @__PURE__ */ React.createElement("div", { style: {
         fontFamily: '"Instrument Serif", Georgia, serif',
         fontStyle: "italic",
         fontSize: 12,
         color: paper.ink,
         lineHeight: 1,
         overflow: "hidden",
-        whiteSpace: "nowrap"
-      } }, q.name)),
+        whiteSpace: "nowrap",
+        flex: 1
+      } }, q.name), onDelete && (pendingDelete ? /* @__PURE__ */ React.createElement(
+        "span",
+        {
+          onClick: (e) => {
+            e.stopPropagation();
+            onDelete();
+          },
+          style: {
+            fontSize: 9,
+            color: paper.laneRose,
+            fontFamily: "Inter Tight",
+            cursor: "pointer",
+            flexShrink: 0,
+            letterSpacing: 0.3
+          }
+        },
+        "del?"
+      ) : /* @__PURE__ */ React.createElement(
+        "span",
+        {
+          onClick: (e) => {
+            e.stopPropagation();
+            setPendingDelete(true);
+          },
+          style: {
+            fontSize: 11,
+            color: paper.ink30,
+            fontFamily: "Inter Tight",
+            cursor: "pointer",
+            flexShrink: 0,
+            lineHeight: 1
+          }
+        },
+        "\xD7"
+      ))),
       /* @__PURE__ */ React.createElement("div", { style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 4,
         fontFamily: "Inter Tight",
         fontSize: 9,
-        letterSpacing: 0.8,
+        letterSpacing: 0.6,
         color: paper.ink50,
-        textTransform: "uppercase"
-      } }, q.target)
-    )), /* @__PURE__ */ React.createElement("div", { style: {
-      flexShrink: 0,
-      width: 110,
-      height: 90,
-      border: `1px dashed ${paper.rule}`,
-      borderRadius: 2,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      color: paper.ink30,
-      cursor: "pointer",
-      fontFamily: '"Caveat", cursive',
-      fontSize: 18
-    } }, "+ save")));
+        textTransform: "uppercase",
+        overflow: "hidden",
+        whiteSpace: "nowrap"
+      } }, /* @__PURE__ */ React.createElement("span", null, q.target), (q.quantizeX || q.quantizeY) && /* @__PURE__ */ React.createElement("span", { style: { color: paper.amber, letterSpacing: 0 } }, q.quantizeX ? `\xD7${q.xDivisions}` : "", q.quantizeX && q.quantizeY ? "\xB7" : "", q.quantizeY ? `\xF7${q.yDivisions}` : ""), q.rangeMin != null && q.rangeMax != null && /* @__PURE__ */ React.createElement("span", { style: { color: paper.ink30 } }, Math.round(q.rangeMin * 100), "\u2013", Math.round(q.rangeMax * 100), "%"))
+    );
   }
   function JuceBottomBar({ eng, paper, h }) {
     const focusLane = eng.lanes.find((l) => l.id === eng.focus);

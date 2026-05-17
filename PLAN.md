@@ -244,7 +244,7 @@ On tap, expand a small floating panel (a JUCE `Component` with `setAlwaysOnTop(t
 
 ## Implementation Order
 
-*(Status updated 2026-03. ✅ = shipped, ⚠️ = in progress / pending fix.)*
+*(Status updated 2026-05. ✅ = shipped, ⚠️ = in progress / pending fix.)*
 
 | Priority | Task | Status |
 |---|---|---|
@@ -262,9 +262,9 @@ On tap, expand a small floating panel (a JUCE `Component` with `setAlwaysOnTop(t
 | — | Per-lane playheads in CurveDisplay | ✅ |
 | — | Sync-mode pause latch (_userManualPauseInSync) | ✅ |
 | — | updateLaneSnapshot (hot-swap params without redraw) | ✅ |
-| — | Bitmask convention: C=MSB, B=LSB | ⚠️ pending |
-| — | Playback direction in sync mode (buttons non-functional) | ⚠️ pending |
-| — | AudioQueue -50 noise (skip probe, use session.sampleRate) | ⚠️ pending |
-| 10 | Message type icons in SymbolLF | PluginEditor.cpp |
+| — | Bitmask convention: C=MSB, B=LSB | ✅ (confirmed correct throughout engine, lattice, tokens.jsx) |
+| — | Default to Light mode | ✅ (all `_lightMode` members initialize to `true`) |
+| — | Playback direction in sync mode (buttons non-functional) | ✅ fixed: bindPlaybackToLane now reads/writes global param when useGlobalPlayback=true |
+| — | AudioQueue -50 noise (skip probe, use session.sampleRate) | ✅ fixed: getSampleRate() now always returns session.sampleRate |
 
 Items 1–5 can ship independently without the multilane refactor. Items 6–10 are the multilane overhaul.

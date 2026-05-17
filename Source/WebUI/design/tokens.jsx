@@ -1,4 +1,4 @@
-// Design tokens — Sketchbook aesthetic (warm paper, light only)
+// Design tokens — Sketchbook aesthetic (warm paper)
 // Shared between v1 "Sketchbook" and v2 "Studio"
 
 const PAPER = {
@@ -11,7 +11,7 @@ const PAPER = {
   // ink
   ink:     '#2D2620',
   ink70:   '#574E44',
-  ink50:   '#857870',
+  ink50:   '#6B5E55',  // was #857870 — lifted to meet WCAG AA (5.5:1 on bg)
   ink30:   '#B3A99E',
   // accents
   amber:   '#C4873A',
@@ -20,12 +20,34 @@ const PAPER = {
   laneInk:   '#3A4060',
   laneRose:  '#C4624A',
   laneMoss:  '#4A7A55',
+  lanePlum:  '#6B4F7C',
 };
 
+const PAPER_DARK = {
+  bg:       '#1A1A24',
+  bgDeep:   '#12121A',
+  card:     '#22222E',
+  rule:     '#484862',  // was #3A3A50 — brighter so borders read clearly
+  ruleFaint:'#32324A',  // was #2A2A3C
+  ink:      '#DCDCE8',
+  ink70:    '#A8A8C0',
+  ink50:    '#9898B4',  // was #787890 — lifted to meet WCAG AA (6.1:1 on bg)
+  ink30:    '#6E6E88',  // was #505068 — lifted for better legibility
+  amber:    '#E8A838',
+  amberInk: '#E8C878',
+  laneInk:  '#4A90E2',
+  laneRose: '#E8A838',
+  laneMoss: '#5CB85C',
+  lanePlum: '#B888D4',
+};
+
+// Each lane has light + dark color variants so the theme toggle can update
+// rendering without reinitialising the engine.  dash is shared across themes.
 const LANES = [
-  { id: 0, name: 'One',   color: PAPER.laneInk,  tint: 'oklch(88% 0.02 250)', dash: '0'     }, // solid
-  { id: 1, name: 'Two',   color: PAPER.laneRose, tint: 'oklch(92% 0.03  25)', dash: '10 4'  }, // long-dash
-  { id: 2, name: 'Three', color: PAPER.laneMoss, tint: 'oklch(91% 0.03 145)', dash: '6 3 2 3' }, // dot-dash
+  { id: 0, name: 'One',   color: PAPER.laneInk,  colorDark: PAPER_DARK.laneInk,  tint: 'oklch(88% 0.02 250)', tintDark: 'rgba(74,144,226,0.13)',  dash: '0'       }, // solid
+  { id: 1, name: 'Two',   color: PAPER.laneRose, colorDark: PAPER_DARK.laneRose, tint: 'oklch(92% 0.03  25)', tintDark: 'rgba(232,168,56,0.13)',  dash: '10 4'    }, // long-dash
+  { id: 2, name: 'Three', color: PAPER.laneMoss, colorDark: PAPER_DARK.laneMoss, tint: 'oklch(91% 0.03 145)', tintDark: 'rgba(92,184,92,0.13)',   dash: '6 3 2 3' }, // dash-dot
+  { id: 3, name: 'Four',  color: PAPER.lanePlum, colorDark: PAPER_DARK.lanePlum, tint: 'oklch(90% 0.03 295)', tintDark: 'rgba(184,136,212,0.13)', dash: '3 4'     }, // short-dot
 ];
 
 // Scale presets — pitch-class bitmasks (MSB = root, bit 11 = interval 0).
@@ -132,7 +154,7 @@ function togglePc(mask, pc) {
 }
 
 Object.assign(window, {
-  PAPER, LANES, SCALES,
+  PAPER, PAPER_DARK, LANES, SCALES,
   PITCH_NAMES, PITCH_SHORT, PITCH_SHARP, PITCH_FLAT,
   pitchName,
   pcActive, togglePc,

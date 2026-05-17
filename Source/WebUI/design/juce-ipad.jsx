@@ -84,7 +84,24 @@ function formatDepth(lane) {
 
 function JuceIPadStudio({ width = 1024, height = 768 }) {
   const eng = useDrawnQurveEngine({ mode: 'standard' });
-  const paper = window.PAPER;
+
+  // Theme — persisted in localStorage so it survives plugin reload.
+  const [useDark, setUseDarkRaw] = React.useState(
+    () => (typeof localStorage !== 'undefined') && localStorage.getItem('dq-theme') === 'dark'
+  );
+  const setUseDark = React.useCallback((next) => {
+    const dark = typeof next === 'function' ? next(useDark) : next;
+    setUseDarkRaw(dark);
+    try { localStorage.setItem('dq-theme', dark ? 'dark' : 'light'); } catch (_) {}
+    // Update lane display colours in engine state without reinitialising.
+    const lanes = window.LANES || [];
+    lanes.forEach((ldef, i) => {
+      const newColor = dark ? (ldef.colorDark || ldef.color) : ldef.color;
+      eng.updateLane(i, { color: newColor });
+    });
+  }, [useDark, eng]);
+
+  const paper = useDark ? (window.PAPER_DARK || window.PAPER) : window.PAPER;
   const focusLane = eng.lanes.find(l => l.id === eng.focus);
 
   const TOP_H = 52;
@@ -97,9 +114,9 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
   // Collapsed strips are 44 px wide so the entire strip is a >= 44 pt iOS
   // touch target (audit F-01).  The visual chevron + label stay centred in
   // the strip; the wider hit area is the whole div.
-  const LEFT_W = leftOpen ? 256 : 44;
+  const LEFT_W = leftOpen ? 160 : 44;
   const [rightOpen, setRightOpen] = React.useState(true);
-  const RIGHT_W = rightOpen ? 148 : 44;
+  const RIGHT_W = rightOpen ? 256 : 44;
 
   // Mutually exclusive bottom panels — opening one closes the other so the
   // canvas can never collapse to ~148 px under both (audit F-14).  Wrap the
@@ -143,6 +160,11 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
     if (focusLane?.target === 'Note' && prevTarget.current !== 'Note') {
       setDiscoveryVisible(true);
       setTimeout(() => setDiscoveryVisible(false), 4000);
+    }
+    // Auto-close the scale panel when the focused lane is no longer Note mode
+    // so the open panel doesn't leave an empty gap in the layout.
+    if (focusLane?.target !== 'Note' && prevTarget.current === 'Note') {
+      setScaleOpen(false);
     }
     prevTarget.current = focusLane?.target;
   }, [focusLane?.target]);
@@ -217,32 +239,34 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
   }, []);
 
   return (
-    <div style={{
+    <div
+      onContextMenu={e => e.preventDefault()}
+      style={{
       width, height,
       background: paper.bg,
       fontFamily: 'Inter Tight, Inter, system-ui, sans-serif',
       color: paper.ink,
       display: 'flex', flexDirection: 'column',
       position: 'relative', overflow: 'hidden',
-      backgroundImage: `
-        radial-gradient(circle at 15% 30%, oklch(94% 0.02 65 / 0.4) 0, transparent 50%),
-        radial-gradient(circle at 80% 70%, oklch(95% 0.025 90 / 0.3) 0, transparent 40%)
-      `,
+      backgroundImage: useDark
+        ? `radial-gradient(circle at 15% 30%, rgba(74,100,160,0.10) 0, transparent 50%),
+           radial-gradient(circle at 80% 70%, rgba(60,80,140,0.08) 0, transparent 40%)`
+        : `radial-gradient(circle at 15% 30%, oklch(94% 0.02 65 / 0.4) 0, transparent 50%),
+           radial-gradient(circle at 80% 70%, oklch(95% 0.025 90 / 0.3) 0, transparent 40%)`,
     }}>
 
       {/* ── Top bar ── */}
       <JuceTopBar eng={eng} paper={paper} h={TOP_H}
-        helpOpen={helpOpen} setHelpOpen={setHelpOpen} />
+        helpOpen={helpOpen} setHelpOpen={setHelpOpen}
+        useDark={useDark} setUseDark={setUseDark} />
 
       {/* ── Main row ── */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
 
-        {/* Left shape well */}
-        <JuceShapeWell
-          open={leftOpen} setOpen={setLeftOpen}
-          eng={eng} paper={paper} focusLane={focusLane}
-          width={LEFT_W}
-        />
+        {/* Left lane panel */}
+        <JuceLanePanel eng={eng} paper={paper} width={LEFT_W}
+          height={height - TOP_H - BOTTOM_H}
+          open={leftOpen} setOpen={setLeftOpen} />
 
         {/* Canvas stack — Y gutter + canvas row above X gutter row */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -306,18 +330,20 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
           }}>
             {SCALE_H > 0 && focusLane?.target === 'Note' && (
               <div style={{
-                padding: '12px 18px', display: 'flex', gap: 18,
+                padding: '10px 12px', display: 'flex', gap: 12,
                 alignItems: 'stretch', height: '100%',
                 boxSizing: 'border-box',
+                minWidth: 520, overflowX: 'auto',
               }}>
                 <ChromaticWheel lane={focusLane} updateLane={eng.updateLane}
-                  paper={paper} size={Math.min(220, SCALE_H - 24)}
+                  paper={paper} size={Math.min(180, SCALE_H - 20)}
                   useFlats={eng.useFlats} />
 
                 <div style={{
-                  width: 220, flexShrink: 0,
-                  borderLeft: `1px dashed ${paper.rule}`, paddingLeft: 18,
+                  width: 170, flexShrink: 0,
+                  borderLeft: `1px dashed ${paper.rule}`, paddingLeft: 12,
                   display: 'flex', flexDirection: 'column', minHeight: 0,
+                  overflow: 'hidden',
                 }}>
                   <div style={{
                     fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 1.5,
@@ -328,9 +354,9 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
                 </div>
 
                 <div style={{
-                  flex: 1, minWidth: 0,
-                  borderLeft: `1px dashed ${paper.rule}`, paddingLeft: 18,
-                  display: 'flex', flexDirection: 'column', gap: 12,
+                  flex: 1, minWidth: 110,
+                  borderLeft: `1px dashed ${paper.rule}`, paddingLeft: 12,
+                  display: 'flex', flexDirection: 'column', gap: 10,
                   overflowY: 'auto',
                 }}>
                   <div style={{
@@ -413,10 +439,12 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
           </div>
         </div>
 
-        {/* Right lane panel — always visible */}
-        <JuceLanePanel eng={eng} paper={paper} width={RIGHT_W}
-          height={height - TOP_H - BOTTOM_H}
-          open={rightOpen} setOpen={setRightOpen} />
+        {/* Right shape well */}
+        <JuceShapeWell
+          open={rightOpen} setOpen={setRightOpen}
+          eng={eng} paper={paper} focusLane={focusLane}
+          width={RIGHT_W}
+        />
       </div>
 
       {/* ── Bottom bar ── */}
@@ -433,7 +461,7 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
 // and "ScalePlugin sync" placeholder buttons (F.3/F.4 roadmap items) were
 // removed — they consumed ~150 px and drove no real behaviour.  They will
 // return as real controls when the features are implemented.
-function JuceTopBar({ eng, paper, h, helpOpen, setHelpOpen }) {
+function JuceTopBar({ eng, paper, h, helpOpen, setHelpOpen, useDark, setUseDark }) {
   return (
     <div style={{
       height: h, display: 'flex', alignItems: 'center',
@@ -514,6 +542,12 @@ function JuceTopBar({ eng, paper, h, helpOpen, setHelpOpen }) {
         onClick={() => setHelpOpen(!helpOpen)} title="Quick reference (? key)">
         <span style={{ fontSize: 14 }}>?</span>
       </IconBtn>
+      {/* Theme toggle — ☾ in light mode (offers dark), ☼ in dark mode (offers light) */}
+      <IconBtn paper={paper} size={36} active={useDark}
+        onClick={() => setUseDark(d => !d)}
+        title={useDark ? 'Switch to light mode' : 'Switch to dark mode'}>
+        <span style={{ fontSize: 15 }}>{useDark ? '☼' : '☾'}</span>
+      </IconBtn>
     </div>
   );
 }
@@ -551,14 +585,14 @@ function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
     <div style={{
       width, flexShrink: 0, display: 'flex',
       transition: 'width 200ms ease-out',
-      borderRight: `1px solid ${paper.rule}`,
+      borderLeft: `1px solid ${paper.rule}`,
       background: open ? paper.card : 'transparent',
       position: 'relative', overflow: 'hidden',
     }}>
       {open && focusLane && (
-        // paddingRight: 48 keeps all content clear of the 36 px collapse-tab handle
-        // that is absolutely positioned at the right edge of this 256 px panel.
-        <div style={{ width: 256, padding: '14px 48px 14px 12px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        // paddingLeft: 48 keeps all content clear of the 36 px collapse-tab handle
+        // that is absolutely positioned at the left edge of this panel.
+        <div style={{ width: 256, padding: '14px 12px 14px 48px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{
             fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 1.5,
             color: paper.ink50, textTransform: 'uppercase', marginBottom: 2,
@@ -567,19 +601,43 @@ function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
           {/* Output type */}
           <div>
             <Label paper={paper}>Output</Label>
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
-              {['CC', 'Aftertouch', 'PitchBend', 'Note'].map(t => (
-                <button key={t}
-                  onClick={() => eng.updateLane(focusLane.id, { target: t })}
-                  style={{
-                    padding: '7px 10px', minHeight: 36,
-                    border: `1px solid ${focusLane.target === t ? paper.ink : paper.rule}`,
-                    background: focusLane.target === t ? paper.ink : 'transparent',
-                    color: focusLane.target === t ? paper.bg : paper.ink70,
-                    borderRadius: 2, fontSize: 11, fontFamily: 'Inter Tight',
-                    cursor: 'pointer',
-                  }}>{t === 'Aftertouch' ? 'AT' : t === 'PitchBend' ? 'PB' : t}</button>
-              ))}
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'nowrap', marginTop: 6 }}>
+              {[
+                { key: 'CC',          label: 'CC',  title: 'Continuous Controller',
+                  icon: <svg width="22" height="12" viewBox="0 0 22 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                    <path d="M0,6 C2.5,6 2.5,1.5 4.5,1.5 C6.5,1.5 6.5,10.5 8.5,10.5 C10.5,10.5 10.5,1.5 12.5,1.5 C14.5,1.5 14.5,10.5 16.5,10.5 C18.5,10.5 18.5,6 22,6" />
+                  </svg> },
+                { key: 'Aftertouch',  label: 'AT',  title: 'Aftertouch (channel pressure)',
+                  icon: <svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="1" y="0.8" width="14" height="2.4" rx="1.2" fill="currentColor" stroke="none" />
+                    <line x1="8" y1="5" x2="8" y2="10.5" />
+                    <polyline points="5,8 8,13 11,8" />
+                  </svg> },
+                { key: 'PitchBend',   label: 'PB',  title: 'Pitch Bend',
+                  icon: <svg width="20" height="14" viewBox="0 0 20 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1,13 Q6,13 10,7 Q14,1 17,1" />
+                    <polyline points="13,1 17,1 17,5" />
+                  </svg> },
+                { key: 'Note',        label: '♩',   title: 'MIDI Note',
+                  icon: <span style={{ fontSize: 16, lineHeight: 1 }}>♩</span> },
+              ].map(({ key, label, title, icon }) => {
+                const active = focusLane.target === key;
+                return (
+                  <button key={key} onClick={() => eng.updateLane(focusLane.id, { target: key })}
+                    title={title}
+                    style={{
+                      padding: '5px 6px', minHeight: 36, minWidth: 36,
+                      border: `1px solid ${active ? paper.ink : paper.rule}`,
+                      background: active ? paper.ink : 'transparent',
+                      color: active ? paper.bg : paper.ink70,
+                      borderRadius: 2, cursor: 'pointer',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                    }}>
+                    {icon}
+                    <span style={{ fontSize: 9, fontFamily: 'Inter Tight', letterSpacing: 0.3 }}>{label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -868,16 +926,17 @@ function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
         style={{
-        position: 'absolute', right: 0, top: 0, bottom: 0,
+        position: 'absolute', left: 0, top: 0, bottom: 0,
         width: open ? 36 : '100%',
-        background: 'transparent', border: 'none',
-        borderLeft: `1px solid ${paper.rule}`,
+        background: paper.bgDeep, border: 'none',
+        borderRight: `1px solid ${paper.rule}`,
+        boxShadow: `inset -2px 0 0 ${paper.rule}`,
         cursor: 'pointer',
         writingMode: 'vertical-rl', transform: 'rotate(180deg)',
-        fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 2,
-        color: paper.ink50, textTransform: 'uppercase',
+        fontFamily: 'Inter Tight', fontSize: 11, letterSpacing: 2,
+        color: paper.ink70, textTransform: 'uppercase',
         padding: '14px 2px',
-      }}>{open ? '◂' : '▸ shape'}</button>
+      }}>{open ? '▸' : '◂ shape'}</button>
     </div>
   );
 }
@@ -902,85 +961,50 @@ function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
     setTimeout(() => setAddPending(false), 500);
   }, [addPending, canAdd, eng.addLane]);
 
-  // Collapsed mode — show only a vertical "▸ lanes" tab so the user can
-  // reclaim canvas width.  Mirrors JuceShapeWell's collapsed handle.
-  if (!open) {
-    return (
-      <div style={{
-        width, height, flexShrink: 0,
-        borderLeft: `1px solid ${paper.rule}`,
-        background: paper.card,
-        display: 'flex', alignItems: 'stretch',
-        position: 'relative',
-      }}>
-        <button
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => { e.stopPropagation(); setOpen(true); }}
-          title="Show lane panel"
-          style={{
-            flex: 1, background: 'transparent', border: 'none',
-            cursor: 'pointer',
-            writingMode: 'vertical-rl', transform: 'rotate(180deg)',
-            fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 2,
-            color: paper.ink50, textTransform: 'uppercase',
-            padding: '14px 2px',
-            position: 'relative', zIndex: 5,
-          }}>◂ lanes</button>
-      </div>
-    );
-  }
-
   return (
     <div style={{
       width, height, flexShrink: 0,
-      borderLeft: `1px solid ${paper.rule}`,
-      background: paper.card,
-      display: 'flex', flexDirection: 'column',
-      overflowY: 'auto',
-      position: 'relative',
+      borderRight: `1px solid ${paper.rule}`,
+      background: open ? paper.card : 'transparent',
+      position: 'relative', overflow: 'hidden',
+      transition: 'width 200ms ease-out',
     }}>
-      <div style={{
-        padding: '10px 10px 6px',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 1.5,
-        color: paper.ink50, textTransform: 'uppercase',
-      }}>
-        <span>Lanes</span>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {canAdd && (
-            <button
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={handleAddLane}
-              title="Add lane"
-              disabled={addPending}
-              style={{
-                width: 32, height: 32, padding: 0,
-                border: `1px solid ${paper.rule}`,
-                background: paper.bg, borderRadius: 2,
-                color: addPending ? paper.ink30 : paper.ink70,
-                cursor: addPending ? 'default' : 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontFamily: 'Inter Tight', fontSize: 16, lineHeight: 1,
-                position: 'relative', zIndex: 5,
-                opacity: addPending ? 0.5 : 1,
-                transition: 'opacity 150ms',
-              }}>{addPending ? '…' : '+'}</button>
-          )}
-          <button
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); setOpen(false); }}
-            title="Hide lane panel"
-            style={{
-              width: 32, height: 32, padding: 0,
-              border: `1px solid ${paper.rule}`,
-              background: paper.bg, borderRadius: 2,
-              color: paper.ink70, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'Inter Tight', fontSize: 12, lineHeight: 1,
-              position: 'relative', zIndex: 5,
-            }}>▸</button>
-        </div>
-      </div>
+      {/* Content — only rendered when open; positioned so it stays clear of
+          the 36 px tab handle on the right edge. */}
+      {open && (
+        <div style={{
+          position: 'absolute', left: 0, top: 0, bottom: 0, right: 36,
+          display: 'flex', flexDirection: 'column',
+          overflowY: 'auto',
+        }}>
+          <div style={{
+            padding: '10px 10px 6px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 1.5,
+            color: paper.ink50, textTransform: 'uppercase',
+            flexShrink: 0,
+          }}>
+            <span>Lanes</span>
+            {canAdd && (
+              <button
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={handleAddLane}
+                title="Add lane"
+                disabled={addPending}
+                style={{
+                  width: 28, height: 28, padding: 0,
+                  border: `1px solid ${paper.rule}`,
+                  background: paper.bg, borderRadius: 2,
+                  color: addPending ? paper.ink30 : paper.ink70,
+                  cursor: addPending ? 'default' : 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: 'Inter Tight', fontSize: 16, lineHeight: 1,
+                  position: 'relative', zIndex: 5,
+                  opacity: addPending ? 0.5 : 1,
+                  transition: 'opacity 150ms',
+                }}>{addPending ? '…' : '+'}</button>
+            )}
+          </div>
 
       {eng.lanes.map(l => {
         const focused = eng.focus === l.id;
@@ -999,43 +1023,57 @@ function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
               userSelect: 'none',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {/* Lane colour dot.  When the lane is muted the dot is shown
-                  hollow (paper.bg fill, lane-colour 2 px ring) — independent
-                  of focus, so muted state is always legible (audit F-11). */}
-              <span style={{
-                width: 12, height: 12, borderRadius: '50%', flexShrink: 0,
-                background: l.enabled ? l.color : paper.bg,
-                border: l.enabled ? 'none' : `2px solid ${l.color}`,
-                boxSizing: 'border-box',
-                boxShadow: focused ? `0 0 0 2px ${paper.bg}, 0 0 0 3.5px ${l.color}` : 'none',
-                opacity: l.enabled ? 1 : 0.7,
-              }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {/* Mute dot — solid = active, hollow = muted (MIDI output). */}
+              <button
+                onPointerDown={e => e.stopPropagation()}
+                onClick={e => { e.stopPropagation(); eng.updateLane(l.id, { enabled: !l.enabled }); }}
+                title={l.enabled ? 'Mute lane' : 'Unmute lane'}
+                style={{
+                  width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+                  background: l.enabled ? l.color : paper.bg,
+                  border: `2px solid ${l.color}`,
+                  boxSizing: 'border-box',
+                  boxShadow: focused ? `0 0 0 2px ${paper.bg}, 0 0 0 3.5px ${l.color}` : 'none',
+                  opacity: l.enabled ? 1 : 0.6,
+                  cursor: 'pointer', padding: 0,
+                  transition: 'background 120ms, opacity 120ms',
+                }} />
               <span style={{
                 fontFamily: '"Instrument Serif", Georgia, serif',
-                fontStyle: 'italic', fontSize: 18,
+                fontStyle: 'italic', fontSize: 17,
                 color: focused ? paper.ink : paper.ink70, lineHeight: 1,
                 flex: 1,
-                // Single-property shorthand to avoid React's "mix shorthand
-                // and longhand" warning (line / colour combined here).
                 textDecoration: l.enabled ? 'none' : `line-through ${paper.ink30}`,
               }}>Lane {l.id + 1}</span>
-              {/* Visibility eye — JS-only; hides ghost lane on canvas without
-                  muting MIDI output.  Always shown so any lane can be hidden
-                  regardless of focus, without expanding the row. */}
+              {/* Eye — toggles curve visibility on canvas (independent of mute). */}
               <button
-                title={l.visible === false ? 'Show on canvas' : 'Hide from canvas'}
                 onPointerDown={e => e.stopPropagation()}
-                onClick={e => {
-                  e.stopPropagation();
-                  eng.updateLane(l.id, { visible: l.visible === false ? true : false });
-                }}
+                onClick={e => { e.stopPropagation(); eng.updateLane(l.id, { visible: l.visible === false ? true : false }); }}
+                title={l.visible === false ? 'Show curve' : 'Hide curve'}
                 style={{
-                  background: 'none', border: 'none', padding: '4px 2px',
-                  cursor: 'pointer', color: l.visible === false ? paper.ink30 : paper.ink50,
-                  fontSize: 14, lineHeight: 1, flexShrink: 0,
+                  flexShrink: 0, padding: 2, border: 'none', borderRadius: 2,
+                  background: 'transparent',
+                  color: l.visible === false ? paper.ink30 : paper.ink50,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center',
+                  transition: 'color 120ms',
                 }}>
-                {l.visible === false ? '○' : '●'}
+                {l.visible === false ? (
+                  // Eye closed — upper arc + lashes
+                  <svg width={14} height={10} viewBox="0 0 14 10" fill="none" stroke="currentColor" strokeLinecap="round" aria-hidden="true">
+                    <path d="M1 4C3 1 5 0 7 0C9 0 11 1 13 4" strokeWidth={1.3}/>
+                    <line x1={3.5} y1={6} x2={3} y2={8.5} strokeWidth={1.1}/>
+                    <line x1={7}   y1={6.5} x2={7} y2={9} strokeWidth={1.1}/>
+                    <line x1={10.5} y1={6} x2={11} y2={8.5} strokeWidth={1.1}/>
+                  </svg>
+                ) : (
+                  // Eye open — almond outline + pupil
+                  <svg width={14} height={10} viewBox="0 0 14 10" fill="none" aria-hidden="true">
+                    <path d="M1 5C3 1.5 5 0 7 0C9 0 11 1.5 13 5C11 8.5 9 10 7 10C5 10 3 8.5 1 5Z"
+                      stroke="currentColor" strokeWidth={1.3} strokeLinejoin="round"/>
+                    <circle cx={7} cy={5} r={2} fill="currentColor"/>
+                  </svg>
+                )}
               </button>
             </div>
             <div style={{
@@ -1044,15 +1082,14 @@ function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
             }}>
               {l.target === 'PitchBend' ? 'Pitch Bend' : l.target}
               {l.target === 'CC' && ` · CC ${l.targetDetail}`}
-              {l.target === 'Note' && ` · v${l.velocity}`}
+              {l.target === 'Note' && (() => {
+                const sc = window.SCALES?.find(s => s.id === l.scaleId);
+                const root = window.pitchName?.(l.scaleRoot, eng.useFlats) ?? '';
+                return ` · ${root}${sc ? ' ' + sc.name : ''}`;
+              })()}
             </div>
             {focused && (
               <div style={{ display: 'flex', gap: 5, marginTop: 2 }}>
-                <button
-                  onClick={e => { e.stopPropagation(); eng.updateLane(l.id, { enabled: !l.enabled }); }}
-                  style={laneChip(paper, l.enabled)}>
-                  {l.enabled ? 'On' : 'Muted'}
-                </button>
                 <ConfirmChip paper={paper}
                   onConfirm={() => eng.clearLane(l.id)} />
               </div>
@@ -1105,19 +1142,31 @@ function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
             </div>
           );
         })}
-      </div>
+        </div>
+        </div>
+      )}
+
+      {/* Tab handle — mirrors JuceShapeWell's collapsed/open handle, but
+          anchored to the RIGHT edge of the left panel instead of the left
+          edge of the right panel. */}
+      <button
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        title={open ? 'Hide lane panel' : 'Show lane panel'}
+        style={{
+          position: 'absolute', right: 0, top: 0, bottom: 0,
+          width: open ? 36 : '100%',
+          background: paper.bgDeep, border: 'none',
+          borderLeft: `1px solid ${paper.rule}`,
+          boxShadow: `inset 2px 0 0 ${paper.rule}`,
+          cursor: 'pointer',
+          writingMode: 'vertical-rl', transform: 'rotate(180deg)',
+          fontFamily: 'Inter Tight', fontSize: 11, letterSpacing: 2,
+          color: paper.ink70, textTransform: 'uppercase',
+          padding: '14px 2px',
+        }}>{open ? '▸' : 'lanes ◂'}</button>
     </div>
   );
-}
-function laneChip(paper, active) {
-  return {
-    padding: '4px 8px', minHeight: 28,
-    borderRadius: 2, border: `1px solid ${paper.rule}`,
-    background: active ? paper.ink : 'transparent',
-    color: active ? paper.bg : paper.ink70,
-    fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 0.5,
-    textTransform: 'uppercase', cursor: 'pointer',
-  };
 }
 
 // Two-tap confirm pattern (audit F-10).  First tap arms the action and
@@ -1263,14 +1312,12 @@ function BothBtn({ active, onClick, paper }) {
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       position: 'relative', zIndex: 5,
     }}>
-      {/* Audit F-06: replace ASCII "#" with a tiny crossed-axis padlock that
-          shares vocabulary with the per-axis LockBtn padlocks. */}
-      <svg width={14} height={16} viewBox="0 0 14 16" aria-hidden="true">
-        <rect x={3} y={7} width={8} height={8} rx={1} fill="currentColor" opacity={0.9}/>
-        <path d="M3.5 7V5a3.5 3.5 0 017 0V7" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round"/>
-        {/* axis-cross marker */}
-        <line x1={7} y1={9} x2={7} y2={13} stroke={active ? '#FFFFFF' : 'currentColor'} strokeWidth={0.9} opacity={0.6}/>
-        <line x1={5} y1={11} x2={9} y2={11} stroke={active ? '#FFFFFF' : 'currentColor'} strokeWidth={0.9} opacity={0.6}/>
+      {/* Tic-tac-toe hash grid — both axes at once */}
+      <svg width={14} height={14} viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" strokeLinecap="round">
+        <line x1={5}  y1={1}  x2={5}  y2={13} strokeWidth={1.5}/>
+        <line x1={9}  y1={1}  x2={9}  y2={13} strokeWidth={1.5}/>
+        <line x1={1}  y1={5}  x2={13} y2={5}  strokeWidth={1.5}/>
+        <line x1={1}  y1={9}  x2={13} y2={9}  strokeWidth={1.5}/>
       </svg>
     </button>
   );
@@ -1368,7 +1415,7 @@ function LockBtn({ axis, active, onClick, paper }) {
     <button
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => { e.stopPropagation(); if (onClick) onClick(e); }}
-      title={`${axis} quantize ${active ? 'on' : 'off'}`} style={{
+      title={`${axis} quantize ${active ? 'on (click to unlock)' : 'off (click to lock)'}`} style={{
       width: 36, height: 36, border: `1px solid ${active ? paper.amberInk : paper.rule}`,
       background: active ? paper.amberInk : 'transparent',
       color: active ? paper.bg : paper.ink50,
@@ -1376,14 +1423,26 @@ function LockBtn({ axis, active, onClick, paper }) {
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: 'Inter Tight', fontSize: 11, letterSpacing: 0.5,
       gap: 3,
-      // Own stacking context above the canvas div so spatial overlap doesn't
-      // create unexpected hit-test outcomes.
       position: 'relative', zIndex: 5,
     }}>
-      <svg width={10} height={12} viewBox="0 0 10 12">
-        <rect x={2} y={5} width={6} height={7} rx={1} fill="currentColor" opacity={0.9}/>
-        <path d={`M2.5 5V3.5a2.5 2.5 0 015 0V5`} fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round"/>
-      </svg>
+      {active ? (
+        // Closed padlock — body + U-shackle arcing upward (sweep=1 = clockwise
+        // in SVG y-down coords = visually upward from left arm to right arm)
+        <svg width={14} height={16} viewBox="0 0 14 16" aria-hidden="true">
+          <rect x={1} y={8} width={12} height={7} rx={1.5} fill="currentColor"/>
+          <path d="M4 8 L4 5.5 A3 3 0 0 1 10 5.5 L10 8"
+            fill="none" stroke="currentColor" strokeWidth={2}
+            strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      ) : (
+        // Open padlock — right arm raised above body, clearly unlatched
+        <svg width={14} height={16} viewBox="0 0 14 16" aria-hidden="true">
+          <rect x={1} y={8} width={12} height={7} rx={1.5} fill="currentColor" opacity={0.55}/>
+          <path d="M4 8 L4 5.5 A3 3 0 0 1 10 5.5 L10 1.5"
+            fill="none" stroke="currentColor" strokeWidth={2}
+            strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      )}
       <span>{axis}</span>
     </button>
   );
@@ -1398,20 +1457,22 @@ function YAxisGutter({ eng, paper, focusLane, gridY, setGridY, width, height }) 
   const noteSpan = focusLane
     ? Math.max(1, Math.round(((focusLane.rangeMax ?? 1) - (focusLane.rangeMin ?? 0)) * 127))
     : 24;
+  // Note presets: finest (chromatic = every semitone) → coarsest (octave).
   const yNotePresets = [
     { label: 'chr', div: Math.min(127, noteSpan) },
-    { label: 'oct', div: Math.max(2, Math.round(noteSpan / 12)) },
-    { label: '5th', div: Math.max(2, Math.round(noteSpan / 7)) },
     { label: '3rd', div: Math.max(2, Math.round(noteSpan / 4)) },
+    { label: '5th', div: Math.max(2, Math.round(noteSpan / 7)) },
+    { label: 'oct', div: Math.max(2, Math.round(noteSpan / 12)) },
   ];
+  // Value presets: finest (24 steps) → coarsest (2 steps), top to bottom.
   const yValuePresets = [
-    { label: '2',  div: 2 },
-    { label: '4',  div: 4 },
-    { label: '8',  div: 8 },
-    { label: '16', div: 16 },
     { label: '24', div: 24 },
+    { label: '16', div: 16 },
+    { label: '8',  div: 8 },
+    { label: '4',  div: 4 },
+    { label: '2',  div: 2 },
   ];
-  const showPresets = !!focusLane?.quantizeY;
+  const showPresets = true;
   const presets = focusLane?.target === 'Note' ? yNotePresets : yValuePresets;
   const toggleY = () => focusLane && eng.updateLane(focusLane.id, { quantizeY: !focusLane.quantizeY });
   return (
@@ -1436,9 +1497,9 @@ function YAxisGutter({ eng, paper, focusLane, gridY, setGridY, width, height }) 
           ))}
         </div>
       )}
-      <GridBtn axis="Y" denser={true}  paper={paper} onClick={() => setGridY(g => Math.min(24, g + 2))} />
+      <GridBtn axis="Y" denser={true}  paper={paper} onClick={() => setGridY(g => Math.min(24, g + 1))} />
       <CountPill value={gridY} paper={paper} />
-      <GridBtn axis="Y" denser={false} paper={paper} onClick={() => setGridY(g => Math.max(2, g - 2))} />
+      <GridBtn axis="Y" denser={false} paper={paper} onClick={() => setGridY(g => Math.max(2, g - 1))} />
       <LockBtn  axis="Y" active={!!focusLane?.quantizeY} paper={paper} onClick={toggleY} />
     </div>
   );
@@ -1486,9 +1547,9 @@ function XAxisGutter({ eng, paper, focusLane, gridX, setGridX, height, cornerW,
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '0 8px' }}>
         <LockBtn axis="X" active={!!focusLane?.quantizeX} paper={paper} onClick={toggleX} />
-        <GridBtn axis="X" denser={false} paper={paper} onClick={() => setGridX(g => Math.max(2, g - 2))} />
+        <GridBtn axis="X" denser={false} paper={paper} onClick={() => setGridX(g => Math.max(2, g - 1))} />
         <CountPill value={gridX} paper={paper} />
-        <GridBtn axis="X" denser={true}  paper={paper} onClick={() => setGridX(g => Math.min(32, g + 2))} />
+        <GridBtn axis="X" denser={true}  paper={paper} onClick={() => setGridX(g => Math.min(32, g + 1))} />
         {eng.syncOn && focusLane?.quantizeX && (
           <div style={{ display: 'flex', gap: 3, marginLeft: 6 }}>
             {xSyncPresets.map(p => (
@@ -1672,67 +1733,238 @@ function MidiGhostOverlay({ w, h, paper }) {
 }
 
 // ── Qurve shelf ──────────────────────────────────────────────
+// Built-in demo curves shown before any user-saved entries.
+const BUILTIN_QURVES = [
+  { id: 'b0', name: 'slow arch',       target: 'CC',          curve: makeSineCurve(64, 0.5, 0.4,  0.8, 0) },
+  { id: 'b1', name: 'fast zigzag',     target: 'CC',          curve: makeSineCurve(64, 0.5, 0.35, 3,   0) },
+  { id: 'b2', name: 'pentatonic glide',target: 'Note',        curve: makeSineCurve(64, 0.5, 0.3,  1.5, Math.PI / 4) },
+  { id: 'b3', name: 'breath swell',    target: 'Aftertouch',  curve: makeSineCurve(64, 0.4, 0.35, 0.6, Math.PI / 6) },
+  { id: 'b4', name: 'stutter',         target: 'CC',          curve: makeSineCurve(64, 0.5, 0.45, 6,   0) },
+];
+
+// Library key — stored in localStorage as JSON.  curve is serialised as a
+// regular Array (Float32Array isn't JSON-safe) and restored on load.
+const LIBRARY_KEY = 'dq-library';
+
+function loadLibrary() {
+  try {
+    const raw = localStorage?.getItem(LIBRARY_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw).map(q => ({
+      ...q,
+      curve: q.curve ? new Float32Array(q.curve) : null,
+    }));
+  } catch { return []; }
+}
+
+function persistLibrary(items) {
+  try {
+    localStorage?.setItem(LIBRARY_KEY, JSON.stringify(
+      items.map(q => ({ ...q, curve: q.curve ? Array.from(q.curve) : null }))
+    ));
+  } catch { /* storage full or unavailable */ }
+}
+
 function QurveShelf({ eng, paper, focusLane }) {
-  const saved = [
-    { name: 'slow arch', target: 'CC', curve: makeSineCurve(64, 0.5, 0.4, 0.8, 0) },
-    { name: 'fast zigzag', target: 'CC', curve: makeSineCurve(64, 0.5, 0.35, 3, 0) },
-    { name: 'pentatonic glide', target: 'Note', curve: makeSineCurve(64, 0.5, 0.3, 1.5, Math.PI/4) },
-    { name: 'breath swell', target: 'Aftertouch', curve: makeSineCurve(64, 0.4, 0.35, 0.6, Math.PI/6) },
-    { name: 'stutter', target: 'CC', curve: makeSineCurve(64, 0.5, 0.45, 6, 0) },
-  ];
+  const [library, setLibraryRaw] = React.useState(loadLibrary);
+
+  const setLibrary = React.useCallback((next) => {
+    const arr = typeof next === 'function' ? next(library) : next;
+    setLibraryRaw(arr);
+    persistLibrary(arr);
+  }, [library]);
+
+  // Inline save flow
+  const [saving, setSaving] = React.useState(false);
+  const [saveName, setSaveName] = React.useState('');
+  const nameRef = React.useRef(null);
+
+  const canSave = !!focusLane?.curve;
+
+  const startSave = () => {
+    if (!canSave) return;
+    const d = new Date();
+    const auto = `${focusLane.target} ${d.toLocaleDateString('en', { month: 'short', day: 'numeric' })}`;
+    setSaveName(auto);
+    setSaving(true);
+    setTimeout(() => { nameRef.current?.select(); }, 0);
+  };
+
+  const commitSave = () => {
+    if (!focusLane?.curve) { setSaving(false); return; }
+    const entry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      name: saveName.trim() || 'Untitled',
+      target: focusLane.target,
+      curve: focusLane.curve,
+      quantizeX: focusLane.quantizeX,
+      quantizeY: focusLane.quantizeY,
+      xDivisions: focusLane.xDivisions,
+      yDivisions: focusLane.yDivisions,
+      rangeMin: focusLane.rangeMin,
+      rangeMax: focusLane.rangeMax,
+      scaleId: focusLane.scaleId,
+      scaleRoot: focusLane.scaleRoot,
+      scaleMask: focusLane.scaleMask,
+    };
+    setLibrary(prev => [...prev, entry]);
+    setSaving(false);
+    setSaveName('');
+  };
+
+  const deleteItem = React.useCallback((id) => {
+    setLibrary(prev => prev.filter(q => q.id !== id));
+  }, [setLibrary]);
+
+  const allItems = [...BUILTIN_QURVES, ...library];
+
   return (
     <div style={{
       height: '100%', padding: '10px 14px',
       display: 'flex', flexDirection: 'column', gap: 8,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         <div style={{
           fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 1.5,
           color: paper.ink50, textTransform: 'uppercase',
         }}>Qurve Library</div>
         <div style={{ flex: 1 }} />
-        <Btn paper={paper} small tone="active">Save current +</Btn>
-      </div>
-      <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
-        {saved.map((q, i) => (
-          <div key={i}
-            onClick={() => eng.setCurve(eng.focus, q.curve)}
-            style={{
-              flexShrink: 0, width: 110, height: 90,
-              background: paper.card,
-              border: `1px solid ${paper.rule}`,
-              borderRadius: 2, cursor: 'pointer',
-              display: 'flex', flexDirection: 'column',
-              overflow: 'hidden', padding: '6px 6px 4px',
-              gap: 4,
-            }}>
-            <svg width={98} height={50} style={{ flex: 1 }}>
-              <CurvePath curve={q.curve} w={98} h={50}
-                stroke={focusLane?.color || paper.laneInk}
-                opacity={0.7} width={1.5} />
-            </svg>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-              <div style={{
+        {saving ? (
+          <>
+            <input
+              ref={nameRef}
+              value={saveName}
+              onChange={e => setSaveName(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') commitSave();
+                if (e.key === 'Escape') { setSaving(false); setSaveName(''); }
+              }}
+              placeholder="Name…"
+              style={{
                 fontFamily: '"Instrument Serif", Georgia, serif',
-                fontStyle: 'italic', fontSize: 12, color: paper.ink,
-                lineHeight: 1, overflow: 'hidden', whiteSpace: 'nowrap',
-              }}>{q.name}</div>
-            </div>
-            <div style={{
-              fontFamily: 'Inter Tight', fontSize: 9, letterSpacing: 0.8,
-              color: paper.ink50, textTransform: 'uppercase',
-            }}>{q.target}</div>
-          </div>
+                fontStyle: 'italic', fontSize: 13,
+                border: `1px solid ${paper.amber}`, borderRadius: 2,
+                background: paper.card, color: paper.ink,
+                padding: '3px 8px', width: 150, outline: 'none',
+              }}
+            />
+            <Btn paper={paper} small tone="active" onClick={commitSave}>Save</Btn>
+            <Btn paper={paper} small onClick={() => { setSaving(false); setSaveName(''); }}>✕</Btn>
+          </>
+        ) : (
+          <Btn paper={paper} small
+            tone={canSave ? 'active' : undefined}
+            onClick={startSave}
+            title={canSave ? 'Save current curve to library' : 'Draw a curve first'}
+            style={{ opacity: canSave ? 1 : 0.4 }}
+          >Save current +</Btn>
+        )}
+      </div>
+
+      {/* Card row */}
+      <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
+        {allItems.map(q => (
+          <QurveCard
+            key={q.id}
+            q={q}
+            paper={paper}
+            focusLane={focusLane}
+            onLoad={() => {
+              const patch = { curve: q.curve };
+              if (q.quantizeX != null)  patch.quantizeX  = q.quantizeX;
+              if (q.quantizeY != null)  patch.quantizeY  = q.quantizeY;
+              if (q.xDivisions != null) patch.xDivisions = q.xDivisions;
+              if (q.yDivisions != null) patch.yDivisions = q.yDivisions;
+              if (q.rangeMin   != null) patch.rangeMin   = q.rangeMin;
+              if (q.rangeMax   != null) patch.rangeMax   = q.rangeMax;
+              if (q.scaleId    != null) patch.scaleId    = q.scaleId;
+              if (q.scaleRoot  != null) patch.scaleRoot  = q.scaleRoot;
+              if (q.scaleMask  != null) patch.scaleMask  = q.scaleMask;
+              eng.updateLane(eng.focus, patch);
+            }}
+            onDelete={q.id.startsWith('b') ? null : () => deleteItem(q.id)}
+          />
         ))}
-        {/* Empty slot */}
+      </div>
+    </div>
+  );
+}
+
+function QurveCard({ q, paper, focusLane, onLoad, onDelete }) {
+  const [pendingDelete, setPendingDelete] = React.useState(false);
+
+  // Auto-cancel confirm after 2 s
+  React.useEffect(() => {
+    if (!pendingDelete) return;
+    const t = setTimeout(() => setPendingDelete(false), 2000);
+    return () => clearTimeout(t);
+  }, [pendingDelete]);
+
+  return (
+    <div
+      onClick={onLoad}
+      style={{
+        flexShrink: 0, width: 110, height: 90,
+        background: paper.card,
+        border: `1px solid ${paper.rule}`,
+        borderRadius: 2, cursor: 'pointer',
+        display: 'flex', flexDirection: 'column',
+        overflow: 'hidden', padding: '6px 6px 4px',
+        gap: 4, position: 'relative',
+      }}
+    >
+      <svg width={98} height={50} style={{ flex: 1 }}>
+        <CurvePath curve={q.curve} w={98} h={50}
+          stroke={focusLane?.color || paper.laneInk}
+          opacity={0.7} width={1.5} />
+      </svg>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
         <div style={{
-          flexShrink: 0, width: 110, height: 90,
-          border: `1px dashed ${paper.rule}`,
-          borderRadius: 2, display: 'flex',
-          alignItems: 'center', justifyContent: 'center',
-          color: paper.ink30, cursor: 'pointer',
-          fontFamily: '"Caveat", cursive', fontSize: 18,
-        }}>+ save</div>
+          fontFamily: '"Instrument Serif", Georgia, serif',
+          fontStyle: 'italic', fontSize: 12, color: paper.ink,
+          lineHeight: 1, overflow: 'hidden', whiteSpace: 'nowrap', flex: 1,
+        }}>{q.name}</div>
+        {onDelete && (
+          pendingDelete ? (
+            <span
+              onClick={e => { e.stopPropagation(); onDelete(); }}
+              style={{
+                fontSize: 9, color: paper.laneRose, fontFamily: 'Inter Tight',
+                cursor: 'pointer', flexShrink: 0, letterSpacing: 0.3,
+              }}
+            >del?</span>
+          ) : (
+            <span
+              onClick={e => { e.stopPropagation(); setPendingDelete(true); }}
+              style={{
+                fontSize: 11, color: paper.ink30, fontFamily: 'Inter Tight',
+                cursor: 'pointer', flexShrink: 0, lineHeight: 1,
+              }}
+            >×</span>
+          )
+        )}
+      </div>
+      {/* Bottom meta row: target + compact grid summary */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 4,
+        fontFamily: 'Inter Tight', fontSize: 9, letterSpacing: 0.6,
+        color: paper.ink50, textTransform: 'uppercase',
+        overflow: 'hidden', whiteSpace: 'nowrap',
+      }}>
+        <span>{q.target}</span>
+        {(q.quantizeX || q.quantizeY) && (
+          <span style={{ color: paper.amber, letterSpacing: 0 }}>
+            {q.quantizeX ? `×${q.xDivisions}` : ''}
+            {q.quantizeX && q.quantizeY ? '·' : ''}
+            {q.quantizeY ? `÷${q.yDivisions}` : ''}
+          </span>
+        )}
+        {q.rangeMin != null && q.rangeMax != null && (
+          <span style={{ color: paper.ink30 }}>
+            {Math.round(q.rangeMin * 100)}–{Math.round(q.rangeMax * 100)}%
+          </span>
+        )}
       </div>
     </div>
   );
