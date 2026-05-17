@@ -200,6 +200,28 @@ float GestureEngine::getCurrentPhaseForLane (int lane) const
     return _lanePhases[static_cast<size_t>(lane)].load (std::memory_order_relaxed);
 }
 
+void GestureEngine::seekToPhase (float phase, float speedRatio) noexcept
+{
+    phase      = std::max (0.0f, std::min (1.0f, phase));
+    speedRatio = std::max (0.001f, speedRatio);
+
+    for (int i = 0; i < kMaxLanes; ++i)
+    {
+        const auto* snap = _snapshots[static_cast<size_t>(i)].load (std::memory_order_acquire);
+        if (! snap || ! snap->valid || snap->oneShot) continue;
+
+        // Map phase → playheadSeconds so processLane re-derives the same phase:
+        //   phase = playheadSeconds / effectiveDur
+        //         = playheadSeconds * speedRatio / snap->durationSeconds
+        // → playheadSeconds = phase * snap->durationSeconds / speedRatio
+        const double effectiveDur = snap->durationSeconds / static_cast<double> (speedRatio);
+        _runtimes[static_cast<size_t>(i)].playheadSeconds = phase * effectiveDur;
+    }
+    _currentPhase.store (phase, std::memory_order_relaxed);
+    for (int i = 0; i < kMaxLanes; ++i)
+        _lanePhases[static_cast<size_t>(i)].store (phase, std::memory_order_relaxed);
+}
+
 // ---------------------------------------------------------------------------
 // Static utilities
 // ---------------------------------------------------------------------------

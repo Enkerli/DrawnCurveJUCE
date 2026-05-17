@@ -84,6 +84,7 @@ function formatDepth(lane) {
 
 function JuceIPadStudio({ width = 1024, height = 768 }) {
   const eng = useDrawnQurveEngine({ mode: 'standard' });
+  const recorder = useMidiRecorder(eng);
 
   // Theme — persisted in localStorage so it survives plugin reload.
   const [useDark, setUseDarkRaw] = React.useState(
@@ -258,7 +259,8 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
       {/* ── Top bar ── */}
       <JuceTopBar eng={eng} paper={paper} h={TOP_H}
         helpOpen={helpOpen} setHelpOpen={setHelpOpen}
-        useDark={useDark} setUseDark={setUseDark} />
+        useDark={useDark} setUseDark={setUseDark}
+        recorder={recorder} />
 
       {/* ── Main row ── */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
@@ -266,7 +268,8 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
         {/* Left lane panel */}
         <JuceLanePanel eng={eng} paper={paper} width={LEFT_W}
           height={height - TOP_H - BOTTOM_H}
-          open={leftOpen} setOpen={setLeftOpen} />
+          open={leftOpen} setOpen={setLeftOpen}
+          recorder={recorder} />
 
         {/* Canvas stack — Y gutter + canvas row above X gutter row */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -300,6 +303,14 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
                     useFlats={eng.useFlats} />
                 );
               })()}
+
+              {/* Piano roll — real recorded MIDI notes (onion skin for Note lanes) */}
+              {focusLane?.target === 'Note' && (
+                <PianoRollOverlay
+                  lane={focusLane}
+                  w={canvasSize.w} h={canvasSize.h}
+                />
+              )}
 
               {/* Scale discovery chip */}
               {discoveryVisible && <DiscoveryChip paper={paper} onOpen={() => setScaleOpen(true)} />}
@@ -461,7 +472,7 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
 // and "ScalePlugin sync" placeholder buttons (F.3/F.4 roadmap items) were
 // removed — they consumed ~150 px and drove no real behaviour.  They will
 // return as real controls when the features are implemented.
-function JuceTopBar({ eng, paper, h, helpOpen, setHelpOpen, useDark, setUseDark }) {
+function JuceTopBar({ eng, paper, h, helpOpen, setHelpOpen, useDark, setUseDark, recorder }) {
   return (
     <div style={{
       height: h, display: 'flex', alignItems: 'center',
@@ -513,6 +524,8 @@ function JuceTopBar({ eng, paper, h, helpOpen, setHelpOpen, useDark, setUseDark 
           flexShrink: 0,
         }}>{eng.syncOn ? `${eng.beats} beats` : `${(1.0 / eng.speed).toFixed(1)} s`}</span>
       </div>
+
+      {recorder && <MidiInputSelector recorder={recorder} paper={paper} />}
 
       <div style={{ flex: 1 }} />
 
@@ -942,7 +955,7 @@ function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
 }
 
 // ── Right lane panel (always visible) ───────────────────────
-function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
+function JuceLanePanel({ eng, paper, width, height, open, setOpen, recorder }) {
   // C++ engine caps lanes at kMaxLanes (4); hide the "+ Lane" button when
   // we're already at the cap so the click doesn't silently no-op.
   const MAX_LANES = 4;
@@ -1075,6 +1088,26 @@ function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
                   </svg>
                 )}
               </button>
+              {/* REC — record MIDI input into this lane's curve. */}
+              {recorder?.hasAccess && (
+                <button
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={e => { e.stopPropagation(); recorder.toggleRec(l.id); }}
+                  title={recorder.isRecording(l.id) ? 'Stop recording' : 'Record MIDI input'}
+                  style={{
+                    flexShrink: 0, padding: 2, border: 'none', borderRadius: 2,
+                    background: recorder.isRecording(l.id) ? 'oklch(50% 0.18 25 / 0.15)' : 'transparent',
+                    color: recorder.isRecording(l.id) ? 'oklch(52% 0.20 25)' : paper.ink30,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center',
+                    transition: 'color 120ms, background 120ms',
+                  }}>
+                  <svg width={12} height={12} viewBox="0 0 12 12" aria-hidden="true">
+                    <circle cx={6} cy={6} r={5}
+                      fill={recorder.isRecording(l.id) ? 'currentColor' : 'none'}
+                      stroke="currentColor" strokeWidth={1.5}/>
+                  </svg>
+                </button>
+              )}
             </div>
             <div style={{
               fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 0.8,
@@ -1698,37 +1731,231 @@ function TypoReadout({ focusLane, phase, canvasW, canvasH, paper, useFlats }) {
   );
 }
 
-// ── MIDI ghost overlay ───────────────────────────────────────
-function MidiGhostOverlay({ w, h, paper }) {
-  // Simulate a few incoming MIDI notes as faint horizontal bars
-  const notes = [
-    { note: 72, vel: 90, start: 0.05, end: 0.25 }, // C5
-    { note: 69, vel: 70, start: 0.30, end: 0.55 }, // A4
-    { note: 71, vel: 85, start: 0.60, end: 0.80 }, // B4
-    { note: 74, vel: 60, start: 0.82, end: 0.95 }, // D5
-    { note: 67, vel: 75, start: 0.10, end: 0.45 }, // G4
-  ];
-  const noteToY = (n) => h * (1 - (n - 48) / 36);
+// ── MIDI input recording ─────────────────────────────────────
+
+// Convert raw MIDI events captured during recording to a Float32Array curve.
+// For Note lanes: also returns midiNotes array for piano-roll display.
+// For CC/AT/PB: step-interpolates between events.
+function eventsToQurve(events, lane, loopSec) {
+  const N = 256;
+  const arr = new Float32Array(N).fill(0.5);
+  if (events.length === 0) return { curve: null, notes: null };
+
+  if (lane.target === 'Note') {
+    const midiNotes = [];
+    const stack = {}; // note# → { tNorm, vel }
+    events.forEach(ev => {
+      const tNorm = Math.min(1, ev.t / loopSec);
+      if (ev.type === 'on') {
+        stack[ev.note] = { tNorm, vel: ev.vel };
+      } else if (ev.type === 'off' && stack[ev.note]) {
+        const { tNorm: s, vel } = stack[ev.note];
+        midiNotes.push({ note: ev.note, vel, start: s, end: tNorm });
+        delete stack[ev.note];
+      }
+    });
+    // Close any notes still open at loop end
+    Object.entries(stack).forEach(([note, { tNorm: s, vel }]) => {
+      midiNotes.push({ note: parseInt(note, 10), vel, start: s, end: 1 });
+    });
+    // Paint pitch curve: silence = 0.5; each note's time range → note/127
+    midiNotes.forEach(n => {
+      const v = n.note / 127;
+      const si = Math.max(0, Math.round(n.start * (N - 1)));
+      const ei = Math.min(N - 1, Math.round(n.end * (N - 1)));
+      for (let i = si; i <= ei; i++) arr[i] = v;
+    });
+    return { curve: arr, notes: midiNotes };
+  }
+
+  // CC / Aftertouch / PitchBend — step-hold between events
+  const sorted = [...events].sort((a, b) => a.t - b.t);
+  let j = 0;
+  for (let i = 0; i < N; i++) {
+    const t = (i / (N - 1)) * loopSec;
+    while (j < sorted.length - 1 && sorted[j + 1].t <= t) j++;
+    arr[i] = sorted[j].v;
+  }
+  return { curve: arr, notes: null };
+}
+
+// useMidiRecorder — manages Web MIDI access and per-lane recording.
+// Returns a recorder object threaded to JuceTopBar and JuceLanePanel.
+function useMidiRecorder(eng) {
+  const [access, setAccess]   = React.useState(null);
+  const [inputs, setInputs]   = React.useState([]);
+  const [inputId, setInputId] = React.useState(null);
+  const [recSet, setRecSet]   = React.useState(() => new Set());
+
+  const eventsRef    = React.useRef({});  // laneId → { startMs, events[] }
+  const recSetRef    = React.useRef(recSet);
+  const engRef       = React.useRef(eng);
+  React.useEffect(() => { recSetRef.current = recSet; }, [recSet]);
+  React.useEffect(() => { engRef.current = eng; }, [eng]);
+
+  // Request MIDI access once on mount
+  React.useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.requestMIDIAccess) return;
+    navigator.requestMIDIAccess().then(acc => {
+      const refresh = () => {
+        const ins = [...acc.inputs.values()];
+        setInputs(ins);
+        if (ins.length === 1) setInputId(ins[0].id);
+      };
+      setAccess(acc);
+      refresh();
+      acc.onstatechange = refresh;
+    }).catch(() => {});
+  }, []);
+
+  // Attach message handler whenever selected port changes
+  React.useEffect(() => {
+    if (!access || !inputId) return;
+    const port = access.inputs.get(inputId);
+    if (!port) return;
+    const handle = (msg) => {
+      const nowMs = performance.now();
+      const data = msg.data;
+      if (!data || data.length < 2) return;
+      const [status, d1, d2 = 0] = data;
+      const ch   = (status & 0x0F) + 1;
+      const type = status & 0xF0;
+      engRef.current.lanes.forEach(lane => {
+        if (!recSetRef.current.has(lane.id)) return;
+        const rec = eventsRef.current[lane.id];
+        if (!rec || lane.channel !== ch) return;
+        const t = (nowMs - rec.startMs) / 1000;
+        if (lane.target === 'CC' && type === 0xB0 && d1 === lane.targetDetail) {
+          rec.events.push({ t, v: d2 / 127 });
+        } else if (lane.target === 'Aftertouch' && type === 0xD0) {
+          rec.events.push({ t, v: d1 / 127 });
+        } else if (lane.target === 'PitchBend' && type === 0xE0) {
+          rec.events.push({ t, v: ((d2 << 7) | d1) / 16383 });
+        } else if (lane.target === 'Note') {
+          if (type === 0x90 && d2 > 0) rec.events.push({ t, note: d1, vel: d2, type: 'on' });
+          else if (type === 0x80 || (type === 0x90 && d2 === 0)) rec.events.push({ t, note: d1, type: 'off' });
+        }
+      });
+    };
+    port.onmidimessage = handle;
+    return () => { port.onmidimessage = null; };
+  }, [access, inputId]);
+
+  const startRec = React.useCallback((laneId) => {
+    eventsRef.current[laneId] = { startMs: performance.now(), events: [] };
+    setRecSet(prev => new Set([...prev, laneId]));
+  }, []);
+
+  const stopRec = React.useCallback((laneId) => {
+    setRecSet(prev => { const s = new Set(prev); s.delete(laneId); return s; });
+    const rec = eventsRef.current[laneId];
+    if (!rec) return;
+    delete eventsRef.current[laneId];
+    const e = engRef.current;
+    const lane = e.lanes.find(l => l.id === laneId);
+    if (!lane) return;
+    const loopSec = e.syncOn ? (e.beats * 60 / 100) : (2 / e.speed);
+    const { curve, notes } = eventsToQurve(rec.events, lane, loopSec);
+    if (curve) {
+      const patch = { curve };
+      if (notes !== null) patch.midiNotes = notes;
+      e.updateLane(laneId, patch);
+    }
+  }, []);
+
+  const toggleRec = React.useCallback((laneId) => {
+    if (recSetRef.current.has(laneId)) stopRec(laneId); else startRec(laneId);
+  }, [startRec, stopRec]);
+
+  return {
+    hasAccess: !!access,
+    inputs,
+    inputId,
+    setInputId,
+    isRecording: (id) => recSet.has(id),
+    toggleRec,
+  };
+}
+
+// ── Piano-roll overlay ───────────────────────────────────────
+// Renders recorded MIDI note events as translucent horizontal bars,
+// using the lane's range to determine Y mapping — matching the curve canvas.
+// Acts as onion skin when the user draws a new curve over a recorded pattern.
+function PianoRollOverlay({ lane, w, h }) {
+  if (!lane?.midiNotes?.length) return null;
+  const lo   = Math.round(lane.rangeMin * 127);
+  const hi   = Math.round(lane.rangeMax * 127);
+  const span = Math.max(1, hi - lo);
+  const rowH = Math.max(3, Math.min(14, h / span));
+  const color = lane.color || '#888';
+  const noteToY = (note) => h * (1 - (note - lo) / span);
   return (
     <svg width={w} height={h} style={{
       position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2,
     }}>
-      {notes.map((n, i) => (
+      {lane.midiNotes.map((n, i) => (
         <rect key={i}
-          x={n.start * w} y={noteToY(n.note) - 6}
-          width={(n.end - n.start) * w} height={12}
-          fill={paper.laneRose || 'oklch(60% 0.14 25)'}
-          opacity={(n.vel / 127) * 0.22}
-          rx={3}
+          x={n.start * w}
+          y={noteToY(n.note) - rowH / 2}
+          width={Math.max(3, (n.end - n.start) * w)}
+          height={rowH}
+          fill={color}
+          opacity={(n.vel / 127) * 0.30}
+          rx={2}
         />
       ))}
-      {/* Label */}
-      <text x={8} y={18} style={{
-        fontFamily: 'Inter Tight', fontSize: 9,
-        fill: paper.amberInk || '#8A5520',
-        letterSpacing: 1.5, textTransform: 'uppercase',
-      }}>MIDI IN</text>
     </svg>
+  );
+}
+
+// ── MIDI input selector ──────────────────────────────────────
+// Shown in the top bar when Web MIDI API is available.
+function MidiInputSelector({ recorder, paper }) {
+  const { hasAccess, inputs, inputId, setInputId } = recorder;
+  if (typeof navigator === 'undefined' || !navigator.requestMIDIAccess) return null;
+
+  const baseStyle = {
+    height: 30, padding: '0 8px',
+    background: paper.card, border: `1px solid ${paper.rule}`,
+    borderRadius: 2, cursor: 'pointer', flexShrink: 0,
+    fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 0.8,
+    color: paper.ink70, display: 'flex', alignItems: 'center', gap: 5,
+    textTransform: 'uppercase',
+  };
+
+  if (!hasAccess) return (
+    <div style={{ ...baseStyle, color: paper.ink30 }}>
+      <span style={{ fontSize: 8 }}>●</span> MIDI in
+    </div>
+  );
+
+  if (inputs.length === 0) return (
+    <div style={{ ...baseStyle, color: paper.ink30 }}>
+      <span style={{ fontSize: 8 }}>●</span> No MIDI
+    </div>
+  );
+
+  const activeColor = 'oklch(55% 0.17 25)';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+      <span style={{ fontSize: 8, color: inputId ? activeColor : paper.ink30 }}>●</span>
+      <select
+        value={inputId || ''}
+        onChange={e => setInputId(e.target.value || null)}
+        style={{
+          height: 30, padding: '0 6px',
+          background: paper.card, border: `1px solid ${paper.rule}`,
+          borderRadius: 2, cursor: 'pointer',
+          fontFamily: 'Inter Tight', fontSize: 10,
+          color: paper.ink70, maxWidth: 130,
+        }}
+      >
+        <option value="">— MIDI IN —</option>
+        {inputs.map(inp => (
+          <option key={inp.id} value={inp.id}>{inp.name}</option>
+        ))}
+      </select>
+    </div>
   );
 }
 
@@ -2090,6 +2317,11 @@ function HelpOverlay({ paper, onClose }) {
      'Left panel: output type (CC / Aftertouch / PitchBend / Note), CC#, channel, velocity, smoothing, output range.'],
     ['MUTE',
      'Silences a lane without erasing its curve. Hollow dot + strikethrough in the lane panel.'],
+    ['MIDI RECORD',
+     'When a MIDI input is connected (select it in the top bar), each lane shows a ⏺ record button. '
+     + 'Press ⏺ to start capturing — the lane listens only to its message type and channel. '
+     + 'Press again to stop and convert to a curve. Note lanes also store note events as a piano-roll '
+     + 'overlay (visible as translucent bars on the canvas), which acts as an onion skin when redrawing.'],
     ['SCALE',
      'Note lanes only. Tap the ▴ Scale button (bottom of canvas, right side) to open the scale editor. '
      + 'Tap pitch-class circles to toggle; double-tap to set root. Pick a preset or type a decimal mask (0–4095).'],
@@ -2192,4 +2424,4 @@ function HelpOverlay({ paper, onClose }) {
   );
 }
 
-Object.assign(window, { JuceIPadStudio, QurveShelf, MidiGhostOverlay, DiscoveryChip, HelpOverlay });
+Object.assign(window, { JuceIPadStudio, QurveShelf, PianoRollOverlay, MidiInputSelector, DiscoveryChip, HelpOverlay });

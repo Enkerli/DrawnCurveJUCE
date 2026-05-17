@@ -135,6 +135,14 @@ public:
                        const std::array<float, kMaxLanes>& speedRatios,
                        const std::array<PlaybackDirection, kMaxLanes>& directions);
 
+    /// Render-thread: anchor all looping lane playheads to the given normalized
+    /// phase (0..1), derived from the host's PPQ position each processBlock.
+    /// Corrects for loop jumps and repositions so the engine stays locked to
+    /// the host transport when syncEnabled is on.  One-shot lanes are skipped.
+    /// @param phase        Target phase 0..1 (= fmod(ppqPos / syncBeats, 1))
+    /// @param speedRatio   Global effective speed (same value passed to processBlock)
+    void seekToPhase (float phase, float speedRatio) noexcept;
+
     // ── Utility (also called from UI for Y-axis display) ─────────────────────
     static int quantizeNote (int rawNote, ScaleConfig sc, bool movingUp);
 

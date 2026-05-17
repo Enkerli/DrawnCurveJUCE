@@ -415,6 +415,8 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     // ── Compute effective speed + handle host transport sync ──────────────────
     const bool syncOn = apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
     float effectiveSpeed = apvts.getRawParameterValue (ParamID::playbackSpeed)->load();
+    // ppqPhase >= 0 when we have a valid PPQ position to seek to this block.
+    float ppqPhase = -1.0f;
 
     if (syncOn)
     {
@@ -455,13 +457,30 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                     _engine.setPlaying (true);
                 }
 
+                const float syncBeats = apvts.getRawParameterValue (ParamID::syncBeats)->load();
+
                 if (auto bpmOpt = pos->getBpm())
                 {
                     const float bpm        = static_cast<float> (*bpmOpt);
-                    const float syncBeats  = apvts.getRawParameterValue (ParamID::syncBeats)->load();
                     const float recordedDur = curveDuration (0);  // use lane 0 as reference
                     if (bpm > 0.0f && syncBeats > 0.0f && recordedDur > 0.0f)
                         effectiveSpeed = recordedDur / (syncBeats * 60.0f / bpm);
+                }
+
+                // PPQ-anchored phase: derive the exact loop phase from the host's
+                // PPQ position every block so the engine stays locked to the host
+                // transport through loops, repositions and tempo changes.
+                // Only seek when the host is actually playing — when stopped, let
+                // the engine hold its current phase (setPlaying(false) already stops
+                // phase advancement, so no drift occurs while paused).
+                if (hostNowPlaying && syncBeats > 0.0f)
+                {
+                    if (auto ppqOpt = pos->getPpqPosition())
+                    {
+                        ppqPhase = static_cast<float> (
+                            std::fmod (*ppqOpt / static_cast<double> (syncBeats), 1.0));
+                        if (ppqPhase < 0.0f) ppqPhase += 1.0f;  // guard negative fmod
+                    }
                 }
             }
         }
@@ -512,6 +531,11 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         {
             tempMidiBuffer.addEvent (makeMidiMessage (status, d1, d2), 0);
         };
+        // Anchor all looping lanes to the host's PPQ position each block so the
+        // engine phase tracks loops, repositions and tempo changes in sync mode.
+        // Called inside the spinlock (render-thread-only runtime state).
+        if (ppqPhase >= 0.0f)
+            _engine.seekToPhase (ppqPhase, effectiveSpeed);
 #if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
         _engine.processBlock (static_cast<uint32_t> (buffer.getNumSamples()),
                               getSampleRate(), midiOut, laneSpeedRatios, laneDirs);

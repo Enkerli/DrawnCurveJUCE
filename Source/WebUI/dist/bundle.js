@@ -25449,6 +25449,7 @@
   }
   function JuceIPadStudio({ width = 1024, height = 768 }) {
     const eng = useDrawnQurveEngine({ mode: "standard" });
+    const recorder = useMidiRecorder(eng);
     const [useDark, setUseDarkRaw] = React.useState(
       () => typeof localStorage !== "undefined" && localStorage.getItem("dq-theme") === "dark"
     );
@@ -25591,7 +25592,8 @@
           helpOpen,
           setHelpOpen,
           useDark,
-          setUseDark
+          setUseDark,
+          recorder
         }
       ),
       /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", minHeight: 0 } }, /* @__PURE__ */ React.createElement(
@@ -25602,7 +25604,8 @@
           width: LEFT_W,
           height: height - TOP_H - BOTTOM_H,
           open: leftOpen,
-          setOpen: setLeftOpen
+          setOpen: setLeftOpen,
+          recorder
         }
       ), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", minHeight: 0 } }, /* @__PURE__ */ React.createElement(
         YAxisGutter,
@@ -25647,7 +25650,14 @@
             useFlats: eng.useFlats
           }
         );
-      })(), discoveryVisible && /* @__PURE__ */ React.createElement(DiscoveryChip, { paper, onOpen: () => setScaleOpen(true) }))), /* @__PURE__ */ React.createElement(
+      })(), focusLane?.target === "Note" && /* @__PURE__ */ React.createElement(
+        PianoRollOverlay,
+        {
+          lane: focusLane,
+          w: canvasSize.w,
+          h: canvasSize.h
+        }
+      ), discoveryVisible && /* @__PURE__ */ React.createElement(DiscoveryChip, { paper, onOpen: () => setScaleOpen(true) }))), /* @__PURE__ */ React.createElement(
         XAxisGutter,
         {
           eng,
@@ -25791,7 +25801,7 @@
       helpOpen && /* @__PURE__ */ React.createElement(HelpOverlay, { paper, onClose: () => setHelpOpen(false) })
     );
   }
-  function JuceTopBar({ eng, paper, h, helpOpen, setHelpOpen, useDark, setUseDark }) {
+  function JuceTopBar({ eng, paper, h, helpOpen, setHelpOpen, useDark, setUseDark, recorder }) {
     return /* @__PURE__ */ React.createElement("div", { style: {
       height: h,
       display: "flex",
@@ -25849,7 +25859,7 @@
       fontSize: 16,
       minWidth: 60,
       flexShrink: 0
-    } }, eng.syncOn ? `${eng.beats} beats` : `${(1 / eng.speed).toFixed(1)} s`)), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }), /* @__PURE__ */ React.createElement("div", { style: { width: 1, height: 20, background: paper.rule, flexShrink: 0 } }), /* @__PURE__ */ React.createElement(
+    } }, eng.syncOn ? `${eng.beats} beats` : `${(1 / eng.speed).toFixed(1)} s`)), recorder && /* @__PURE__ */ React.createElement(MidiInputSelector, { recorder, paper }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }), /* @__PURE__ */ React.createElement("div", { style: { width: 1, height: 20, background: paper.rule, flexShrink: 0 } }), /* @__PURE__ */ React.createElement(
       "button",
       {
         onClick: () => eng.setUseFlats(!eng.useFlats),
@@ -26274,7 +26284,7 @@
       open ? "\u25B8" : "\u25C2 shape"
     ));
   }
-  function JuceLanePanel({ eng, paper, width, height, open, setOpen }) {
+  function JuceLanePanel({ eng, paper, width, height, open, setOpen, recorder }) {
     const MAX_LANES = 4;
     const canAdd = eng.lanes.length < MAX_LANES;
     const [addPending, setAddPending] = React.useState(false);
@@ -26435,6 +26445,39 @@
               }
             ), /* @__PURE__ */ React.createElement("circle", { cx: 7, cy: 5, r: 2, fill: "currentColor" }))
           )
+        ), recorder?.hasAccess && /* @__PURE__ */ React.createElement(
+          "button",
+          {
+            onPointerDown: (e) => e.stopPropagation(),
+            onClick: (e) => {
+              e.stopPropagation();
+              recorder.toggleRec(l.id);
+            },
+            title: recorder.isRecording(l.id) ? "Stop recording" : "Record MIDI input",
+            style: {
+              flexShrink: 0,
+              padding: 2,
+              border: "none",
+              borderRadius: 2,
+              background: recorder.isRecording(l.id) ? "oklch(50% 0.18 25 / 0.15)" : "transparent",
+              color: recorder.isRecording(l.id) ? "oklch(52% 0.20 25)" : paper.ink30,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              transition: "color 120ms, background 120ms"
+            }
+          },
+          /* @__PURE__ */ React.createElement("svg", { width: 12, height: 12, viewBox: "0 0 12 12", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement(
+            "circle",
+            {
+              cx: 6,
+              cy: 6,
+              r: 5,
+              fill: recorder.isRecording(l.id) ? "currentColor" : "none",
+              stroke: "currentColor",
+              strokeWidth: 1.5
+            }
+          ))
         )),
         /* @__PURE__ */ React.createElement("div", { style: {
           fontFamily: "Inter Tight",
@@ -27135,44 +27178,212 @@
       textShadow: `0 0 4px ${paper.bg}`
     } }, units));
   }
-  function MidiGhostOverlay({ w, h, paper }) {
-    const notes = [
-      { note: 72, vel: 90, start: 0.05, end: 0.25 },
-      // C5
-      { note: 69, vel: 70, start: 0.3, end: 0.55 },
-      // A4
-      { note: 71, vel: 85, start: 0.6, end: 0.8 },
-      // B4
-      { note: 74, vel: 60, start: 0.82, end: 0.95 },
-      // D5
-      { note: 67, vel: 75, start: 0.1, end: 0.45 }
-      // G4
-    ];
-    const noteToY = (n) => h * (1 - (n - 48) / 36);
+  function eventsToQurve(events, lane, loopSec) {
+    const N = 256;
+    const arr = new Float32Array(N).fill(0.5);
+    if (events.length === 0) return { curve: null, notes: null };
+    if (lane.target === "Note") {
+      const midiNotes = [];
+      const stack = {};
+      events.forEach((ev) => {
+        const tNorm = Math.min(1, ev.t / loopSec);
+        if (ev.type === "on") {
+          stack[ev.note] = { tNorm, vel: ev.vel };
+        } else if (ev.type === "off" && stack[ev.note]) {
+          const { tNorm: s, vel } = stack[ev.note];
+          midiNotes.push({ note: ev.note, vel, start: s, end: tNorm });
+          delete stack[ev.note];
+        }
+      });
+      Object.entries(stack).forEach(([note, { tNorm: s, vel }]) => {
+        midiNotes.push({ note: parseInt(note, 10), vel, start: s, end: 1 });
+      });
+      midiNotes.forEach((n) => {
+        const v = n.note / 127;
+        const si = Math.max(0, Math.round(n.start * (N - 1)));
+        const ei = Math.min(N - 1, Math.round(n.end * (N - 1)));
+        for (let i = si; i <= ei; i++) arr[i] = v;
+      });
+      return { curve: arr, notes: midiNotes };
+    }
+    const sorted = [...events].sort((a, b) => a.t - b.t);
+    let j = 0;
+    for (let i = 0; i < N; i++) {
+      const t = i / (N - 1) * loopSec;
+      while (j < sorted.length - 1 && sorted[j + 1].t <= t) j++;
+      arr[i] = sorted[j].v;
+    }
+    return { curve: arr, notes: null };
+  }
+  function useMidiRecorder(eng) {
+    const [access, setAccess] = React.useState(null);
+    const [inputs, setInputs] = React.useState([]);
+    const [inputId, setInputId] = React.useState(null);
+    const [recSet, setRecSet] = React.useState(() => /* @__PURE__ */ new Set());
+    const eventsRef = React.useRef({});
+    const recSetRef = React.useRef(recSet);
+    const engRef = React.useRef(eng);
+    React.useEffect(() => {
+      recSetRef.current = recSet;
+    }, [recSet]);
+    React.useEffect(() => {
+      engRef.current = eng;
+    }, [eng]);
+    React.useEffect(() => {
+      if (typeof navigator === "undefined" || !navigator.requestMIDIAccess) return;
+      navigator.requestMIDIAccess().then((acc) => {
+        const refresh = () => {
+          const ins = [...acc.inputs.values()];
+          setInputs(ins);
+          if (ins.length === 1) setInputId(ins[0].id);
+        };
+        setAccess(acc);
+        refresh();
+        acc.onstatechange = refresh;
+      }).catch(() => {
+      });
+    }, []);
+    React.useEffect(() => {
+      if (!access || !inputId) return;
+      const port = access.inputs.get(inputId);
+      if (!port) return;
+      const handle = (msg) => {
+        const nowMs = performance.now();
+        const data = msg.data;
+        if (!data || data.length < 2) return;
+        const [status, d1, d2 = 0] = data;
+        const ch = (status & 15) + 1;
+        const type = status & 240;
+        engRef.current.lanes.forEach((lane) => {
+          if (!recSetRef.current.has(lane.id)) return;
+          const rec = eventsRef.current[lane.id];
+          if (!rec || lane.channel !== ch) return;
+          const t = (nowMs - rec.startMs) / 1e3;
+          if (lane.target === "CC" && type === 176 && d1 === lane.targetDetail) {
+            rec.events.push({ t, v: d2 / 127 });
+          } else if (lane.target === "Aftertouch" && type === 208) {
+            rec.events.push({ t, v: d1 / 127 });
+          } else if (lane.target === "PitchBend" && type === 224) {
+            rec.events.push({ t, v: (d2 << 7 | d1) / 16383 });
+          } else if (lane.target === "Note") {
+            if (type === 144 && d2 > 0) rec.events.push({ t, note: d1, vel: d2, type: "on" });
+            else if (type === 128 || type === 144 && d2 === 0) rec.events.push({ t, note: d1, type: "off" });
+          }
+        });
+      };
+      port.onmidimessage = handle;
+      return () => {
+        port.onmidimessage = null;
+      };
+    }, [access, inputId]);
+    const startRec = React.useCallback((laneId) => {
+      eventsRef.current[laneId] = { startMs: performance.now(), events: [] };
+      setRecSet((prev) => /* @__PURE__ */ new Set([...prev, laneId]));
+    }, []);
+    const stopRec = React.useCallback((laneId) => {
+      setRecSet((prev) => {
+        const s = new Set(prev);
+        s.delete(laneId);
+        return s;
+      });
+      const rec = eventsRef.current[laneId];
+      if (!rec) return;
+      delete eventsRef.current[laneId];
+      const e = engRef.current;
+      const lane = e.lanes.find((l) => l.id === laneId);
+      if (!lane) return;
+      const loopSec = e.syncOn ? e.beats * 60 / 100 : 2 / e.speed;
+      const { curve, notes } = eventsToQurve(rec.events, lane, loopSec);
+      if (curve) {
+        const patch = { curve };
+        if (notes !== null) patch.midiNotes = notes;
+        e.updateLane(laneId, patch);
+      }
+    }, []);
+    const toggleRec = React.useCallback((laneId) => {
+      if (recSetRef.current.has(laneId)) stopRec(laneId);
+      else startRec(laneId);
+    }, [startRec, stopRec]);
+    return {
+      hasAccess: !!access,
+      inputs,
+      inputId,
+      setInputId,
+      isRecording: (id) => recSet.has(id),
+      toggleRec
+    };
+  }
+  function PianoRollOverlay({ lane, w, h }) {
+    if (!lane?.midiNotes?.length) return null;
+    const lo = Math.round(lane.rangeMin * 127);
+    const hi = Math.round(lane.rangeMax * 127);
+    const span = Math.max(1, hi - lo);
+    const rowH = Math.max(3, Math.min(14, h / span));
+    const color = lane.color || "#888";
+    const noteToY = (note) => h * (1 - (note - lo) / span);
     return /* @__PURE__ */ React.createElement("svg", { width: w, height: h, style: {
       position: "absolute",
       inset: 0,
       pointerEvents: "none",
       zIndex: 2
-    } }, notes.map((n, i) => /* @__PURE__ */ React.createElement(
+    } }, lane.midiNotes.map((n, i) => /* @__PURE__ */ React.createElement(
       "rect",
       {
         key: i,
         x: n.start * w,
-        y: noteToY(n.note) - 6,
-        width: (n.end - n.start) * w,
-        height: 12,
-        fill: paper.laneRose || "oklch(60% 0.14 25)",
-        opacity: n.vel / 127 * 0.22,
-        rx: 3
+        y: noteToY(n.note) - rowH / 2,
+        width: Math.max(3, (n.end - n.start) * w),
+        height: rowH,
+        fill: color,
+        opacity: n.vel / 127 * 0.3,
+        rx: 2
       }
-    )), /* @__PURE__ */ React.createElement("text", { x: 8, y: 18, style: {
+    )));
+  }
+  function MidiInputSelector({ recorder, paper }) {
+    const { hasAccess, inputs, inputId, setInputId } = recorder;
+    if (typeof navigator === "undefined" || !navigator.requestMIDIAccess) return null;
+    const baseStyle = {
+      height: 30,
+      padding: "0 8px",
+      background: paper.card,
+      border: `1px solid ${paper.rule}`,
+      borderRadius: 2,
+      cursor: "pointer",
+      flexShrink: 0,
       fontFamily: "Inter Tight",
-      fontSize: 9,
-      fill: paper.amberInk || "#8A5520",
-      letterSpacing: 1.5,
+      fontSize: 10,
+      letterSpacing: 0.8,
+      color: paper.ink70,
+      display: "flex",
+      alignItems: "center",
+      gap: 5,
       textTransform: "uppercase"
-    } }, "MIDI IN"));
+    };
+    if (!hasAccess) return /* @__PURE__ */ React.createElement("div", { style: { ...baseStyle, color: paper.ink30 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 8 } }, "\u25CF"), " MIDI in");
+    if (inputs.length === 0) return /* @__PURE__ */ React.createElement("div", { style: { ...baseStyle, color: paper.ink30 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 8 } }, "\u25CF"), " No MIDI");
+    const activeColor = "oklch(55% 0.17 25)";
+    return /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, flexShrink: 0 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 8, color: inputId ? activeColor : paper.ink30 } }, "\u25CF"), /* @__PURE__ */ React.createElement(
+      "select",
+      {
+        value: inputId || "",
+        onChange: (e) => setInputId(e.target.value || null),
+        style: {
+          height: 30,
+          padding: "0 6px",
+          background: paper.card,
+          border: `1px solid ${paper.rule}`,
+          borderRadius: 2,
+          cursor: "pointer",
+          fontFamily: "Inter Tight",
+          fontSize: 10,
+          color: paper.ink70,
+          maxWidth: 130
+        }
+      },
+      /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014 MIDI IN \u2014"),
+      inputs.map((inp) => /* @__PURE__ */ React.createElement("option", { key: inp.id, value: inp.id }, inp.name))
+    ));
   }
   var BUILTIN_QURVES = [
     { id: "b0", name: "slow arch", target: "CC", curve: makeSineCurve(64, 0.5, 0.4, 0.8, 0) },
@@ -27519,6 +27730,10 @@
         "Silences a lane without erasing its curve. Hollow dot + strikethrough in the lane panel."
       ],
       [
+        "MIDI RECORD",
+        "When a MIDI input is connected (select it in the top bar), each lane shows a \u23FA record button. Press \u23FA to start capturing \u2014 the lane listens only to its message type and channel. Press again to stop and convert to a curve. Note lanes also store note events as a piano-roll overlay (visible as translucent bars on the canvas), which acts as an onion skin when redrawing."
+      ],
+      [
         "SCALE",
         "Note lanes only. Tap the \u25B4 Scale button (bottom of canvas, right side) to open the scale editor. Tap pitch-class circles to toggle; double-tap to set root. Pick a preset or type a decimal mask (0\u20134095)."
       ],
@@ -27647,7 +27862,7 @@
       )
     );
   }
-  Object.assign(window, { JuceIPadStudio, QurveShelf, MidiGhostOverlay, DiscoveryChip, HelpOverlay });
+  Object.assign(window, { JuceIPadStudio, QurveShelf, PianoRollOverlay, MidiInputSelector, DiscoveryChip, HelpOverlay });
 
   // main.jsx
   (function patchEngine() {
