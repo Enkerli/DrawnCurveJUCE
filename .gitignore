@@ -37,3 +37,10 @@ mockups/*.heic
 DrawnQurve-*.html
 DrawnQurve-*.zip
 DrawnQurve-*/
+
+# WebUI source now lives in the music-suite monorepo (apps/drawnqurve); only the
+# C++ editor (WebCurveEditor.*) remains under Source/WebUI here. Bundle is built
+# into the build tree from the monorepo source.
+Source/WebUI/node_modules/
+Source/WebUI/dist/
+webui.local.cmake

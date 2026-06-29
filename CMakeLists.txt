@@ -146,13 +146,23 @@ juce_add_binary_data(DrawnCurveFonts SOURCES
 target_link_libraries(DrawnCurve PRIVATE DrawnCurveFonts)
 
 # ── WebUI bundle (esbuild → BinaryData) ──────────────────────────────────────
-# esbuild is invoked by npm/npx and must be installed in Source/WebUI:
-#   cd Source/WebUI && npm install
-# The dist/ files are checked in so a clean CMake configure works without Node.
-# Run 'npm run build' in Source/WebUI to regenerate after editing JS/JSX files.
+# The WebUI *source* lives in the music-suite monorepo (apps/drawnqurve) — single
+# source shared with the standalone webapp; only the C++ editor (WebCurveEditor.*)
+# stays here. Default to the maintainer's sibling checkout; override per machine
+# in webui.local.cmake (gitignored). esbuild/react resolve from the monorepo's
+# hoisted node_modules, so the monorepo must be checked out and `npm install`ed.
+set(DRAWNQURVE_WEBUI_DIR "${CMAKE_SOURCE_DIR}/../music-suite/apps/drawnqurve"
+    CACHE PATH "Path to the DrawnQurve WebUI source (music-suite/apps/drawnqurve)")
+include("${CMAKE_CURRENT_SOURCE_DIR}/webui.local.cmake" OPTIONAL)
+set(WEBUI_DIR "${DRAWNQURVE_WEBUI_DIR}")
+set(WEBUI_DIST "${CMAKE_CURRENT_BINARY_DIR}/webui")
 
-set(WEBUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source/WebUI")
-set(WEBUI_DIST "${WEBUI_DIR}/dist")
+if(NOT EXISTS "${WEBUI_DIR}/main.jsx")
+    message(FATAL_ERROR
+        "DrawnQurve WebUI source not found at ${WEBUI_DIR}. It now lives in the "
+        "music-suite monorepo (apps/drawnqurve). Check out music-suite next to this "
+        "repo, or set DRAWNQURVE_WEBUI_DIR in webui.local.cmake.")
+endif()
 
 find_program(NPXCMD npx)
 if(NPXCMD)
