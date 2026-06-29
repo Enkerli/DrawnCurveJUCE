@@ -200,6 +200,32 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
     return () => window.removeEventListener('keydown', onKey);
   }, []); // stable — reads all state via refs
 
+  // ── Outer-container size (ResizeObserver) ────────────────────────────────
+  // The outer div uses width:'100%', height:'100%' so it fills the WKWebView
+  // frame exactly — avoiding the clipping that occurred when window.innerWidth
+  // differed slightly from the actual JUCE-allocated frame.  We measure the
+  // outer div's actual pixel size and use it for all internal layout math
+  // (panel heights, canvas fallback size).  The `width`/`height` props are
+  // only ever used as initial estimates before the first ResizeObserver fire.
+  //
+  // IMPORTANT: this block must precede any use of W / H (canvasW/canvasH below).
+  const outerRef = React.useRef(null);
+  const [outerSize, setOuterSize] = React.useState({
+    w: width  || 1024,
+    h: height || 768,
+  });
+  React.useLayoutEffect(() => {
+    if (!outerRef.current || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width: w, height: h } = entry.contentRect;
+      if (w > 0 && h > 0) setOuterSize({ w: Math.floor(w), h: Math.floor(h) });
+    });
+    ro.observe(outerRef.current);
+    return () => ro.disconnect();
+  }, []); // stable — outer element never changes
+  const W = outerSize.w;   // use W / H everywhere instead of width / height
+  const H = outerSize.h;
+
   // Gutter geometry — Y gutter on the left, X gutter on the bottom of the
   // canvas area, intersecting at the '#' corner cell.  Width must match
   // CORNER_W for the L to align.
@@ -207,8 +233,8 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
   // 36 × 36 quantize buttons (audit F-02) fit cleanly with margin.
   const Y_GUTTER_W = 60;
   const X_GUTTER_H = 48;
-  const canvasW = width  - LEFT_W - RIGHT_W - Y_GUTTER_W;
-  const canvasH = height - TOP_H - BOTTOM_H - SHELF_H - SCALE_H - X_GUTTER_H;
+  const canvasW = W - LEFT_W - RIGHT_W - Y_GUTTER_W;
+  const canvasH = H - TOP_H - BOTTOM_H - SHELF_H - SCALE_H - X_GUTTER_H;
 
   // Canvas sizing — track the canvas-area div's *actual* allocated size with
   // a ResizeObserver instead of computing from window.innerWidth/Height.  The
@@ -241,9 +267,10 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
 
   return (
     <div
+      ref={outerRef}
       onContextMenu={e => e.preventDefault()}
       style={{
-      width, height,
+      width: '100%', height: '100%',
       background: paper.bg,
       fontFamily: 'Inter Tight, Inter, system-ui, sans-serif',
       color: paper.ink,
@@ -267,7 +294,6 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
 
         {/* Left lane panel */}
         <JuceLanePanel eng={eng} paper={paper} width={LEFT_W}
-          height={height - TOP_H - BOTTOM_H}
           open={leftOpen} setOpen={setLeftOpen}
           recorder={recorder} />
 
@@ -304,11 +330,14 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
                 );
               })()}
 
-              {/* Piano roll — real recorded MIDI notes (onion skin for Note lanes) */}
+              {/* Piano roll — committed notes (onion skin) + live preview during recording */}
               {focusLane?.target === 'Note' && (
                 <PianoRollOverlay
                   lane={focusLane}
                   w={canvasSize.w} h={canvasSize.h}
+                  liveRecRef={recorder.armedLane === focusLane?.id ? recorder.liveRecRef : null}
+                  isRecording={recorder.isRecording && recorder.armedLane === focusLane?.id}
+                  liveRecTick={recorder.liveRecTick}
                 />
               )}
 
@@ -473,6 +502,10 @@ function JuceIPadStudio({ width = 1024, height = 768 }) {
 // removed — they consumed ~150 px and drove no real behaviour.  They will
 // return as real controls when the features are implemented.
 function JuceTopBar({ eng, paper, h, helpOpen, setHelpOpen, useDark, setUseDark, recorder }) {
+  const rec = recorder;
+  const canRecord  = rec?.hasAccess && rec?.armedLane !== null;
+  const isRec      = !!rec?.isRecording;
+
   return (
     <div style={{
       height: h, display: 'flex', alignItems: 'center',
@@ -491,6 +524,33 @@ function JuceTopBar({ eng, paper, h, helpOpen, setHelpOpen, useDark, setUseDark,
       {/* Playback direction + transport */}
       <PlaybackControl direction={eng.direction} setDirection={eng.setDirection}
         playing={eng.playing} setPlaying={eng.setPlaying} paper={paper} />
+
+      {/* ── REC button — starts/stops MIDI capture for the armed lane ─────── */}
+      {rec?.hasAccess && (
+        <button
+          onClick={() => rec.toggleRecording()}
+          disabled={!canRecord && !isRec}
+          title={
+            isRec          ? 'Stop recording'
+            : canRecord    ? `Record into Lane ${rec.armedLane + 1}`
+                           : 'Arm a lane first (●)'
+          }
+          style={{
+            width: 30, height: 30, borderRadius: '50%', padding: 0,
+            border: `2px solid ${isRec ? 'oklch(52% 0.20 25)' : canRecord ? paper.ink50 : paper.rule}`,
+            background: isRec ? 'oklch(52% 0.20 25)' : 'transparent',
+            color: isRec ? '#fff' : canRecord ? paper.ink50 : paper.ink30,
+            cursor: canRecord || isRec ? 'pointer' : 'default',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+            animation: isRec ? 'dq-pulse 1s ease-in-out infinite' : 'none',
+            transition: 'background 150ms, border-color 150ms, color 150ms',
+          }}>
+          <svg width={10} height={10} viewBox="0 0 10 10" aria-hidden="true">
+            <circle cx={5} cy={5} r={4} fill="currentColor" />
+          </svg>
+        </button>
+      )}
 
       {/* Sync mode + duration/beat-count.
           Free mode: slider controls duration in seconds (= 1 / speed ratio).
@@ -605,7 +665,7 @@ function JuceShapeWell({ open, setOpen, eng, paper, focusLane, width }) {
       {open && focusLane && (
         // paddingLeft: 48 keeps all content clear of the 36 px collapse-tab handle
         // that is absolutely positioned at the left edge of this panel.
-        <div style={{ width: 256, padding: '14px 12px 14px 48px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ width: 256, boxSizing: 'border-box', padding: '14px 12px 14px 48px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{
             fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 1.5,
             color: paper.ink50, textTransform: 'uppercase', marginBottom: 2,
@@ -976,7 +1036,7 @@ function JuceLanePanel({ eng, paper, width, height, open, setOpen, recorder }) {
 
   return (
     <div style={{
-      width, height, flexShrink: 0,
+      width, alignSelf: 'stretch', flexShrink: 0,
       borderRight: `1px solid ${paper.rule}`,
       background: open ? paper.card : 'transparent',
       position: 'relative', overflow: 'hidden',
@@ -1036,6 +1096,7 @@ function JuceLanePanel({ eng, paper, width, height, open, setOpen, recorder }) {
               userSelect: 'none',
             }}
           >
+            {/* Row 1: mute dot · lane name · eye ──────────────────────────── */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               {/* Mute dot — solid = active, hollow = muted (MIDI output). */}
               <button
@@ -1088,37 +1149,76 @@ function JuceLanePanel({ eng, paper, width, height, open, setOpen, recorder }) {
                   </svg>
                 )}
               </button>
-              {/* REC — record MIDI input into this lane's curve. */}
-              {recorder?.hasAccess && (
-                <button
-                  onPointerDown={e => e.stopPropagation()}
-                  onClick={e => { e.stopPropagation(); recorder.toggleRec(l.id); }}
-                  title={recorder.isRecording(l.id) ? 'Stop recording' : 'Record MIDI input'}
-                  style={{
-                    flexShrink: 0, padding: 2, border: 'none', borderRadius: 2,
-                    background: recorder.isRecording(l.id) ? 'oklch(50% 0.18 25 / 0.15)' : 'transparent',
-                    color: recorder.isRecording(l.id) ? 'oklch(52% 0.20 25)' : paper.ink30,
-                    cursor: 'pointer', display: 'flex', alignItems: 'center',
-                    transition: 'color 120ms, background 120ms',
-                  }}>
-                  <svg width={12} height={12} viewBox="0 0 12 12" aria-hidden="true">
-                    <circle cx={6} cy={6} r={5}
-                      fill={recorder.isRecording(l.id) ? 'currentColor' : 'none'}
-                      stroke="currentColor" strokeWidth={1.5}/>
-                  </svg>
-                </button>
-              )}
             </div>
-            <div style={{
-              fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 0.8,
-              color: paper.ink50, textTransform: 'uppercase',
-            }}>
-              {l.target === 'PitchBend' ? 'Pitch Bend' : l.target}
-              {l.target === 'CC' && ` · CC ${l.targetDetail}`}
-              {l.target === 'Note' && (() => {
-                const sc = window.SCALES?.find(s => s.id === l.scaleId);
-                const root = window.pitchName?.(l.scaleRoot, eng.useFlats) ?? '';
-                return ` · ${root}${sc ? ' ' + sc.name : ''}`;
+            {/* Row 2: target label (flex:1) · ARM button · MIDI activity dot ── */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{
+                fontFamily: 'Inter Tight', fontSize: 10, letterSpacing: 0.8,
+                color: paper.ink50, textTransform: 'uppercase', flex: 1,
+              }}>
+                {l.target === 'PitchBend' ? 'Pitch Bend' : l.target}
+                {l.target === 'CC' && ` · CC ${l.targetDetail}`}
+                {l.target === 'Note' && (() => {
+                  const sc = window.SCALES?.find(s => s.id === l.scaleId);
+                  const root = window.pitchName?.(l.scaleRoot, eng.useFlats) ?? '';
+                  return ` · ${root}${sc ? ' ' + sc.name : ''}`;
+                })()}
+              </span>
+              {/* ARM button + MIDI activity dot ─────────────────────────────
+                  Lives in row 2 so row 1 (lane name) never gets squished.
+                  Hollow circle = armed, filled = recording.
+                  Dot: green = in-range MIDI received; amber = out-of-range or
+                  wrong channel; grey = armed but idle. */}
+              {recorder?.hasAccess && (() => {
+                const isArmed = recorder.armedLane === l.id;
+                const isRec   = isArmed && recorder.isRecording;
+                const act     = isArmed && recorder.midiActivity?.tick > 0;
+                const inRange = recorder.midiActivity?.inRange !== false;
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+                    <button
+                      onPointerDown={e => e.stopPropagation()}
+                      onClick={e => { e.stopPropagation(); recorder.setArmedLane(l.id); }}
+                      title={isArmed
+                        ? (isRec ? 'Recording — click REC to stop' : 'Armed — click REC to start, or click here to disarm')
+                        : 'Arm this lane for MIDI recording'}
+                      style={{
+                        flexShrink: 0, width: 16, height: 16, padding: 0,
+                        border: 'none', borderRadius: 3, boxSizing: 'border-box',
+                        background: isRec  ? 'oklch(50% 0.18 25 / 0.18)'
+                                  : isArmed ? 'oklch(65% 0.14 65 / 0.15)'
+                                  : 'transparent',
+                        color: isRec  ? 'oklch(62% 0.22 25)'
+                             : isArmed ? 'oklch(65% 0.16 65)'
+                             : paper.ink50,
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        transition: 'color 120ms, background 120ms',
+                      }}>
+                      <svg width={9} height={9} viewBox="0 0 9 9" aria-hidden="true">
+                        <circle cx={4.5} cy={4.5} r={3.5}
+                          fill={isRec ? 'currentColor' : 'none'}
+                          stroke="currentColor" strokeWidth={1.5}/>
+                      </svg>
+                    </button>
+                    {isArmed && (
+                      <div
+                        title={act
+                          ? (inRange ? 'MIDI received — in range' : 'MIDI received — out of range or wrong channel')
+                          : 'Armed — waiting for MIDI'}
+                        style={{
+                          width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+                          background: act
+                            ? (inRange ? 'oklch(65% 0.20 145)' : 'oklch(70% 0.18 65)')
+                            : paper.ink20,
+                          boxShadow: act
+                            ? (inRange ? '0 0 3px oklch(65% 0.20 145 / 0.7)' : '0 0 3px oklch(70% 0.18 65 / 0.7)')
+                            : 'none',
+                          transition: act ? 'none' : 'background 300ms, box-shadow 300ms',
+                        }}
+                      />
+                    )}
+                  </div>
+                );
               })()}
             </div>
             {focused && (
@@ -1758,13 +1858,21 @@ function eventsToQurve(events, lane, loopSec) {
     Object.entries(stack).forEach(([note, { tNorm: s, vel }]) => {
       midiNotes.push({ note: parseInt(note, 10), vel, start: s, end: 1 });
     });
-    // Paint pitch curve: silence = 0.5; each note's time range → note/127
+    // Paint pitch curve using NaN as sentinel for gaps.
+    // Gaps before the first note stay at 0.5 (center/silence);
+    // gaps after a note hold that note's last value (monosynth hold behaviour).
+    arr.fill(NaN);
     midiNotes.forEach(n => {
       const v = n.note / 127;
       const si = Math.max(0, Math.round(n.start * (N - 1)));
       const ei = Math.min(N - 1, Math.round(n.end * (N - 1)));
       for (let i = si; i <= ei; i++) arr[i] = v;
     });
+    let lastVal = 0.5;
+    for (let i = 0; i < N; i++) {
+      if (isNaN(arr[i])) { arr[i] = lastVal; }
+      else { lastVal = arr[i]; }
+    }
     return { curve: arr, notes: midiNotes };
   }
 
@@ -1779,22 +1887,73 @@ function eventsToQurve(events, lane, loopSec) {
   return { curve: arr, notes: null };
 }
 
-// useMidiRecorder — manages Web MIDI access and per-lane recording.
-// Returns a recorder object threaded to JuceTopBar and JuceLanePanel.
+// useMidiRecorder — manages MIDI recording with an ARM / REC workflow.
+//
+// Workflow:
+//   1. Click ARM on a lane  → arms that lane (only one lane armed at a time).
+//   2. Click REC in the transport → starts capturing MIDI for the armed lane.
+//   3. Click REC again → stops capture, runs eventsToQurve, updates the lane curve.
+//
+// Two MIDI sources:
+//   Web MIDI mode  — browser / Chrome / Edge: navigator.requestMIDIAccess.
+//   JUCE mode      — WKWebView: C++ buffers incoming MIDI; bridge emits "midiIn"
+//                    events via eng.setMidiInHandler (wired in main.jsx patchEngine).
+//
+// Live preview:
+//   During recording of a Note lane, liveRecRef tracks in-progress notes so
+//   PianoRollOverlay can render them before eventsToQurve runs.
+//   A 100 ms interval keeps the display current while notes are held.
 function useMidiRecorder(eng) {
+  const isJuceMode = typeof window.__JUCE__ !== 'undefined';
+
+  // ── Web MIDI access ────────────────────────────────────────────────────────
   const [access, setAccess]   = React.useState(null);
   const [inputs, setInputs]   = React.useState([]);
   const [inputId, setInputId] = React.useState(null);
-  const [recSet, setRecSet]   = React.useState(() => new Set());
 
-  const eventsRef    = React.useRef({});  // laneId → { startMs, events[] }
-  const recSetRef    = React.useRef(recSet);
-  const engRef       = React.useRef(eng);
-  React.useEffect(() => { recSetRef.current = recSet; }, [recSet]);
+  // ── ARM / REC state ────────────────────────────────────────────────────────
+  // armedLane: which lane will record when REC is pressed (null = none).
+  // isRecording: capture is actively running.
+  const [armedLane, setArmedLaneState] = React.useState(null);
+  const [isRecording, setIsRecording]  = React.useState(false);
+  const armedLaneRef  = React.useRef(null);
+  const isRecordingRef = React.useRef(false);
+  // NOTE: the refs below are also updated synchronously in the ARM/start/stop
+  // functions so processMidiBytes always sees the current value without waiting
+  // for a React effect to fire (effects run after paint — that's too late when
+  // JUCE's 30 Hz timer fires between the click and the next render).
+  React.useEffect(() => { armedLaneRef.current  = armedLane;   }, [armedLane]);
+  React.useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
+
+  // ── Raw event accumulator ──────────────────────────────────────────────────
+  // eventsRef: raw events accumulated during capture, converted on stop.
+  const eventsRef = React.useRef(null);  // { startMs, events[] } | null
+
+  // ── Live note preview ──────────────────────────────────────────────────────
+  // liveRecRef: {active: {noteNum→{vel,tStart}}, done:[{note,vel,tStart,tEnd}]}
+  // Updated synchronously on each MIDI event; read by PianoRollOverlay via ref.
+  const liveRecRef = React.useRef({ active: {}, done: [] });
+  // liveRecTick bumps every 100 ms while recording so the overlay re-renders.
+  const [liveRecTick, setLiveRecTick] = React.useState(0);
+  React.useEffect(() => {
+    if (!isRecording) { liveRecRef.current = { active: {}, done: [] }; return; }
+    const id = setInterval(() => setLiveRecTick(t => t + 1), 100);
+    return () => clearInterval(id);
+  }, [isRecording]);
+
+  // ── MIDI activity indicator ────────────────────────────────────────────────
+  // midiActivity: { tick, inRange } — updated on every incoming MIDI event
+  // before channel/range filtering so the indicator lights up for ALL messages
+  // (including out-of-range notes, which are the most useful to flag).
+  const [midiActivity, setMidiActivity] = React.useState({ tick: 0, inRange: true });
+  const midiActivityTimerRef = React.useRef(null);
+
+  const engRef = React.useRef(eng);
   React.useEffect(() => { engRef.current = eng; }, [eng]);
 
-  // Request MIDI access once on mount
+  // ── Web MIDI: request access ───────────────────────────────────────────────
   React.useEffect(() => {
+    if (isJuceMode) return;
     if (typeof navigator === 'undefined' || !navigator.requestMIDIAccess) return;
     navigator.requestMIDIAccess().then(acc => {
       const refresh = () => {
@@ -1806,74 +1965,180 @@ function useMidiRecorder(eng) {
       refresh();
       acc.onstatechange = refresh;
     }).catch(() => {});
-  }, []);
+  }, [isJuceMode]);
 
-  // Attach message handler whenever selected port changes
-  React.useEffect(() => {
-    if (!access || !inputId) return;
-    const port = access.inputs.get(inputId);
-    if (!port) return;
-    const handle = (msg) => {
-      const nowMs = performance.now();
-      const data = msg.data;
-      if (!data || data.length < 2) return;
-      const [status, d1, d2 = 0] = data;
-      const ch   = (status & 0x0F) + 1;
-      const type = status & 0xF0;
-      engRef.current.lanes.forEach(lane => {
-        if (!recSetRef.current.has(lane.id)) return;
-        const rec = eventsRef.current[lane.id];
-        if (!rec || lane.channel !== ch) return;
-        const t = (nowMs - rec.startMs) / 1000;
-        if (lane.target === 'CC' && type === 0xB0 && d1 === lane.targetDetail) {
-          rec.events.push({ t, v: d2 / 127 });
-        } else if (lane.target === 'Aftertouch' && type === 0xD0) {
-          rec.events.push({ t, v: d1 / 127 });
-        } else if (lane.target === 'PitchBend' && type === 0xE0) {
-          rec.events.push({ t, v: ((d2 << 7) | d1) / 16383 });
-        } else if (lane.target === 'Note') {
-          if (type === 0x90 && d2 > 0) rec.events.push({ t, note: d1, vel: d2, type: 'on' });
-          else if (type === 0x80 || (type === 0x90 && d2 === 0)) rec.events.push({ t, note: d1, type: 'off' });
-        }
-      });
-    };
-    port.onmidimessage = handle;
-    return () => { port.onmidimessage = null; };
-  }, [access, inputId]);
+  // ── Shared MIDI processor ──────────────────────────────────────────────────
+  // recMs: milliseconds since recording started, supplied by C++ audio thread.
+  //   • In JUCE mode this value is accurate (stamped in processBlock) so note
+  //     positions are correct even if the 30 Hz drain timer fires irregularly.
+  //   • In Web MIDI mode recMs is undefined; we fall back to performance.now().
+  const processMidiBytes = React.useCallback((laneId, status, d1, d2, recMs) => {
+    // Indicator fires whenever the lane is ARMED, regardless of recording state.
+    // This lets the user verify MIDI is flowing before pressing REC.
+    if (armedLaneRef.current !== laneId) return;
 
-  const startRec = React.useCallback((laneId) => {
-    eventsRef.current[laneId] = { startMs: performance.now(), events: [] };
-    setRecSet(prev => new Set([...prev, laneId]));
-  }, []);
-
-  const stopRec = React.useCallback((laneId) => {
-    setRecSet(prev => { const s = new Set(prev); s.delete(laneId); return s; });
-    const rec = eventsRef.current[laneId];
-    if (!rec) return;
-    delete eventsRef.current[laneId];
-    const e = engRef.current;
-    const lane = e.lanes.find(l => l.id === laneId);
+    const lane = engRef.current.lanes.find(l => l.id === laneId);
     if (!lane) return;
-    const loopSec = e.syncOn ? (e.beats * 60 / 100) : (2 / e.speed);
-    const { curve, notes } = eventsToQurve(rec.events, lane, loopSec);
-    if (curve) {
-      const patch = { curve };
-      if (notes !== null) patch.midiNotes = notes;
-      e.updateLane(laneId, patch);
+    const ch   = (status & 0x0F) + 1;
+    const type =  status & 0xF0;
+
+    // ── MIDI activity indicator ──────────────────────────────────────────────
+    // Green = note in range on any channel.
+    // Amber = note received but out of range or on a different channel than the
+    //         lane's configured output channel (the user may want to adjust the
+    //         lane's channel or range setting).
+    let inRange = true;
+    if (type === 0x90 && d2 > 0 && lane.target === 'Note') {
+      const lo = Math.round(lane.rangeMin * 127);
+      const hi = Math.round(lane.rangeMax * 127);
+      inRange = d1 >= lo && d1 <= hi;
+    }
+    // Channel mismatch counts as "out of range" for the indicator only —
+    // the note is still captured (see below).
+    if (lane.channel !== ch) inRange = false;
+    if (midiActivityTimerRef.current) clearTimeout(midiActivityTimerRef.current);
+    setMidiActivity(prev => ({ tick: prev.tick + 1, inRange }));
+    midiActivityTimerRef.current = setTimeout(() =>
+      setMidiActivity(prev => ({ ...prev, tick: 0 })), 300);
+
+    // ── Capture (only while actively recording) ──────────────────────────────
+    if (!isRecordingRef.current) return;
+    const rec = eventsRef.current;
+    if (!rec) return;
+
+    // Use C++ timestamp when available (JUCE mode); fall back to JS wall-clock.
+    // The C++ timestamp is stamped in processBlock — it stays accurate even when
+    // the JS 30 Hz timer fires late or sends a burst of queued events at once.
+    const t = (recMs !== undefined && recMs >= 0)
+      ? recMs / 1000
+      : (performance.now() - rec.startMs) / 1000;
+
+    // Accept MIDI from any channel during recording — the per-lane channel
+    // setting governs playback output, not input capture.
+    if (lane.target === 'CC' && type === 0xB0 && d1 === lane.targetDetail) {
+      rec.events.push({ t, v: d2 / 127 });
+    } else if (lane.target === 'Aftertouch' && type === 0xD0) {
+      rec.events.push({ t, v: d1 / 127 });
+    } else if (lane.target === 'PitchBend' && type === 0xE0) {
+      rec.events.push({ t, v: ((d2 << 7) | d1) / 16383 });
+    } else if (lane.target === 'Note') {
+      if (type === 0x90 && d2 > 0) {
+        rec.events.push({ t, note: d1, vel: d2, type: 'on' });
+        // Live preview: open a new active note
+        liveRecRef.current.active[d1] = { vel: d2, tStart: t };
+        setLiveRecTick(n => n + 1);
+      } else if (type === 0x80 || (type === 0x90 && d2 === 0)) {
+        rec.events.push({ t, note: d1, type: 'off' });
+        // Live preview: finalise the note
+        const open = liveRecRef.current.active[d1];
+        if (open) {
+          liveRecRef.current.done.push({ note: d1, vel: open.vel, tStart: open.tStart, tEnd: t });
+          delete liveRecRef.current.active[d1];
+          setLiveRecTick(n => n + 1);
+        }
+      }
     }
   }, []);
 
-  const toggleRec = React.useCallback((laneId) => {
-    if (recSetRef.current.has(laneId)) stopRec(laneId); else startRec(laneId);
-  }, [startRec, stopRec]);
+  // ── Web MIDI: attach handler on port change ────────────────────────────────
+  React.useEffect(() => {
+    if (isJuceMode || !access || !inputId) return;
+    const port = access.inputs.get(inputId);
+    if (!port) return;
+    const handle = (msg) => {
+      const data = msg.data;
+      if (!data || data.length < 2) return;
+      const lane = armedLaneRef.current;
+      if (lane === null) return;
+      processMidiBytes(lane, data[0], data[1], data[2] ?? 0);
+      // No recMs in Web MIDI mode — processMidiBytes falls back to performance.now()
+    };
+    port.onmidimessage = handle;
+    return () => { port.onmidimessage = null; };
+  }, [isJuceMode, access, inputId, processMidiBytes]);
+
+  // ── JUCE bridge: register midiIn handler ──────────────────────────────────
+  React.useEffect(() => {
+    if (!isJuceMode || !eng.setMidiInHandler) return;
+    eng.setMidiInHandler(({ lane, status, data1, data2, ms }) => {
+      // Pass C++ ms offset so processMidiBytes can use accurate timestamps.
+      processMidiBytes(lane, status, data1, data2, ms);
+    });
+    return () => eng.setMidiInHandler(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isJuceMode, processMidiBytes]);
+
+  // ── ARM a lane (toggle — clicking armed lane disarms) ─────────────────────
+  const setArmedLane = React.useCallback((laneId) => {
+    // Stop any active recording before re-arming
+    if (isRecordingRef.current) stopRecording();
+    const next = (armedLaneRef.current === laneId) ? null : laneId;
+    armedLaneRef.current = next;  // sync update so processMidiBytes sees it immediately
+    setArmedLaneState(next);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Start / stop recording ─────────────────────────────────────────────────
+  const startRecording = React.useCallback(() => {
+    const lane = armedLaneRef.current;
+    if (lane === null) return;
+    eventsRef.current = { startMs: performance.now(), events: [] };
+    liveRecRef.current = { active: {}, done: [] };
+    isRecordingRef.current = true;  // sync update — don't wait for React effect
+    setIsRecording(true);
+    if (isJuceMode && engRef.current.beginRecord) engRef.current.beginRecord(lane);
+  }, [isJuceMode]);
+
+  const stopRecording = React.useCallback(() => {
+    const lane = armedLaneRef.current;
+    isRecordingRef.current = false;  // sync update — blocks processMidiBytes immediately
+    setIsRecording(false);
+    if (isJuceMode && engRef.current.stopRecord) engRef.current.stopRecord();
+    const rec = eventsRef.current;
+    eventsRef.current = null;
+    if (!rec || lane === null) return;
+    const e = engRef.current;
+    const laneObj = e.lanes.find(l => l.id === lane);
+    if (!laneObj) return;
+    // Map all recorded events proportionally to [0,1] using the actual
+    // recording duration as the denominator.  Using the engine's loopSec
+    // (beats*60/100, or 2/speed) mismaps events whenever the host BPM ≠ 100
+    // or the user records for longer than one loop: timestamps past loopSec
+    // are clamped to tNorm=1.0 and rendered at x=w (outside the SVG viewBox),
+    // making those notes invisible in the committed overlay even though they
+    // showed correctly in the live preview (which normalises to max tEnd).
+    const totalDuration = Math.max(0.001, (performance.now() - rec.startMs) / 1000);
+    const { curve, notes } = eventsToQurve(rec.events, laneObj, totalDuration);
+    if (!curve) return;
+    // setCurve updates React state AND sends the curve to the C++ engine
+    // (updateLane with a 'curve' patch skips sendCurve, so C++ never learned
+    // about the recorded data — the curve would revert on the next stateSnapshot).
+    e.setCurve(lane, curve);
+    // midiNotes is JS-only (piano-roll display), so patch it separately via
+    // setLanes to avoid interfering with the sendParam loop in updateLane.
+    if (notes !== null && notes.length > 0) {
+      e.setLanes(prev => prev.map(l => l.id === lane ? { ...l, midiNotes: notes } : l));
+    }
+  }, [isJuceMode]);
+
+  const toggleRecording = React.useCallback(() => {
+    if (isRecordingRef.current) stopRecording(); else startRecording();
+  }, [startRecording, stopRecording]);
 
   return {
-    hasAccess: !!access,
+    hasAccess: isJuceMode || !!access,
     inputs,
     inputId,
     setInputId,
-    isRecording: (id) => recSet.has(id),
-    toggleRec,
+    armedLane,
+    setArmedLane,
+    isRecording,
+    toggleRecording,
+    // For live note preview — ref + tick read by PianoRollOverlay
+    liveRecRef,
+    liveRecTick,   // changing value forces re-render of overlay consumers
+    // MIDI activity indicator: { tick (0=idle/>0=active), inRange }
+    midiActivity,
   };
 }
 
@@ -1881,26 +2146,85 @@ function useMidiRecorder(eng) {
 // Renders recorded MIDI note events as translucent horizontal bars,
 // using the lane's range to determine Y mapping — matching the curve canvas.
 // Acts as onion skin when the user draws a new curve over a recorded pattern.
-function PianoRollOverlay({ lane, w, h }) {
-  if (!lane?.midiNotes?.length) return null;
-  const lo   = Math.round(lane.rangeMin * 127);
-  const hi   = Math.round(lane.rangeMax * 127);
-  const span = Math.max(1, hi - lo);
-  const rowH = Math.max(3, Math.min(14, h / span));
+//
+// Live preview: when liveRecRef + isRecording are provided, also renders
+// in-progress notes (both completed and still-held) in real time at 100 ms
+// resolution, before eventsToQurve runs at stop.
+function PianoRollOverlay({ lane, w, h, liveRecRef, isRecording, liveRecTick }) {
+  if (!lane) return null;
+  const lo    = Math.round(lane.rangeMin * 127);
+  const hi    = Math.round(lane.rangeMax * 127);
+  const span  = Math.max(1, hi - lo);
+  const rowH  = Math.max(3, Math.min(14, h / span));
   const color = lane.color || '#888';
   const noteToY = (note) => h * (1 - (note - lo) / span);
+
+  // Committed notes from previous recording (onion skin)
+  const committed = lane.midiNotes ?? [];
+
+  // Live notes during active recording — read directly from mutable ref
+  // so we avoid a full state copy for every 100 ms tick.
+  const liveNotes = [];
+  if (isRecording && liveRecRef?.current) {
+    const live = liveRecRef.current;
+    const now  = performance.now();
+    // We need the recording start time to convert ms → seconds.
+    // It's stored on eventsRef (via rec.startMs) but we can derive it from
+    // done notes' tStart values, or just use the first entry's tStart.
+    // Simpler: accept that we don't know startMs here and render durations
+    // as-is using the done list (tStart/tEnd) and active notes clipped to 1.
+    // We use tEnd - tStart proportional to loopSec — but we don't have loopSec here.
+    // So we skip the fraction conversion for live notes and instead render them
+    // relative to the MAXIMUM observed tEnd (or a rolling window).
+    // NOTE: for the live preview we render positions using normalised t-values
+    // capped to [0,1], which are pre-computed in stopRecording anyway.
+    // For simplicity, we just show completed notes with tStart/tEnd as fractions
+    // assuming a 1-second loop — this gives a relative picture, not exact.
+    // The PianoRoll is just feedback; the real output comes from eventsToQurve.
+    live.done.forEach(n => {
+      liveNotes.push({ note: n.note, vel: n.vel, start: n.tStart, end: n.tEnd });
+    });
+    const maxT = Math.max(1, ...live.done.map(n => n.tEnd ?? 0),
+                          ...Object.values(live.active).map(n => n.tStart));
+    Object.entries(live.active).forEach(([noteStr, { vel, tStart }]) => {
+      liveNotes.push({ note: parseInt(noteStr), vel, start: tStart, end: maxT });
+    });
+    // Suppress the liveRecTick dependency warning — we want re-renders on tick
+    void liveRecTick;
+  }
+
+  if (!committed.length && !liveNotes.length) return null;
+
+  // Scale factor: committed notes are already in [0,1] fractions.
+  // Live notes are in seconds; normalise by the max time seen.
+  const liveMax = liveNotes.length
+    ? Math.max(1, ...liveNotes.map(n => n.end ?? n.start)) : 1;
+
   return (
     <svg width={w} height={h} style={{
       position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2,
     }}>
-      {lane.midiNotes.map((n, i) => (
-        <rect key={i}
+      {/* Committed (onion skin) */}
+      {committed.map((n, i) => (
+        <rect key={`c${i}`}
           x={n.start * w}
           y={noteToY(n.note) - rowH / 2}
           width={Math.max(3, (n.end - n.start) * w)}
           height={rowH}
           fill={color}
-          opacity={(n.vel / 127) * 0.30}
+          opacity={(n.vel / 127) * 0.28}
+          rx={2}
+        />
+      ))}
+      {/* Live — brighter while recording */}
+      {liveNotes.map((n, i) => (
+        <rect key={`l${i}`}
+          x={(n.start / liveMax) * w}
+          y={noteToY(n.note) - rowH / 2}
+          width={Math.max(3, ((n.end - n.start) / liveMax) * w)}
+          height={rowH}
+          fill={color}
+          opacity={Math.min(0.80, (n.vel / 127) * 0.65)}
           rx={2}
         />
       ))}
@@ -2011,7 +2335,10 @@ function QurveShelf({ eng, paper, focusLane }) {
   const startSave = () => {
     if (!canSave) return;
     const d = new Date();
-    const auto = `${focusLane.target} ${d.toLocaleDateString('en', { month: 'short', day: 'numeric' })}`;
+    const date = d.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const auto = `${focusLane.target} ${date} ${hh}:${mm}`;
     setSaveName(auto);
     setSaving(true);
     setTimeout(() => { nameRef.current?.select(); }, 0);
@@ -2033,6 +2360,9 @@ function QurveShelf({ eng, paper, focusLane }) {
       scaleId: focusLane.scaleId,
       scaleRoot: focusLane.scaleRoot,
       scaleMask: focusLane.scaleMask,
+      // midiNotes is JS-only (piano-roll display) but worth persisting so the
+      // onion-skin overlay stays visible after the qurve is reloaded from the library.
+      midiNotes: focusLane.midiNotes ?? null,
     };
     setLibrary(prev => [...prev, entry]);
     setSaving(false);
@@ -2098,7 +2428,11 @@ function QurveShelf({ eng, paper, focusLane }) {
             paper={paper}
             focusLane={focusLane}
             onLoad={() => {
-              const patch = { curve: q.curve };
+              // setCurve sends the curve data to C++ (updateLane skips sendCurve).
+              eng.setCurve(eng.focus, q.curve);
+              // Remaining fields: send APVTS params via updateLane; midiNotes is
+              // JS-only (piano-roll overlay) so it's handled silently by updateLane.
+              const patch = {};
               if (q.quantizeX != null)  patch.quantizeX  = q.quantizeX;
               if (q.quantizeY != null)  patch.quantizeY  = q.quantizeY;
               if (q.xDivisions != null) patch.xDivisions = q.xDivisions;
@@ -2108,7 +2442,8 @@ function QurveShelf({ eng, paper, focusLane }) {
               if (q.scaleId    != null) patch.scaleId    = q.scaleId;
               if (q.scaleRoot  != null) patch.scaleRoot  = q.scaleRoot;
               if (q.scaleMask  != null) patch.scaleMask  = q.scaleMask;
-              eng.updateLane(eng.focus, patch);
+              if (q.midiNotes  != null) patch.midiNotes  = q.midiNotes;
+              if (Object.keys(patch).length > 0) eng.updateLane(eng.focus, patch);
             }}
             onDelete={q.id.startsWith('b') ? null : () => deleteItem(q.id)}
           />

@@ -15,7 +15,8 @@ import './design/scale-editor.jsx';
 import { initJuceBridge, sendCurve, sendParam, sendFocus,
          sendPlaying, sendDirection, sendEnabled, sendGlobalActual,
          sendClearLane, sendAddLane, sendRemoveLane, sendPanic,
-         sendBeginTeach, sendCancelTeach } from './juce-bridge.js';
+         sendBeginTeach, sendCancelTeach,
+         sendBeginRecord, sendStopRecord } from './juce-bridge.js';
 
 // ── Patch useDrawnQurveEngine ─────────────────────────────────────────────────
 // Must run before juce-ipad.jsx is imported (esbuild preserves import order in
@@ -57,6 +58,9 @@ import { initJuceBridge, sendCurve, sendParam, sendFocus,
     // Per-lane phases from C++: array indexed by lane id, or null in demo mode.
     const [juceLanePhases, setJuceLanePhases] = React.useState(null);
     const jucePhaseTimeRef = React.useRef(0);
+    // Handler for incoming MIDI events forwarded from the C++ bridge.
+    // useMidiRecorder registers itself here in JUCE mode.
+    const midiInHandlerRef = React.useRef(null);
     const isJuceDriving =
       jucePhase != null && (performance.now() - jucePhaseTimeRef.current) < 200;
     const effectivePhase = isJuceDriving ? jucePhase : demo.phase;
@@ -71,6 +75,13 @@ import { initJuceBridge, sendCurve, sendParam, sendFocus,
             jucePhaseTimeRef.current = performance.now();
             setJucePhase(action.phase);
             if (action.lanePhases) setJuceLanePhases(action.lanePhases);
+            // Mirror host transport state into the demo RAF loop so that when
+            // the host pauses (JUCE stops emitting phase), the demo loop also
+            // pauses rather than taking over and causing "keeps looping".
+            if (action.playing !== undefined) demo.setPlaying(action.playing);
+            break;
+          case 'midiIn':
+            if (midiInHandlerRef.current) midiInHandlerRef.current(action);
             break;
           case 'setLanes':     demo.setLanes(action.lanes);         break;
           case 'setPlaying':   demo.setPlaying(action.playing);     break;
@@ -258,6 +269,10 @@ import { initJuceBridge, sendCurve, sendParam, sendFocus,
       panic: sendPanic,
       beginTeach: sendBeginTeach,
       cancelTeach: sendCancelTeach,
+      // MIDI recording bridge — used by useMidiRecorder in JUCE mode.
+      beginRecord: sendBeginRecord,
+      stopRecord:  sendStopRecord,
+      setMidiInHandler: (fn) => { midiInHandlerRef.current = fn; },
     };
   };
 })();

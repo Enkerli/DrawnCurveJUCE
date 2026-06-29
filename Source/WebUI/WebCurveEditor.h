@@ -23,6 +23,16 @@ public:
     void paint   (juce::Graphics&) override {}
     void resized () override;
 
+    // ── AUv3 / host-parented view navigation ─────────────────────────────────
+    // goToURL must fire AFTER the WKWebView has been embedded in the host's
+    // view hierarchy.  In standalone this happens immediately; in AUv3
+    // (Logic Pro, GarageBand) the host attaches the view after construction.
+    // parentHierarchyChanged fires at exactly that moment.
+    void parentHierarchyChanged() override;
+
+    // Navigate to the resource provider root if we haven't loaded yet.
+    void navigateIfNeeded();
+
 private:
     // ── APVTS listener ────────────────────────────────────────────────────────
     void parameterChanged (const juce::String& paramID, float newValue) override;
@@ -51,8 +61,13 @@ private:
     // true once the JS page has loaded and sent "uiReady" — guards all outbound emits
     std::atomic<bool> pageReady { false };
 
+    // true once goToURL has been called — prevents duplicate navigations
+    bool pageNavigated { false };
+
     // Last known phase sent to JS — avoid redundant emits
-    float lastSentPhase { -1.0f };
+    float lastSentPhase     { -1.0f };
+    bool  lastEmittedPlaying { true };
+
 
     // ── Standalone MIDI output ────────────────────────────────────────────────
     // The native PluginEditor used to create a virtual MIDI source so other

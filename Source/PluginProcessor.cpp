@@ -374,6 +374,37 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         }
     }
 
+    // ── MIDI recording capture ────────────────────────────────────────────────
+    // Runs before midiMessages.clear() so incoming messages are still present.
+    // Uses a try-lock: if the message thread holds the lock (very rare), we
+    // silently drop this block rather than stalling the audio thread.
+    {
+        const int recLane = _recordArmedLane.load (std::memory_order_acquire);
+        if (recLane >= 0)
+        {
+            // Compute ms offset once per block (all messages in a block share the
+            // same timestamp — sub-block accuracy isn't needed for MIDI recording).
+            const int64_t recStart = _recStartTimeMs.load (std::memory_order_acquire);
+            const auto    nowMs    = static_cast<int64_t> (juce::Time::getMillisecondCounterHiRes());
+            const int64_t elapsedMs = juce::jmax<int64_t> (0, nowMs - recStart);
+
+            juce::SpinLock::ScopedTryLockType captureLock (_midiCaptureLock);
+            if (captureLock.isLocked())
+            {
+                for (const auto meta : midiMessages)
+                {
+                    const auto& msg = meta.getMessage();
+                    const auto* raw = msg.getRawData();
+                    const int   sz  = msg.getRawDataSize();
+                    const uint8_t status = static_cast<uint8_t> (raw[0]);
+                    const uint8_t d1     = sz > 1 ? static_cast<uint8_t> (raw[1]) : 0;
+                    const uint8_t d2     = sz > 2 ? static_cast<uint8_t> (raw[2]) : 0;
+                    _midiCaptureBuf.add ({ recLane, status, d1, d2, elapsedMs });
+                }
+            }
+        }
+    }
+
     midiMessages.clear();
 
     // ── MIDI Panic: All Notes Off + brute-force Note Off sweep ───────────────
@@ -996,6 +1027,36 @@ void DrawnCurveProcessor::restartAllLanes()
 void DrawnCurveProcessor::sendPanic()
 {
     _panicNeeded.store (true, std::memory_order_release);
+}
+
+// ── MIDI recording bridge ─────────────────────────────────────────────────────
+
+void DrawnCurveProcessor::beginRecord (int lane)
+{
+    // Clear any stale events from a previous session before arming.
+    {
+        juce::SpinLock::ScopedLockType lock (_midiCaptureLock);
+        _midiCaptureBuf.clearQuick();
+    }
+    // Snapshot the current wall-clock time so the audio thread can compute
+    // an accurate ms-since-recording-start for each captured event.
+    const auto nowMs = static_cast<int64_t> (juce::Time::getMillisecondCounterHiRes());
+    _recStartTimeMs.store (nowMs, std::memory_order_release);
+    _recordArmedLane.store (lane, std::memory_order_release);
+}
+
+void DrawnCurveProcessor::stopRecord()
+{
+    _recordArmedLane.store (-1, std::memory_order_release);
+}
+
+juce::Array<DrawnCurveProcessor::MidiCapEvent>
+DrawnCurveProcessor::drainMidiCapture()
+{
+    juce::Array<MidiCapEvent> out;
+    juce::SpinLock::ScopedLockType lock (_midiCaptureLock);
+    out.swapWith (_midiCaptureBuf);
+    return out;
 }
 
 void DrawnCurveProcessor::setVirtualMidiOutput (juce::MidiOutput* output) noexcept

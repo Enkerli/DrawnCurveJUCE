@@ -188,8 +188,16 @@ export function initJuceBridge(onEvent) {
   // `lanes` is an optional array of per-lane phases (indexed by lane id) that
   // enables each lane's CurvePath to show its own independent playhead when
   // override-transport is active.
-  juceOn('phase', ({ phase, lanes: lanePhases }) =>
-    onEvent({ type: 'setPhase', phase, lanePhases: lanePhases ?? null }));
+  // `playing` mirrors the engine's _isPlaying flag so JS can pause its demo
+  // RAF loop when the host transport stops, preventing the "keeps looping"
+  // symptom where the demo loop takes over after JUCE stops emitting phase.
+  juceOn('phase', ({ phase, lanes: lanePhases, playing }) =>
+    onEvent({ type: 'setPhase', phase, lanePhases: lanePhases ?? null, playing }));
+
+  // Incoming MIDI captured by the audio thread while a lane is armed for
+  // recording.  JS recorder accumulates these and converts them to a curve.
+  juceOn('midiIn', ({ lane, status, data1, data2 }) =>
+    onEvent({ type: 'midiIn', lane, status, data1, data2 }));
 
   // Single APVTS parameter changed
   juceOn('paramChange', ({ id, value }) => onEvent({ type: 'paramChange', id, value }));
@@ -264,6 +272,12 @@ export function sendPanic()              { juceEmit('panic',        {}); }
 // cancelTeach disarms without changing the CC number.
 export function sendBeginTeach(lane)     { juceEmit('beginTeach',   { lane }); }
 export function sendCancelTeach()        { juceEmit('cancelTeach',  {}); }
+
+// MIDI recording — arm / disarm the audio-thread MIDI capture buffer.
+// beginRecord tells C++ to start buffering incoming MIDI for the given lane;
+// stopRecord clears the armed lane so the audio thread stops capturing.
+export function sendBeginRecord(lane)    { juceEmit('beginRecord',  { lane }); }
+export function sendStopRecord()         { juceEmit('stopRecord',   {}); }
 
 // Export the LANE_MAP for use in C++ param-change dispatching
 export { LANE_MAP, laneParamId };

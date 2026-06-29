@@ -265,6 +265,23 @@ public:
     /// Safe to call from any thread; executes on the next processBlock.
     void sendPanic();
 
+    // ── MIDI recording bridge ─────────────────────────────────────────────────
+    /// One captured incoming MIDI message.
+    struct MidiCapEvent { int lane; uint8_t status, d1, d2; int64_t ms; };
+
+    /// Arm a lane for MIDI input capture.  The audio thread will copy every
+    /// incoming MIDI message that arrives while this is set into the capture
+    /// buffer, for the timer to drain and forward to JS as "midiIn" events.
+    /// Pass lane = -1 to stop recording on all lanes (same as stopRecord).
+    void beginRecord (int lane);
+
+    /// Disarm MIDI recording.
+    void stopRecord ();
+
+    /// Drain and return all buffered capture events; clears the internal buffer.
+    /// Call from the message/timer thread only.
+    juce::Array<MidiCapEvent> drainMidiCapture();
+
     // ── Standalone Teach/Learn helper ────────────────────────────────────────────
     /// Called by the TeachMidiCallback adapter in StandaloneApp.cpp when MIDI
     /// arrives without an audio device driving processBlock.
@@ -289,6 +306,19 @@ private:
     // ── Teach / Learn ─────────────────────────────────────────────────────────
     /// Lane index currently waiting for a CC learn message (-1 = none).
     std::atomic<int> _teachPendingLane { -1 };
+
+    // ── MIDI recording capture ────────────────────────────────────────────────
+    /// Lane index currently being recorded (-1 = not recording).
+    std::atomic<int>     _recordArmedLane  { -1 };
+    /// Wall-clock time (ms, hi-res) when beginRecord() was last called.
+    /// The audio thread subtracts this from the current time to produce the
+    /// per-event ms offset sent to JS, giving accurate note timestamps even
+    /// when the 30 Hz drain timer fires late or in bursts.
+    std::atomic<int64_t> _recStartTimeMs   { 0 };
+    /// Capture FIFO; written by audio thread under _midiCaptureLock, drained
+    /// by the WebCurveEditor timer (message thread) via drainMidiCapture().
+    juce::Array<MidiCapEvent> _midiCaptureBuf;
+    juce::SpinLock             _midiCaptureLock;
 
     /// Set by sendPanic(); cleared after the panic sweep fires in processBlock.
     std::atomic<bool> _panicNeeded { false };

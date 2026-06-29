@@ -161,6 +161,8 @@ if(NPXCMD)
         COMMAND "${NPXCMD}" esbuild "${WEBUI_DIR}/main.jsx"
                     --bundle
                     "--inject:${WEBUI_DIR}/react-globals.js"
+                    "--define:process.env.NODE_ENV=\"production\""
+                    --minify
                     "--outfile=${WEBUI_DIST}/bundle.js"
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                     "${WEBUI_DIR}/index.html"
@@ -240,6 +242,19 @@ target_include_directories(DrawnCurve PRIVATE Source/Engine Source Source/UI Sou
 # (used in CI/build-only checks) sidesteps it but produces an unsigned
 # binary that cannot be installed.
 # -----------------------------------------------------------------------------
+if(IS_MACOS)
+    # Custom entitlements for the AUv3 extension: adds network.client on top of
+    # the mandatory app-sandbox so WKWebView's internal XPC round-trips work in
+    # Logic Pro's out-of-process AUv3 host (RemoteViewService / ViewBridge).
+    # Without network.client the WebContent process cannot fetch the juce://
+    # resource provider URL, and the plugin shows a blank window in Logic Pro.
+    if(TARGET DrawnCurve_AUv3)
+        set_target_properties (DrawnCurve_AUv3 PROPERTIES
+            XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS
+                "${CMAKE_SOURCE_DIR}/Assets/DrawnQurve_AUv3.entitlements")
+    endif()
+endif()
+
 if(IS_IOS)
     if(TARGET DrawnCurve_AUv3)
         set_target_properties (DrawnCurve_AUv3 PROPERTIES

@@ -63,6 +63,21 @@ juce::WebBrowserComponent::Options WebCurveEditor::buildOptions (WebCurveEditor*
             { return WebCurveEditor::provideResource (path); },
             WebBrowserComponent::getResourceProviderRoot())
         .withNativeIntegrationEnabled()
+       #if JUCE_MAC
+        // macOS only: prevent JUCE navigating to about:blank when isShowing()
+        // returns false.  In Logic Pro's out-of-process AUv3 host the view is
+        // attached via RemoteViewService (ViewBridge XPC), so the WKWebView is
+        // considered "hidden" during the entire initialisation window.  Without
+        // this option, checkWindowAssociation() fires repeatedly and keeps
+        // overwriting our juce:// URL with about:blank → blank plugin GUI.
+        //
+        // NOT applied on iOS: it prevents the system from managing WKWebView's
+        // lifecycle, fights iOS's memory manager, and causes the "Could not
+        // create a sandbox extension" / WebContent-process-unresponsive crash
+        // seen on iPad.  iOS Standalone doesn't have the ViewBridge race so
+        // the option is unnecessary there.
+        .withKeepPageLoadedWhenBrowserIsHidden()
+       #endif
 
         // ── JS → C++: UI signals ──────────────────────────────────────────────
         // "log" — diagnostic console.log mirror from JS
@@ -228,6 +243,22 @@ juce::WebBrowserComponent::Options WebCurveEditor::buildOptions (WebCurveEditor*
         .withEventListener ("cancelTeach", [owner] (const Array<var>&)
         {
             owner->proc.cancelTeach();
+        })
+
+        // "beginRecord" — { lane: N } — arm a lane for MIDI input recording.
+        // The audio thread will buffer incoming MIDI messages; the timer drains
+        // them and forwards to JS as "midiIn" events for the JS recorder.
+        .withEventListener ("beginRecord", [owner] (const Array<var>& args)
+        {
+            if (args.isEmpty()) return;
+            const int lane = static_cast<int> (args[0]["lane"]);
+            owner->proc.beginRecord (lane);
+        })
+
+        // "stopRecord" — {} — disarm; audio thread stops buffering.
+        .withEventListener ("stopRecord", [owner] (const Array<var>&)
+        {
+            owner->proc.stopRecord();
         });
 }
 
@@ -267,12 +298,35 @@ WebCurveEditor::WebCurveEditor (DrawnCurveProcessor& p)
             proc.setVirtualMidiOutput (virtualMidiPort.get());
     }
 
-    // Navigate to the resource provider root — triggers "uiReady" from JS
-    // once the page has loaded and the bridge is initialised.
-    webView.goToURL (juce::WebBrowserComponent::getResourceProviderRoot());
+    // Initial navigation attempt.  navigateIfNeeded() also fires from
+    // parentHierarchyChanged() which is the reliable hook for AUv3 hosts
+    // (Logic Pro, GarageBand) where the view is parented AFTER construction.
+    juce::MessageManager::callAsync ([this] { navigateIfNeeded(); });
 
     // Start phase heartbeat at 30 Hz
     startTimer (33);
+}
+
+// ── Navigation helpers ────────────────────────────────────────────────────────
+
+void WebCurveEditor::navigateIfNeeded()
+{
+    if (pageNavigated)
+        return;
+    pageNavigated = true;
+    webView.goToURL (juce::WebBrowserComponent::getResourceProviderRoot());
+}
+
+// Called by JUCE whenever this component is added to (or moved within) a
+// parent component's hierarchy.  In AUv3 the host embeds the plugin view
+// AFTER the AudioProcessorEditor constructor returns, so this is the
+// earliest reliable moment to start the WKWebView navigation without risking
+// a silent no-op from a not-yet-parented WebView.
+void WebCurveEditor::parentHierarchyChanged()
+{
+    AudioProcessorEditor::parentHierarchyChanged();
+    if (getParentComponent() != nullptr)
+        navigateIfNeeded();
 }
 
 WebCurveEditor::~WebCurveEditor()
@@ -301,21 +355,49 @@ void WebCurveEditor::timerCallback()
     if (! pageReady)
         return;
 
-    const float phase = proc.currentPhase();   // exposed on DrawnCurveProcessor
+    const float phase   = proc.currentPhase();
+    const bool playing  = proc.isPlaying();
 
-    // Only emit if phase has moved meaningfully (avoids flooding when paused)
-    if (std::abs (phase - lastSentPhase) < 0.001f)
+    const bool phaseChanged   = std::abs (phase - lastSentPhase) >= 0.001f;
+    const bool playingChanged = playing != lastEmittedPlaying;
+
+    // ── MIDI recording drain ──────────────────────────────────────────────────
+    // Drain captured MIDI events on every timer tick, regardless of whether
+    // phase is moving.  This matters for recording while the host is paused,
+    // or in free-running mode at very low speed.  The drain was previously
+    // inside the phase-change guard, causing events to be silently lost
+    // whenever the transport was still.
+    const auto captured = proc.drainMidiCapture();
+    for (const auto& ev : captured)
+    {
+        // "ms" is the millisecond offset from the moment beginRecord() was
+        // called, computed on the audio thread.  JS uses it as the note
+        // timestamp so positions stay accurate even when the 30 Hz drain
+        // timer fires late or in bursts.
+        webView.emitEventIfBrowserIsVisible ("midiIn",
+            makeObj ({ { "lane",   ev.lane },
+                       { "status", (int) ev.status },
+                       { "data1",  (int) ev.d1 },
+                       { "data2",  (int) ev.d2 },
+                       { "ms",     (int64_t) ev.ms } }));
+    }
+
+    // Always emit when playing state changes (so JS can pause its demo loop);
+    // also emit when phase moves meaningfully.
+    if (! phaseChanged && ! playingChanged)
         return;
-    lastSentPhase = phase;
 
-    // Per-lane phases let each lane show its own independent playhead when
-    // override transport is active (lane useGlobalPlayback=false).
+    lastSentPhase      = phase;
+    lastEmittedPlaying = playing;
+
     juce::Array<juce::var> lanePhases;
     for (int L = 0; L < proc.activeLaneCount; ++L)
         lanePhases.add (proc.currentPhaseForLane (L));
 
     webView.emitEventIfBrowserIsVisible ("phase",
-        makeObj ({ { "phase", phase }, { "lanes", juce::var (lanePhases) } }));
+        makeObj ({ { "phase",   phase },
+                   { "lanes",   juce::var (lanePhases) },
+                   { "playing", playing } }));
 }
 
 // ── Parameter listener ────────────────────────────────────────────────────────
