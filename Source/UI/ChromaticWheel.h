@@ -225,7 +225,7 @@ inline void ChromaticWheel::mouseUp (const juce::MouseEvent& /*e*/)
             const bool isDoubleTap = (_pressed == _lastTapNode)
                                   && (_lastTapMs != 0)
                                   && ((now - _lastTapMs) < kDoubleTapMs);
-            const uint16_t bit = static_cast<uint16_t> (1u << (11 - _nodes[static_cast<size_t> (_pressed)].pc));
+            const uint16_t bit = static_cast<uint16_t> (1u << (_nodes[static_cast<size_t> (_pressed)].pc));
 
             if (isDoubleTap)
             {
@@ -283,7 +283,7 @@ inline void ChromaticWheel::paint (juce::Graphics& g)
     std::vector<juce::Point<float>> polyPts;
     polyPts.reserve (12);
     for (const auto& n : _nodes)
-        if (((_mask >> (11 - n.pc)) & 1) != 0)
+        if (((_mask >> (n.pc)) & 1) != 0)
             polyPts.push_back ({ n.cx, n.cy });
 
     if (polyPts.size() >= 2)
@@ -316,7 +316,7 @@ inline void ChromaticWheel::paint (juce::Graphics& g)
 
     for (const auto& n : _nodes)
     {
-        const bool active = ((_mask >> (11 - n.pc)) & 1) != 0;
+        const bool active = ((_mask >> (n.pc)) & 1) != 0;
         const bool isRoot = (n.pc == _root);
         const float r     = active ? _nodeR : _nodeR * 0.72f;
 
@@ -374,7 +374,7 @@ inline void ChromaticWheel::paint (juce::Graphics& g)
     // ── Centre text — root name (italic serif) + N-notes caption ─────────────
     int nActive = 0;
     for (int pc = 0; pc < 12; ++pc)
-        if (((_mask >> (11 - pc)) & 1) != 0) ++nActive;
+        if (((_mask >> (pc)) & 1) != 0) ++nActive;
 
     static const char* const kRootSharp[12] = {
         "C","C\u266f","D","D\u266f","E","F","F\u266f","G","G\u266f","A","A\u266f","B"

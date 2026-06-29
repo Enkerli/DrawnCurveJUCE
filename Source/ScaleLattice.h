@@ -273,7 +273,7 @@ inline void ScaleLattice::mouseUp (const juce::MouseEvent& /*e*/)
             const bool isDoubleTap = (_pressed == _lastTapNode)
                                   && (_lastTapMs != 0)
                                   && ((now - _lastTapMs) < kDoubleTapMs);
-            const uint16_t bit = static_cast<uint16_t> (1u << (11 - _nodes[static_cast<size_t> (_pressed)].pc));
+            const uint16_t bit = static_cast<uint16_t> (1u << (_nodes[static_cast<size_t> (_pressed)].pc));
 
             if (isDoubleTap)
             {
@@ -289,7 +289,7 @@ inline void ScaleLattice::mouseUp (const juce::MouseEvent& /*e*/)
             }
             else
             {
-                // Bitmask convention: bit (11 - pc) = pitch class pc active.
+                // Bitmask convention: bit (pc) = pitch class pc active.
                 _mask ^= bit;
                 _lastTapMs   = now;
                 _lastTapNode = _pressed;
@@ -329,8 +329,8 @@ inline void ScaleLattice::paint (juce::Graphics& g)
 
     for (const auto& n : _nodes)
     {
-        // Bitmask convention: bit (11 - pc) = pitch class pc active.
-        const bool active = ((_mask >> (11 - n.pc)) & 1) != 0;
+        // Bitmask convention: bit (pc) = pitch class pc active.
+        const bool active = ((_mask >> (n.pc)) & 1) != 0;
         const bool isRoot = (n.pc == _root);
         const bool isNat  = n.nat;
         const juce::Rectangle<float> circ (n.cx - n.r, n.cy - n.r,

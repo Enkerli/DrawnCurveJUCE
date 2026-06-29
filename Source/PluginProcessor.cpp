@@ -219,8 +219,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout DrawnCurveProcessor::createP
 }
 
 // Scale mask bitmask convention:
-//   Bit 11 = root (interval 0 = C when root=C), bit 0 = major-7th (interval 11 = B).
-//   Example: 0xFFF = all 12 notes (Chromatic), 0xAD5 = C D E F G A B (Major from C).
+//   Leftmost-LSB: bit 0 = root (interval 0 = C when root=C), bit 11 = major-7th (B).
+//   Example: 0xFFF = all 12 notes (Chromatic), 0xAB5 = C D E F G A B (Major from C).
 // The preset masks live on the JS side (tokens.jsx::SCALES) — JS writes the final mask
 // directly to l<n>_scaleMask, so no C++ preset table is needed anymore.
 static constexpr uint16_t kChromaticMask = 0x0FFFu;  // used only by fallback in getScaleConfig

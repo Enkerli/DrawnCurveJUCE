@@ -13,7 +13,7 @@
  * so the user can visually compare scale shapes without selecting each one.
  *
  * Bitmask convention matches ScaleLattice and ScaleData.h:
- *   bit (11 - interval) = 1 → interval is active.
+ *   bit (interval) = 1 → interval is active.
  *
  * Header-only — no .cpp required.
  */
@@ -58,8 +58,8 @@ public:
 
         for (int i = 0; i < 12; ++i)
         {
-            // interval i → bit (11 - i)
-            const bool active = ((_mask >> (11 - i)) & 1) != 0;
+            // interval i → bit (i)
+            const bool active = ((_mask >> (i)) & 1) != 0;
             const float cx = step * 0.5f + static_cast<float> (i) * step;
 
             if (active)

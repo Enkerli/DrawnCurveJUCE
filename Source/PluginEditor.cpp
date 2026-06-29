@@ -156,12 +156,12 @@ static uint16_t calcAbsLatticeMask (DrawnCurveProcessor& proc, int /*lane*/)
         return static_cast<uint16_t> (proc.apvts.getRawParameterValue ("scaleMask")->load());
 
     const auto sc = proc.getScaleConfig (0);   // global; lane irrelevant
-    // Engine mask: bit (11 - interval) = interval present.
-    // Lattice mask: bit (11 - abs_pc) = absolute pitch class present.
+    // Engine mask: bit (interval) = interval present.
+    // Lattice mask: bit (abs_pc) = absolute pitch class present.
     uint16_t abs  = 0;
     for (int i = 0; i < 12; ++i)
-        if ((sc.mask >> (11 - i)) & 1)
-            abs |= static_cast<uint16_t> (1u << (11 - (i + root) % 12));
+        if ((sc.mask >> (i)) & 1)
+            abs |= static_cast<uint16_t> (1u << ((i + root) % 12));
     return abs;
 }
 
@@ -1258,7 +1258,7 @@ void CurveDisplay::paint (juce::Graphics& g)
             for (int n = hiNote; n >= loNote; --n)
             {
                 const int interval = ((n % 12) - (int)sc.root + 12) % 12;
-                if ((sc.mask >> (11 - interval)) & 1)
+                if ((sc.mask >> (interval)) & 1)
                 {
                     const float norm = noteToNorm (n);
                     if (norm >= -0.05f && norm <= 1.05f)
@@ -2606,8 +2606,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     scaleNoneBtn.onClick = [this, applyMask]
     {
         const int root = static_cast<int> (proc.apvts.getRawParameterValue ("scaleRoot")->load());
-        // Lattice convention: bit (11 - pc) = pitch class pc active.
-        applyMask (static_cast<uint16_t> (1u << (11 - root)));
+        // Lattice convention: bit (pc) = pitch class pc active.
+        applyMask (static_cast<uint16_t> (1u << (root)));
     };
 
     addAndMakeVisible (scaleInvBtn);
