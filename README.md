@@ -240,3 +240,10 @@ usability guidelines.
 
 [MIT License](LICENSE)
 JUCE is used under the JUCE 7 Community license.
+
+## Suite handoff
+
+This repo is part of the Enkerli music suite. For the whole-suite picture —
+repo map, conventions (leftmost-LSB bit order, structural spelling),
+build/validation ladders, and open queues — start at the suite handoff:
+<https://github.com/Enkerli/music-suite/blob/main/HANDOFF.md>.
