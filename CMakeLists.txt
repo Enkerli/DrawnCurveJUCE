@@ -115,7 +115,21 @@ else()
     juce_add_plugin(DrawnCurve
         ${PLUGIN_BASE_PROPS}
         FORMATS                     Standalone
+        NEEDS_WEB_BROWSER           TRUE
+        NEEDS_CURL                  FALSE
     )
+endif()
+
+# Windows: the WebView needs the Edge/WebView2 backend + its SDK headers, which
+# JUCE doesn't vendor. Enable the backend and fetch the NuGet (a zip).
+if(WIN32)
+    target_compile_definitions(DrawnCurve PUBLIC JUCE_USE_WIN_WEBVIEW2=1)
+    include(FetchContent)
+    FetchContent_Declare(webview2
+        URL https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.2792.45
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+    FetchContent_MakeAvailable(webview2)
+    include_directories("${webview2_SOURCE_DIR}/build/native/include")
 endif()
 
 # Ensure all source files are interpreted as UTF-8 (for Unicode symbols)
@@ -170,16 +184,13 @@ endif()
 find_program(NPXCMD npx)
 if(NPXCMD)
     add_custom_command(
-        OUTPUT  "${WEBUI_DIST}/bundle.js" "${WEBUI_DIST}/index.html"
+        OUTPUT  "${WEBUI_DIST}/bundle.js"
         COMMAND "${NPXCMD}" esbuild "${WEBUI_DIR}/main.jsx"
                     --bundle
                     "--inject:${WEBUI_DIR}/react-globals.js"
                     "--define:process.env.NODE_ENV=\"production\""
                     --minify
                     "--outfile=${WEBUI_DIST}/bundle.js"
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                    "${WEBUI_DIR}/index.html"
-                    "${WEBUI_DIST}/index.html"
         DEPENDS "${WEBUI_DIR}/main.jsx"
                 "${WEBUI_DIR}/juce-bridge.js"
                 "${WEBUI_DIR}/react-globals.js"
@@ -194,14 +205,15 @@ if(NPXCMD)
         COMMENT "Bundling WebUI with esbuild"
         VERBATIM
     )
-    add_custom_target(DrawnCurveWebUIBundle DEPENDS "${WEBUI_DIST}/bundle.js" "${WEBUI_DIST}/index.html")
+    add_custom_target(DrawnCurveWebUIBundle DEPENDS "${WEBUI_DIST}/bundle.js")
 endif()
 
+set_source_files_properties("${WEBUI_DIST}/bundle.js" PROPERTIES GENERATED TRUE)
 juce_add_binary_data(DrawnCurveWebUI
     HEADER_NAME BinaryDataWebUI.h
     NAMESPACE   BinaryData
     SOURCES
-        "${WEBUI_DIST}/index.html"
+        "${WEBUI_DIR}/index.html"
         "${WEBUI_DIST}/bundle.js"
 )
 if(NPXCMD)

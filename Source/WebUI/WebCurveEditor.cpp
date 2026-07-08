@@ -379,7 +379,7 @@ void WebCurveEditor::timerCallback()
                        { "status", (int) ev.status },
                        { "data1",  (int) ev.d1 },
                        { "data2",  (int) ev.d2 },
-                       { "ms",     (int64_t) ev.ms } }));
+                       { "ms",     (juce::int64) ev.ms } }));
     }
 
     // Always emit when playing state changes (so JS can pause its demo loop);
