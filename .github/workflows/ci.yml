@@ -1,0 +1,12 @@
+# Cross-platform build matrix via the shared enkerli-juce reusable workflow.
+# DrawnQurve is iPad-first (native JUCE UI, no WebView) — its formats are
+# AU/AUv3/Standalone by design; this proves they build on macOS/Linux/Windows.
+name: build
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: Enkerli/enkerli-juce/.github/workflows/build-plugin.yml@main

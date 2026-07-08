@@ -23,15 +23,18 @@ set(CMAKE_CXX_STANDARD_REQUIRED YES)
 find_package(JUCE CONFIG QUIET)
 if(NOT JUCE_FOUND)
     set(JUCE_PATH "${CMAKE_SOURCE_DIR}/JUCE" CACHE PATH "Path to JUCE directory")
-    if(NOT EXISTS "${JUCE_PATH}/CMakeLists.txt")
-        message(FATAL_ERROR
-            "JUCE not found.\n"
-            "Either:\n"
-            "  (a) Set -DJUCE_PATH=/path/to/JUCE on the cmake command line, or\n"
-            "  (b) Symlink JUCE into this directory:\n"
-            "      ln -s /path/to/JUCE ${CMAKE_SOURCE_DIR}/JUCE\n")
+    if(EXISTS "${JUCE_PATH}/CMakeLists.txt")
+        add_subdirectory("${JUCE_PATH}" JUCE)   # local path/symlink (dev machines)
+    else()
+        # No local JUCE (e.g. CI) — fetch it, matching the enkerli-juce archetype.
+        message(STATUS "JUCE not found locally — fetching juce-framework/JUCE 8.0.13")
+        include(FetchContent)
+        FetchContent_Declare(JUCE
+            GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
+            GIT_TAG        8.0.13
+            GIT_SHALLOW    TRUE)
+        FetchContent_MakeAvailable(JUCE)
     endif()
-    add_subdirectory("${JUCE_PATH}" JUCE)
 endif()
 
 # ── Detect platform ──────────────────────────────────────────────────────────
