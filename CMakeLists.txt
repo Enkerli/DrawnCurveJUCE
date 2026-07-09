@@ -107,17 +107,37 @@ if(IS_IOS)
 elseif(IS_MACOS)
     juce_add_plugin(DrawnCurve
         ${PLUGIN_BASE_PROPS}
-        FORMATS                     AU AUv3 Standalone
+        FORMATS                     AU AUv3 VST3 Standalone
         # macOS does not use BACKGROUND_AUDIO_ENABLED or orientation properties
     )
 else()
     # Fallback for other platforms (Windows, Linux, etc.)
     juce_add_plugin(DrawnCurve
         ${PLUGIN_BASE_PROPS}
-        FORMATS                     Standalone
+        FORMATS                     VST3 LV2 Standalone
         NEEDS_WEB_BROWSER           TRUE
         NEEDS_CURL                  FALSE
     )
+endif()
+
+# ── CLAP (macOS / Linux / Windows — not an iOS format) ────────────────────────
+# DrawnQurve is off the shared enkerli-juce archetype (inline CMake), so this
+# mirrors enkerli_resolve_clap()/clap_juce_extensions_plugin() from
+# enkerli-juce/cmake/EnkerliPlugin.cmake by hand rather than calling it.
+if(NOT IS_IOS)
+    set(CLAP_JUCE_PATH "${CMAKE_SOURCE_DIR}/clap-juce-extensions" CACHE PATH "Path to clap-juce-extensions")
+    if(EXISTS "${CLAP_JUCE_PATH}/CMakeLists.txt")
+        add_subdirectory("${CLAP_JUCE_PATH}" "${CMAKE_BINARY_DIR}/clap-juce-extensions")
+    else()
+        include(FetchContent)
+        FetchContent_Declare(clap-juce-extensions
+            GIT_REPOSITORY https://github.com/free-audio/clap-juce-extensions.git
+            GIT_TAG main)   # not GIT_SHALLOW: it carries the CLAP SDK as submodules
+        FetchContent_MakeAvailable(clap-juce-extensions)
+    endif()
+    clap_juce_extensions_plugin(TARGET DrawnCurve
+        CLAP_ID       "com.enkerli.DrawnQurve"
+        CLAP_FEATURES "note-effect")
 endif()
 
 # Windows: the WebView needs the Edge/WebView2 backend + its SDK headers, which
