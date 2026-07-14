@@ -8,47 +8,58 @@
 
 GestureEngine::GestureEngine()
 {
+    for (int s = 0; s < kMaxSlots; ++s)
+    {
+        _snapshots[static_cast<size_t>(s)].store     (nullptr, std::memory_order_relaxed);
+        _noteOffNeeded[static_cast<size_t>(s)].store (false,   std::memory_order_relaxed);
+        _slotPhases[static_cast<size_t>(s)].store    (0.0f,    std::memory_order_relaxed);
+        _lastSentMirror[static_cast<size_t>(s)].store(-1,      std::memory_order_relaxed);
+    }
     for (int i = 0; i < kMaxLanes; ++i)
     {
-        _snapshots[static_cast<size_t>(i)].store    (nullptr, std::memory_order_relaxed);
-        _noteOffNeeded[static_cast<size_t>(i)].store(false,   std::memory_order_relaxed);
-        _scalesPacked[static_cast<size_t>(i)].store (0xFFF,   std::memory_order_relaxed);
-        _laneEnabled[static_cast<size_t>(i)].store  (true,    std::memory_order_relaxed);
-        _lanePaused[static_cast<size_t>(i)].store   (false,   std::memory_order_relaxed);
-        _lanePhases[static_cast<size_t>(i)].store   (0.0f,    std::memory_order_relaxed);
-        _lastSentMirror[static_cast<size_t>(i)].store (-1,    std::memory_order_relaxed);
+        _scalesPacked[static_cast<size_t>(i)].store (0xFFF, std::memory_order_relaxed);
+        _laneEnabled[static_cast<size_t>(i)].store  (true,  std::memory_order_relaxed);
+        _lanePaused[static_cast<size_t>(i)].store   (false, std::memory_order_relaxed);
     }
 }
 
-int GestureEngine::getLastSentValue (int lane) const noexcept
+int GestureEngine::getLastSentValueForQurve (int lane, int qurve) const noexcept
 {
-    if (lane < 0 || lane >= kMaxLanes) return -1;
-    return _lastSentMirror[static_cast<size_t>(lane)].load (std::memory_order_acquire);
+    if (lane < 0 || lane >= kMaxLanes || qurve < 0 || qurve >= kMaxQurves) return -1;
+    return _lastSentMirror[static_cast<size_t>(slotOf (lane, qurve))].load (std::memory_order_acquire);
 }
 
 // ---------------------------------------------------------------------------
 // UI-thread methods
 // ---------------------------------------------------------------------------
 
-void GestureEngine::setSnapshot (int lane, const LaneSnapshot* snapshot)
+void GestureEngine::setSnapshot (int lane, int qurve, const LaneSnapshot* snapshot)
 {
-    if (lane < 0 || lane >= kMaxLanes) return;
-    _snapshots[static_cast<size_t>(lane)].store (snapshot, std::memory_order_release);
+    if (lane < 0 || lane >= kMaxLanes || qurve < 0 || qurve >= kMaxQurves) return;
+    _snapshots[static_cast<size_t>(slotOf (lane, qurve))].store (snapshot, std::memory_order_release);
+}
+
+void GestureEngine::clearQurve (int lane, int qurve)
+{
+    if (lane < 0 || lane >= kMaxLanes || qurve < 0 || qurve >= kMaxQurves) return;
+    const auto s = static_cast<size_t>(slotOf (lane, qurve));
+    _snapshots[s].store     (nullptr, std::memory_order_release);
+    _noteOffNeeded[s].store (true,    std::memory_order_release);
 }
 
 void GestureEngine::clearSnapshot (int lane)
 {
     if (lane < 0 || lane >= kMaxLanes) return;
-    _snapshots[static_cast<size_t>(lane)].store     (nullptr, std::memory_order_release);
-    _noteOffNeeded[static_cast<size_t>(lane)].store (true,    std::memory_order_release);
+    for (int q = 0; q < kMaxQurves; ++q)
+        clearQurve (lane, q);
 }
 
 void GestureEngine::clearAllSnapshots()
 {
-    for (int i = 0; i < kMaxLanes; ++i)
+    for (int s = 0; s < kMaxSlots; ++s)
     {
-        _snapshots[static_cast<size_t>(i)].store    (nullptr, std::memory_order_release);
-        _noteOffNeeded[static_cast<size_t>(i)].store(true,    std::memory_order_release);
+        _snapshots[static_cast<size_t>(s)].store    (nullptr, std::memory_order_release);
+        _noteOffNeeded[static_cast<size_t>(s)].store(true,    std::memory_order_release);
     }
     _isPlaying.store (false, std::memory_order_release);
 }
@@ -57,27 +68,28 @@ void GestureEngine::setPlaying (bool playing)
 {
     _isPlaying.store (playing, std::memory_order_release);
     if (! playing)
-        for (int i = 0; i < kMaxLanes; ++i)
-            _noteOffNeeded[static_cast<size_t>(i)].store (true, std::memory_order_release);
+        for (int s = 0; s < kMaxSlots; ++s)
+            _noteOffNeeded[static_cast<size_t>(s)].store (true, std::memory_order_release);
 }
 
 void GestureEngine::reset()
 {
-    for (int i = 0; i < kMaxLanes; ++i)
+    for (int s = 0; s < kMaxSlots; ++s)
     {
-        // Don't clear _noteOffNeeded here — let processLane send the Note Off
+        // Don't clear _noteOffNeeded here — let processSlot send the Note Off
         // on the next block before starting the new curve.  Only reset dedup
         // state when no note-off is already pending.
-        if (! _noteOffNeeded[static_cast<size_t>(i)].load (std::memory_order_acquire))
+        if (! _noteOffNeeded[static_cast<size_t>(s)].load (std::memory_order_acquire))
         {
-            _runtimes[static_cast<size_t>(i)].lastSentValue = -1;
-            _lastSentMirror[static_cast<size_t>(i)].store (-1, std::memory_order_release);
+            _runtimes[static_cast<size_t>(s)].lastSentValue = -1;
+            _lastSentMirror[static_cast<size_t>(s)].store (-1, std::memory_order_release);
         }
-        _runtimes[static_cast<size_t>(i)].playheadSeconds = 0.0;
-        _runtimes[static_cast<size_t>(i)].smoothedValue   = 0.0f;
-        _lanePhases[static_cast<size_t>(i)].store (0.0f,  std::memory_order_relaxed);
-        _lanePaused[static_cast<size_t>(i)].store (false, std::memory_order_relaxed);
+        _runtimes[static_cast<size_t>(s)].playheadSeconds = 0.0;
+        _runtimes[static_cast<size_t>(s)].smoothedValue   = 0.0f;
+        _slotPhases[static_cast<size_t>(s)].store (0.0f, std::memory_order_relaxed);
     }
+    for (int i = 0; i < kMaxLanes; ++i)
+        _lanePaused[static_cast<size_t>(i)].store (false, std::memory_order_relaxed);
 
     _currentPhase.store (0.0f, std::memory_order_relaxed);
     _syncMasterPlayhead = 0.0;
@@ -89,28 +101,28 @@ void GestureEngine::resetForDirection (PlaybackDirection dir)
     // Choose raw start phase: Reverse starts from the end (1.0), everything else from 0.
     const float rawPhase = (dir == PlaybackDirection::Reverse) ? 1.0f : 0.0f;
 
-    for (int i = 0; i < kMaxLanes; ++i)
+    for (int s = 0; s < kMaxSlots; ++s)
     {
         // Preserve any pending Note Off — same policy as reset().
-        if (! _noteOffNeeded[static_cast<size_t>(i)].load (std::memory_order_acquire))
+        if (! _noteOffNeeded[static_cast<size_t>(s)].load (std::memory_order_acquire))
         {
-            _runtimes[static_cast<size_t>(i)].lastSentValue = -1;
-            _lastSentMirror[static_cast<size_t>(i)].store (-1, std::memory_order_release);
+            _runtimes[static_cast<size_t>(s)].lastSentValue = -1;
+            _lastSentMirror[static_cast<size_t>(s)].store (-1, std::memory_order_release);
         }
 
-        _runtimes[static_cast<size_t>(i)].playheadSeconds = 0.0;
+        _runtimes[static_cast<size_t>(s)].playheadSeconds = 0.0;
 
         // Seed the smoother from the curve's value at the correct starting phase
         // (raw direction phase + phaseOffset) so that the first block of output
         // begins at the right position without a "glide from zero" artefact.
-        const auto* snap = _snapshots[static_cast<size_t>(i)].load (std::memory_order_acquire);
+        const auto* snap = _snapshots[static_cast<size_t>(s)].load (std::memory_order_acquire);
         const float offset    = (snap && snap->valid) ? snap->phaseOffset : 0.0f;
         const float seedPhase = std::fmod (rawPhase + offset + 1.0f, 1.0f);
-        _runtimes[static_cast<size_t>(i)].smoothedValue =
+        _runtimes[static_cast<size_t>(s)].smoothedValue =
             (snap && snap->valid) ? sampleCurve (*snap, seedPhase) : 0.0f;
 
         // Store the unshifted playhead phase (0 or 1 depending on direction).
-        _lanePhases[static_cast<size_t>(i)].store (rawPhase, std::memory_order_relaxed);
+        _slotPhases[static_cast<size_t>(s)].store (rawPhase, std::memory_order_relaxed);
     }
 
     _currentPhase.store (rawPhase, std::memory_order_relaxed);
@@ -118,48 +130,63 @@ void GestureEngine::resetForDirection (PlaybackDirection dir)
     _syncWasEnabled     = false;
 }
 
+void GestureEngine::stopQurve (int lane, int qurve)
+{
+    if (lane < 0 || lane >= kMaxLanes || qurve < 0 || qurve >= kMaxQurves) return;
+    // Signal processSlot to send Note Off on the next processBlock call.
+    _noteOffNeeded[static_cast<size_t>(slotOf (lane, qurve))].store (true, std::memory_order_release);
+}
+
 void GestureEngine::stopLane (int lane)
 {
     if (lane < 0 || lane >= kMaxLanes) return;
-    // Signal processLane to send Note Off on the next processBlock call.
     // Does not stop playback on other lanes.
-    _noteOffNeeded[static_cast<size_t>(lane)].store (true, std::memory_order_release);
+    for (int q = 0; q < kMaxQurves; ++q)
+        stopQurve (lane, q);
+}
+
+void GestureEngine::resetQurve (int lane, int qurve)
+{
+    if (lane < 0 || lane >= kMaxLanes || qurve < 0 || qurve >= kMaxQurves) return;
+    const auto s = static_cast<size_t>(slotOf (lane, qurve));
+    // Rewind playhead.  Do NOT touch _noteOffNeeded or lastSentValue
+    // so any pending Note Off still fires correctly in processSlot.
+    _runtimes[s].playheadSeconds = 0.0;
+    _runtimes[s].lastXTick       = -1;   // reset X-quantize dedup
+
+    // Pre-seed the smoother from the curve's value at the effective start phase
+    // (phase 0 shifted by phaseOffset) so that playback begins at the correct
+    // value without a "glide from zero" artefact.
+    const auto* snap = _snapshots[s].load (std::memory_order_acquire);
+    const float seedPhase = (snap && snap->valid) ? snap->phaseOffset : 0.0f;
+    _runtimes[s].smoothedValue = (snap && snap->valid) ? sampleCurve (*snap, seedPhase) : 0.0f;
+
+    _slotPhases[s].store (0.0f, std::memory_order_relaxed);
 }
 
 void GestureEngine::resetLane (int lane)
 {
     if (lane < 0 || lane >= kMaxLanes) return;
-    // Rewind playhead.  Do NOT touch _noteOffNeeded or lastSentValue
-    // so any pending Note Off still fires correctly in processLane.
-    _runtimes[static_cast<size_t>(lane)].playheadSeconds = 0.0;
-    _runtimes[static_cast<size_t>(lane)].lastXTick       = -1;   // reset X-quantize dedup
-
-    // Pre-seed the smoother from the curve's value at the effective start phase
-    // (phase 0 shifted by phaseOffset) so that playback begins at the correct
-    // value without a "glide from zero" artefact.
-    const auto* snap = _snapshots[static_cast<size_t>(lane)].load (std::memory_order_acquire);
-    const float seedPhase = (snap && snap->valid) ? snap->phaseOffset : 0.0f;
-    _runtimes[static_cast<size_t>(lane)].smoothedValue = (snap && snap->valid) ? sampleCurve (*snap, seedPhase) : 0.0f;
-
-    _lanePhases[static_cast<size_t>(lane)].store (0.0f, std::memory_order_relaxed);
+    for (int q = 0; q < kMaxQurves; ++q)
+        resetQurve (lane, q);
 }
 
 void GestureEngine::setLaneEnabled (int lane, bool enabled)
 {
     if (lane < 0 || lane >= kMaxLanes) return;
-    // Detect enabled→disabled transition and queue a Note Off for any held note.
+    // Detect enabled→disabled transition and queue Note Offs for any held notes.
     // It is safe to call this on every processBlock iteration since the exchange
     // only triggers stopLane on the false edge.
     const bool wasEnabled = _laneEnabled[static_cast<size_t>(lane)].exchange (enabled, std::memory_order_acq_rel);
     if (wasEnabled && ! enabled)
-        stopLane (lane);    // sets _noteOffNeeded; fires in the current processLane call
+        stopLane (lane);    // sets _noteOffNeeded; fires in the current processSlot calls
 }
 
 void GestureEngine::setLanePaused (int lane, bool paused)
 {
     if (lane < 0 || lane >= kMaxLanes) return;
-    // Queue a Note Off on the false→true (playing→paused) edge, so any held
-    // note stops immediately rather than sustaining indefinitely.
+    // Queue Note Offs on the false→true (playing→paused) edge, so any held
+    // notes stop immediately rather than sustaining indefinitely.
     const bool wasPaused = _lanePaused[static_cast<size_t>(lane)].exchange (paused, std::memory_order_acq_rel);
     if (! wasPaused && paused)
         stopLane (lane);
@@ -194,10 +221,10 @@ void GestureEngine::setScaleConfig (int lane, ScaleConfig config)
 bool  GestureEngine::getPlaying()      const { return _isPlaying.load (std::memory_order_acquire); }
 float GestureEngine::getCurrentPhase() const { return _currentPhase.load (std::memory_order_relaxed); }
 
-float GestureEngine::getCurrentPhaseForLane (int lane) const
+float GestureEngine::getCurrentPhaseForQurve (int lane, int qurve) const
 {
-    if (lane < 0 || lane >= kMaxLanes) return 0.0f;
-    return _lanePhases[static_cast<size_t>(lane)].load (std::memory_order_relaxed);
+    if (lane < 0 || lane >= kMaxLanes || qurve < 0 || qurve >= kMaxQurves) return 0.0f;
+    return _slotPhases[static_cast<size_t>(slotOf (lane, qurve))].load (std::memory_order_relaxed);
 }
 
 void GestureEngine::seekToPhase (float phase, float speedRatio) noexcept
@@ -205,21 +232,21 @@ void GestureEngine::seekToPhase (float phase, float speedRatio) noexcept
     phase      = std::max (0.0f, std::min (1.0f, phase));
     speedRatio = std::max (0.001f, speedRatio);
 
-    for (int i = 0; i < kMaxLanes; ++i)
+    for (int s = 0; s < kMaxSlots; ++s)
     {
-        const auto* snap = _snapshots[static_cast<size_t>(i)].load (std::memory_order_acquire);
+        const auto* snap = _snapshots[static_cast<size_t>(s)].load (std::memory_order_acquire);
         if (! snap || ! snap->valid || snap->oneShot) continue;
 
-        // Map phase → playheadSeconds so processLane re-derives the same phase:
+        // Map phase → playheadSeconds so processSlot re-derives the same phase:
         //   phase = playheadSeconds / effectiveDur
         //         = playheadSeconds * speedRatio / snap->durationSeconds
         // → playheadSeconds = phase * snap->durationSeconds / speedRatio
         const double effectiveDur = snap->durationSeconds / static_cast<double> (speedRatio);
-        _runtimes[static_cast<size_t>(i)].playheadSeconds = phase * effectiveDur;
+        _runtimes[static_cast<size_t>(s)].playheadSeconds = phase * effectiveDur;
     }
     _currentPhase.store (phase, std::memory_order_relaxed);
-    for (int i = 0; i < kMaxLanes; ++i)
-        _lanePhases[static_cast<size_t>(i)].store (phase, std::memory_order_relaxed);
+    for (int s = 0; s < kMaxSlots; ++s)
+        _slotPhases[static_cast<size_t>(s)].store (phase, std::memory_order_relaxed);
 }
 
 // ---------------------------------------------------------------------------
@@ -284,23 +311,24 @@ float GestureEngine::sampleCurve (const LaneSnapshot& snap, float phase) const
 }
 
 // ---------------------------------------------------------------------------
-// Per-lane processing (render thread) — called for each lane in processBlock
+// Per-qurve processing (render thread) — called for each slot in processBlock
 // ---------------------------------------------------------------------------
 
-void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRate,
+void GestureEngine::processSlot (int slot, uint32_t frameCount, double sampleRate,
                                   const MIDIOut& midiOut,
                                   float speedRatio, PlaybackDirection direction,
                                   float forcedPhase)
 {
-    auto& rt  = _runtimes[static_cast<size_t>(lane)];
-    const auto* snap = _snapshots[static_cast<size_t>(lane)].load (std::memory_order_acquire);
+    const int lane = laneOf (slot);
+    auto& rt  = _runtimes[static_cast<size_t>(slot)];
+    const auto* snap = _snapshots[static_cast<size_t>(slot)].load (std::memory_order_acquire);
 
     // ── Note Off cleanup (may fire even without a valid snapshot) ─────────────
     // Use rt.lastSentChannel (recorded at Note-On time) rather than
     // snap->midiChannel so that:
-    //   (a) clearing a lane (snap == nullptr) still sends the Note Off, and
+    //   (a) clearing a qurve (snap == nullptr) still sends the Note Off, and
     //   (b) a channel change between Note On and Note Off doesn't orphan a note.
-    if (_noteOffNeeded[static_cast<size_t>(lane)].exchange (false, std::memory_order_acq_rel))
+    if (_noteOffNeeded[static_cast<size_t>(slot)].exchange (false, std::memory_order_acq_rel))
     {
         if (rt.lastSentValue >= 0 && midiOut)
         {
@@ -308,7 +336,7 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
                      static_cast<uint8_t> (rt.lastSentValue), 0u);
         }
         rt.lastSentValue = -1;
-        _lastSentMirror[static_cast<size_t>(lane)].store (-1, std::memory_order_release);
+        _lastSentMirror[static_cast<size_t>(slot)].store (-1, std::memory_order_release);
     }
 
     if (! snap || ! snap->valid) return;
@@ -321,13 +349,13 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
 
     // ── Advance playhead ──────────────────────────────────────────────────────
     // One-shot sentinel: playheadSeconds == -1 means "already completed this pass".
-    // reset() / resetLane() clear the sentinel by setting playheadSeconds = 0.
+    // reset() / resetQurve() clear the sentinel by setting playheadSeconds = 0.
     // Park the UI playhead at 0 so the dot rests at the start rather than
     // wherever it was when the sentinel fired.
     if (snap->oneShot && rt.playheadSeconds < 0.0)
     {
-        _lanePhases[static_cast<size_t>(lane)].store (0.0f, std::memory_order_relaxed);
-        return;   // one-shot complete — lane is silent until next reset
+        _slotPhases[static_cast<size_t>(slot)].store (0.0f, std::memory_order_relaxed);
+        return;   // one-shot complete — qurve is silent until next reset
     }
 
     rt.playheadSeconds += static_cast<double> (frameCount) / sampleRate;
@@ -335,7 +363,7 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
     // ── Phase (direction-dependent) ───────────────────────────────────────────
     float phase;
 
-    // When forcedPhase is provided (lane-sync master phase) and this lane loops,
+    // When forcedPhase is provided (lane-sync master phase) and this qurve loops,
     // skip own phase computation and use the master phase directly.
     // playheadSeconds is still advanced above so it stays coherent when sync is disabled.
     if (forcedPhase >= 0.0f && ! snap->oneShot)
@@ -361,9 +389,9 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
             {
                 // Reverse one-shot: curve played from end to beginning — done.
                 if (snap->messageType == MessageType::Note)
-                    _noteOffNeeded[static_cast<size_t>(lane)].store (true, std::memory_order_release);
+                    _noteOffNeeded[static_cast<size_t>(slot)].store (true, std::memory_order_release);
                 rt.playheadSeconds = -1.0;   // sentinel: skip on future blocks
-                _lanePhases[static_cast<size_t>(lane)].store (0.0f, std::memory_order_relaxed);
+                _slotPhases[static_cast<size_t>(slot)].store (0.0f, std::memory_order_relaxed);
                 return;
             }
             rt.playheadSeconds = std::fmod (rt.playheadSeconds, effectiveDur);
@@ -379,9 +407,9 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
             {
                 // PingPong one-shot: one full round-trip (0→1→0) — done.
                 if (snap->messageType == MessageType::Note)
-                    _noteOffNeeded[static_cast<size_t>(lane)].store (true, std::memory_order_release);
+                    _noteOffNeeded[static_cast<size_t>(slot)].store (true, std::memory_order_release);
                 rt.playheadSeconds = -1.0;
-                _lanePhases[static_cast<size_t>(lane)].store (0.0f, std::memory_order_relaxed);
+                _slotPhases[static_cast<size_t>(slot)].store (0.0f, std::memory_order_relaxed);
                 return;
             }
             rt.playheadSeconds = std::fmod (rt.playheadSeconds, ppDur);
@@ -398,9 +426,9 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
             {
                 // Forward one-shot: curve played from beginning to end — done.
                 if (snap->messageType == MessageType::Note)
-                    _noteOffNeeded[static_cast<size_t>(lane)].store (true, std::memory_order_release);
+                    _noteOffNeeded[static_cast<size_t>(slot)].store (true, std::memory_order_release);
                 rt.playheadSeconds = -1.0;
-                _lanePhases[static_cast<size_t>(lane)].store (0.0f, std::memory_order_relaxed);
+                _slotPhases[static_cast<size_t>(slot)].store (0.0f, std::memory_order_relaxed);
                 return;
             }
             rt.playheadSeconds = std::fmod (rt.playheadSeconds, effectiveDur);
@@ -408,18 +436,18 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
         phase = static_cast<float> (rt.playheadSeconds / effectiveDur);
     }
 
-    // Store per-lane phase for the UI playhead (unshifted, so the playhead
+    // Store per-qurve phase for the UI playhead (unshifted, so the playhead
     // always tracks 0→1 regardless of phaseOffset).
-    _lanePhases[static_cast<size_t>(lane)].store (phase, std::memory_order_relaxed);
+    _slotPhases[static_cast<size_t>(slot)].store (phase, std::memory_order_relaxed);
 
-    // Also update _currentPhase from the lowest-indexed valid lane so the
+    // Also update _currentPhase from the lowest-indexed valid slot so the
     // CurveDisplay always shows a moving playhead when anything is playing.
     {
         bool lowerValid = false;
-        for (int l = 0; l < lane; ++l)
+        for (int s = 0; s < slot; ++s)
         {
-            const auto* s = _snapshots[static_cast<size_t>(l)].load (std::memory_order_relaxed);
-            if (s && s->valid) { lowerValid = true; break; }
+            const auto* sn = _snapshots[static_cast<size_t>(s)].load (std::memory_order_relaxed);
+            if (sn && sn->valid) { lowerValid = true; break; }
         }
         if (! lowerValid)
             _currentPhase.store (phase, std::memory_order_relaxed);
@@ -478,7 +506,7 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
                 if (midiOut) midiOut (0xB0u | (snap->midiChannel & 0x0Fu),
                                       snap->ccNumber, static_cast<uint8_t> (v));
                 rt.lastSentValue = v;
-                _lastSentMirror[static_cast<size_t>(lane)].store (v, std::memory_order_release);
+                _lastSentMirror[static_cast<size_t>(slot)].store (v, std::memory_order_release);
             }
             break;
         }
@@ -490,7 +518,7 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
                 if (midiOut) midiOut (0xD0u | (snap->midiChannel & 0x0Fu),
                                       static_cast<uint8_t> (v), 0u);
                 rt.lastSentValue = v;
-                _lastSentMirror[static_cast<size_t>(lane)].store (v, std::memory_order_release);
+                _lastSentMirror[static_cast<size_t>(slot)].store (v, std::memory_order_release);
             }
             break;
         }
@@ -503,7 +531,7 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
                                       static_cast<uint8_t> (v & 0x7F),
                                       static_cast<uint8_t> ((v >> 7) & 0x7F));
                 rt.lastSentValue = v;
-                _lastSentMirror[static_cast<size_t>(lane)].store (v, std::memory_order_release);
+                _lastSentMirror[static_cast<size_t>(slot)].store (v, std::memory_order_release);
             }
             break;
         }
@@ -579,23 +607,23 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
             }
             rt.lastSentValue   = candidate;
             rt.lastSentChannel = snap->midiChannel;   // record channel for matching Note Off
-            _lastSentMirror[static_cast<size_t>(lane)].store (candidate, std::memory_order_release);
+            _lastSentMirror[static_cast<size_t>(slot)].store (candidate, std::memory_order_release);
             break;
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// processBlock — render thread: iterates all lanes
+// processBlock — render thread: iterates all slots (lane-major order)
 // ---------------------------------------------------------------------------
 
 void GestureEngine::processBlock (uint32_t frameCount, double sampleRate,
                                    const MIDIOut& midiOut,
                                    float speedRatio, PlaybackDirection direction)
 {
-    // ── Lane sync: compute master phase once and pass to all lanes ────────────
+    // ── Lane sync: compute master phase once and pass to all qurves ───────────
     const bool syncNow = _lanesSynced.load (std::memory_order_relaxed);
-    // Detect false→true transition: reset the master clock so all lanes snap
+    // Detect false→true transition: reset the master clock so all qurves snap
     // to a clean phase-0 start the moment sync is engaged.
     if (syncNow && ! _syncWasEnabled)
         _syncMasterPlayhead = 0.0;
@@ -604,14 +632,14 @@ void GestureEngine::processBlock (uint32_t frameCount, double sampleRate,
     float masterPhase = -1.0f;
     if (syncNow && _isPlaying.load (std::memory_order_acquire))
     {
-        // Use the first valid lane's duration as the master period.
+        // Use the first valid qurve's duration as the master period.
         double masterDur = 0.0;
-        for (int i = 0; i < kMaxLanes; ++i)
+        for (int s = 0; s < kMaxSlots; ++s)
         {
-            const auto* s = _snapshots[static_cast<size_t>(i)].load (std::memory_order_acquire);
-            if (s && s->valid)
+            const auto* sn = _snapshots[static_cast<size_t>(s)].load (std::memory_order_acquire);
+            if (sn && sn->valid)
             {
-                masterDur = static_cast<double> (s->durationSeconds)
+                masterDur = static_cast<double> (sn->durationSeconds)
                             / static_cast<double> (std::max (speedRatio, 0.001f));
                 break;
             }
@@ -643,8 +671,8 @@ void GestureEngine::processBlock (uint32_t frameCount, double sampleRate,
         }
     }
 
-    for (int lane = 0; lane < kMaxLanes; ++lane)
-        processLane (lane, frameCount, sampleRate, midiOut, speedRatio, direction, masterPhase);
+    for (int s = 0; s < kMaxSlots; ++s)
+        processSlot (s, frameCount, sampleRate, midiOut, speedRatio, direction, masterPhase);
 }
 
 void GestureEngine::processBlock (uint32_t frameCount, double sampleRate,
@@ -661,17 +689,18 @@ void GestureEngine::processBlock (uint32_t frameCount, double sampleRate,
     float masterPhase = -1.0f;
     if (syncNow && _isPlaying.load (std::memory_order_acquire))
     {
-        // Use the first valid lane's speed and direction as the master clock.
+        // Use the first valid qurve's lane speed and direction as the master clock.
         double masterDur = 0.0;
         PlaybackDirection masterDir = PlaybackDirection::Forward;
-        for (int i = 0; i < kMaxLanes; ++i)
+        for (int s = 0; s < kMaxSlots; ++s)
         {
-            const auto* s = _snapshots[static_cast<size_t>(i)].load (std::memory_order_acquire);
-            if (s && s->valid)
+            const auto* sn = _snapshots[static_cast<size_t>(s)].load (std::memory_order_acquire);
+            if (sn && sn->valid)
             {
-                masterDur = static_cast<double> (s->durationSeconds)
-                            / static_cast<double> (std::max (speedRatios[static_cast<size_t>(i)], 0.001f));
-                masterDir = directions[static_cast<size_t>(i)];
+                const int lane = laneOf (s);
+                masterDur = static_cast<double> (sn->durationSeconds)
+                            / static_cast<double> (std::max (speedRatios[static_cast<size_t>(lane)], 0.001f));
+                masterDir = directions[static_cast<size_t>(lane)];
                 break;
             }
         }
@@ -697,9 +726,12 @@ void GestureEngine::processBlock (uint32_t frameCount, double sampleRate,
         }
     }
 
-    for (int lane = 0; lane < kMaxLanes; ++lane)
-        processLane (lane, frameCount, sampleRate, midiOut,
+    for (int s = 0; s < kMaxSlots; ++s)
+    {
+        const int lane = laneOf (s);
+        processSlot (s, frameCount, sampleRate, midiOut,
                      speedRatios[static_cast<size_t>(lane)],
                      directions[static_cast<size_t>(lane)],
                      masterPhase);
+    }
 }

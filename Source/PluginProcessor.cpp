@@ -292,7 +292,8 @@ DrawnCurveProcessor::DrawnCurveProcessor()
     : AudioProcessor (BusesProperties()),
       apvts (*this, nullptr, "DrawnCurve", createParams())
 {
-    _laneSnaps.fill (nullptr);
+    _qurveSnaps.fill (nullptr);
+    activeQurveCounts.fill (1);
     updateAllLaneScales();
 }
 
@@ -704,11 +705,11 @@ void DrawnCurveProcessor::handleTeachMidi (const juce::MidiMessage& msg)
 // Capture API
 //==============================================================================
 
-void DrawnCurveProcessor::beginCapture (int lane)
+void DrawnCurveProcessor::beginCapture (int lane, int qurve)
 {
-    // Signal the engine to send Note Off for this lane before drawing overwrites it.
-    // Other lanes continue playing uninterrupted.
-    _engine.stopLane (lane);
+    // Signal the engine to send Note Off for this qurve before drawing
+    // overwrites it.  Other qurves/lanes continue playing uninterrupted.
+    _engine.stopQurve (lane, juce::jlimit (0, kMaxQurves - 1, qurve));
     _capture.begin();
 }
 
@@ -717,9 +718,10 @@ void DrawnCurveProcessor::addCapturePoint (double t, float x, float y, float pre
     _capture.addPoint (t, x, y, pressure);
 }
 
-void DrawnCurveProcessor::finalizeCapture (int lane)
+void DrawnCurveProcessor::finalizeCapture (int lane, int qurve)
 {
     if (! _capture.hasPoints()) return;
+    qurve = juce::jlimit (0, kMaxQurves - 1, qurve);
 
     const uint8_t ccNum  = static_cast<uint8_t> (
         static_cast<int> (apvts.getRawParameterValue (laneParam (lane, ParamID::ccNumber))->load()));
@@ -737,7 +739,7 @@ void DrawnCurveProcessor::finalizeCapture (int lane)
     const float phaseOffPct = apvts.getRawParameterValue (laneParam (lane, ParamID::phaseOffset))->load();
 
     /* Snapshot replacement strategy:
-     * Each new snapshot is allocated and assigned to _laneSnaps without deleting
+     * Each new snapshot is allocated and assigned to _qurveSnaps without deleting
      * the previous one, intentionally leaking the old snapshot. This avoids
      * realtime unsafe deallocation while the audio thread might still access the old snapshot.
      * TODO: migrate to shared_ptr<const LaneSnapshot> ownership to allow safe
@@ -763,20 +765,22 @@ void DrawnCurveProcessor::finalizeCapture (int lane)
     ++gSnapshotReplacements;
 #endif
 
-    _laneSnaps[static_cast<size_t>(lane)] = snap;
+    // Non-Note lanes are monophonic by policy: extra qurves never reach the
+    // engine (the UI doesn't offer them, but clamp defensively).
+    if (snap->messageType != MessageType::Note) qurve = 0;
+
+    _qurveSnaps[static_cast<size_t>(qslot (lane, qurve))] = snap;
 
     {
         juce::SpinLock::ScopedLockType lock (_engineLock);
-        _engine.setSnapshot (lane, snap);
-        _engine.resetLane (lane);   // rewind only this lane; Note Off from stopLane still fires
+        _engine.setSnapshot (lane, qurve, snap);
+        _engine.resetQurve (lane, qurve);   // rewind only this qurve; Note Off from stopQurve still fires
     }
 }
 
 void DrawnCurveProcessor::updateLaneSnapshot (int lane)
 {
     if (lane < 0 || lane >= kMaxLanes) return;
-    const auto* existing = _laneSnaps[static_cast<size_t>(lane)];
-    if (! existing || ! existing->valid) return;   // nothing drawn yet — nothing to update
 
     const uint8_t ccNum  = static_cast<uint8_t> (
         static_cast<int> (apvts.getRawParameterValue (laneParam (lane, ParamID::ccNumber))->load()));
@@ -793,62 +797,74 @@ void DrawnCurveProcessor::updateLaneSnapshot (int lane)
     const bool  oneShot     = apvts.getRawParameterValue (laneParam (lane, ParamID::loopMode))->load() > 0.5f;
     const float phaseOffPct = apvts.getRawParameterValue (laneParam (lane, ParamID::phaseOffset))->load();
 
-    /* Snapshot replacement strategy:
-     * Each new snapshot is allocated and assigned to _laneSnaps without deleting
-     * the previous one, intentionally leaking the old snapshot. This avoids
-     * realtime unsafe deallocation while the audio thread might still access the old snapshot.
-     * TODO: migrate to shared_ptr<const LaneSnapshot> ownership to allow safe
-     * reclamation without leaks.
-     */
     const bool  xQuant  = apvts.getRawParameterValue (laneParam (lane, ParamID::xQuantize))->load() > 0.5f;
     const bool  yQuant  = apvts.getRawParameterValue (laneParam (lane, ParamID::yQuantize))->load() > 0.5f;
     const bool  legato  = apvts.getRawParameterValue (laneParam (lane, ParamID::legatoMode))->load() > 0.5f;
     const auto  xDiv    = static_cast<uint8_t> (static_cast<int> (apvts.getRawParameterValue (laneParam (lane, ParamID::xDivisions))->load()));
     const auto  yDiv    = static_cast<uint8_t> (static_cast<int> (apvts.getRawParameterValue (laneParam (lane, ParamID::yDivisions))->load()));
 
-    // Clone the existing snapshot, then overwrite only the param-driven fields.
-    auto* snap = new LaneSnapshot (*existing);
-    snap->ccNumber       = ccNum;
-    snap->midiChannel    = ch;
-    snap->smoothing      = smooth;
-    snap->minOut         = minOut;
-    snap->maxOut         = maxOut;
-    snap->messageType    = msgType;
-    snap->noteVelocity   = noteVel;
-    snap->oneShot        = oneShot;
-    snap->phaseOffset    = phaseOffPct / 100.0f;
-    snap->xQuantize      = xQuant;
-    snap->yQuantize      = yQuant;
-    snap->legatoMode     = legato;
-    snap->xDivisions     = xDiv;
-    snap->yDivisions     = yDiv;
+    // Loop length from sync settings (mirror of setSnapshotFromArray).
+    const bool  syncOn = apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
+    const float beats  = apvts.getRawParameterValue (ParamID::syncBeats)->load();
+    constexpr float fakeBpm = 100.0f;
+    const float loopDur = syncOn ? juce::jmax (0.05f, beats * 60.0f / fakeBpm) : 1.0f;
 
-    // Recompute loop length from sync settings (mirror of setSnapshotFromArray).
+    // Lane params are SHARED by every qurve in the lane — rebake all of them.
+    // Snapshot replacement strategy (per qurve): each new snapshot is allocated
+    // and assigned to _qurveSnaps without deleting the previous one,
+    // intentionally leaking the old snapshot.  This avoids realtime-unsafe
+    // deallocation while the audio thread might still access the old snapshot.
+    // TODO: migrate to shared_ptr<const LaneSnapshot> ownership to allow safe
+    // reclamation without leaks.
+    bool anyTypeChange = false;
+    for (int q = 0; q < kMaxQurves; ++q)
     {
-        const bool  syncOn = apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
-        const float beats  = apvts.getRawParameterValue (ParamID::syncBeats)->load();
-        constexpr float fakeBpm = 100.0f;
-        snap->durationSeconds = syncOn ? juce::jmax (0.05f, beats * 60.0f / fakeBpm) : 1.0f;
-    }
+        const auto* existing = _qurveSnaps[static_cast<size_t>(qslot (lane, q))];
+        if (! existing || ! existing->valid) continue;   // nothing drawn in this slot
+
+        auto* snap = new LaneSnapshot (*existing);
+        snap->ccNumber       = ccNum;
+        snap->midiChannel    = ch;
+        snap->smoothing      = smooth;
+        snap->minOut         = minOut;
+        snap->maxOut         = maxOut;
+        snap->messageType    = msgType;
+        snap->noteVelocity   = noteVel;
+        snap->oneShot        = oneShot;
+        snap->phaseOffset    = phaseOffPct / 100.0f;
+        snap->xQuantize      = xQuant;
+        snap->yQuantize      = yQuant;
+        snap->legatoMode     = legato;
+        snap->xDivisions     = xDiv;
+        snap->yDivisions     = yDiv;
+        snap->durationSeconds = loopDur;
 
 #if JUCE_DEBUG
-    ++gSnapshotReplacements;
+        ++gSnapshotReplacements;
 #endif
+        if (msgType != existing->messageType)
+            anyTypeChange = true;
 
-    _laneSnaps[static_cast<size_t>(lane)] = snap;
+        _qurveSnaps[static_cast<size_t>(qslot (lane, q))] = snap;
+
+        {
+            juce::SpinLock::ScopedLockType lock (_engineLock);
+            // Non-Note types are monophonic by policy: only qurve 0 reaches the
+            // engine.  Extra qurves stay parked in _qurveSnaps so switching the
+            // lane back to Note mode restores them intact.
+            if (q == 0 || msgType == MessageType::Note)
+                _engine.setSnapshot (lane, q, snap);
+            else
+                _engine.clearQurve (lane, q);
+        }
+    }
 
     // When switching TO Note mode, send Note Off for any CC/PB value in flight.
     // When switching FROM Note mode, the engine will naturally stop sending Note-Ons.
-    if (msgType != existing->messageType)
+    if (anyTypeChange)
         _engine.stopLane (lane);
-
-    {
-        juce::SpinLock::ScopedLockType lock (_engineLock);
-        _engine.setSnapshot (lane, snap);
-    }
-    // Note: do NOT delete existing — it may still be in use by the audio thread until
-    // the next processBlock acquires the new pointer.  Small intentional leak per update;
-    // finalizeCapture() already has the same pattern (_laneSnaps overwrite without delete).
+    // Note: do NOT delete the old snapshots — they may still be in use by the
+    // audio thread until the next processBlock acquires the new pointers.
 
     // Re-push scale config — updateLaneSnapshot is called when any per-lane or
     // global param changes, so scaleRoot/scaleMask might have changed since the
@@ -868,15 +884,69 @@ void DrawnCurveProcessor::clearSnapshot (int lane)
 {
     {
         juce::SpinLock::ScopedLockType lock (_engineLock);
-        _engine.clearSnapshot (lane);
+        _engine.clearSnapshot (lane);   // clears every qurve + queues Note Offs
         if (lane == 0) _capture.clear();   // capture session belongs to whichever lane is being drawn
     }
-    _laneSnaps[static_cast<size_t>(lane)] = nullptr;
+    for (int q = 0; q < kMaxQurves; ++q)
+        _qurveSnaps[static_cast<size_t>(qslot (lane, q))] = nullptr;
 }
 
-void DrawnCurveProcessor::setSnapshotFromArray (int lane, const float* data, int size)
+void DrawnCurveProcessor::clearQurve (int lane, int qurve)
 {
-    if (lane < 0 || lane >= kMaxLanes || data == nullptr || size <= 0) return;
+    if (lane < 0 || lane >= kMaxLanes || qurve < 0 || qurve >= kMaxQurves) return;
+    {
+        juce::SpinLock::ScopedLockType lock (_engineLock);
+        _engine.clearQurve (lane, qurve);
+    }
+    _qurveSnaps[static_cast<size_t>(qslot (lane, qurve))] = nullptr;
+}
+
+int DrawnCurveProcessor::addQurve (int lane)
+{
+    if (lane < 0 || lane >= kMaxLanes) return -1;
+    auto& count = activeQurveCounts[static_cast<size_t> (lane)];
+    if (count >= kMaxQurves) return -1;
+    return count++;   // the new (empty) qurve's index
+}
+
+void DrawnCurveProcessor::removeQurve (int lane, int qurve)
+{
+    if (lane < 0 || lane >= kMaxLanes) return;
+    auto& count = activeQurveCounts[static_cast<size_t> (lane)];
+    if (qurve < 0 || qurve >= count) return;
+
+    if (count <= 1) { clearQurve (lane, 0); return; }   // last one: just empty it
+
+    // Shift every qurve above 'qurve' down by one slot (mirrors deleteLane's
+    // copy-then-clear strategy: heap copies so the audio thread can finish
+    // reading the originals while the UI thread installs the new pointers).
+    for (int srcQ = qurve + 1; srcQ < count; ++srcQ)
+    {
+        const int dstQ = srcQ - 1;
+        const auto* srcSnap = _qurveSnaps[static_cast<size_t> (qslot (lane, srcQ))];
+        if (srcSnap && srcSnap->valid)
+        {
+            auto* newSnap = new LaneSnapshot (*srcSnap);
+            _qurveSnaps[static_cast<size_t> (qslot (lane, dstQ))] = newSnap;
+            juce::SpinLock::ScopedLockType lock (_engineLock);
+            _engine.setSnapshot (lane, dstQ, newSnap);
+        }
+        else
+        {
+            _qurveSnaps[static_cast<size_t> (qslot (lane, dstQ))] = nullptr;
+            juce::SpinLock::ScopedLockType lock (_engineLock);
+            _engine.clearQurve (lane, dstQ);
+        }
+    }
+
+    clearQurve (lane, count - 1);   // vacate the top slot (queues its Note Off)
+    --count;
+}
+
+void DrawnCurveProcessor::setSnapshotFromArray (int lane, int qurve, const float* data, int size)
+{
+    if (lane < 0 || lane >= kMaxLanes || qurve < 0 || qurve >= kMaxQurves
+        || data == nullptr || size <= 0) return;
 
     // Read current APVTS values so the snapshot reflects the live param state.
     const auto raw = [&] (const juce::String& suffix) {
@@ -919,12 +989,16 @@ void DrawnCurveProcessor::setSnapshotFromArray (int lane, const float* data, int
     for (int i = 0; i < n; ++i)
         snap->table[static_cast<std::size_t> (i)] = juce::jlimit (0.0f, 1.0f, data[i]);
 
-    _laneSnaps[static_cast<size_t> (lane)] = snap;
+    // Non-Note lanes are monophonic by policy — extra qurves never reach the
+    // engine (the UI doesn't offer them, but clamp defensively).
+    if (snap->messageType != MessageType::Note) qurve = 0;
+
+    _qurveSnaps[static_cast<size_t> (qslot (lane, qurve))] = snap;
 
     {
         juce::SpinLock::ScopedLockType lock (_engineLock);
-        _engine.setSnapshot (lane, snap);
-        _engine.resetLane (lane);
+        _engine.setSnapshot (lane, qurve, snap);
+        _engine.resetQurve (lane, qurve);
     }
 
     // Push the current global scale config to the engine for this lane so
@@ -939,7 +1013,8 @@ void DrawnCurveProcessor::clearAllSnapshots()
         _engine.clearAllSnapshots();
         _capture.clear();
     }
-    _laneSnaps.fill (nullptr);
+    _qurveSnaps.fill (nullptr);
+    activeQurveCounts.fill (1);
 }
 
 void DrawnCurveProcessor::deleteLane (int lane)
@@ -968,27 +1043,32 @@ void DrawnCurveProcessor::deleteLane (int lane)
                 pDst->setValueNotifyingHost (pSrc->getValue());
         }
 
-        // ── Copy curve snapshot ───────────────────────────────────────────
-        // A new heap copy is made so the audio thread can safely finish
-        // reading the original while the UI thread installs the new one.
-        const auto* srcSnap = _laneSnaps[static_cast<size_t> (src)];
-        if (srcSnap && srcSnap->valid)
+        // ── Copy curve snapshots (every qurve) ────────────────────────────
+        // New heap copies are made so the audio thread can safely finish
+        // reading the originals while the UI thread installs the new ones.
+        for (int q = 0; q < kMaxQurves; ++q)
         {
-            auto* newSnap = new LaneSnapshot (*srcSnap);
-            _laneSnaps[static_cast<size_t> (dst)] = newSnap;
-            juce::SpinLock::ScopedLockType lock (_engineLock);
-            _engine.setSnapshot (dst, newSnap);
+            const auto* srcSnap = _qurveSnaps[static_cast<size_t> (qslot (src, q))];
+            if (srcSnap && srcSnap->valid)
+            {
+                auto* newSnap = new LaneSnapshot (*srcSnap);
+                _qurveSnaps[static_cast<size_t> (qslot (dst, q))] = newSnap;
+                juce::SpinLock::ScopedLockType lock (_engineLock);
+                _engine.setSnapshot (dst, q, newSnap);
+            }
+            else
+            {
+                _qurveSnaps[static_cast<size_t> (qslot (dst, q))] = nullptr;
+                juce::SpinLock::ScopedLockType lock (_engineLock);
+                _engine.clearQurve (dst, q);
+            }
         }
-        else
-        {
-            _laneSnaps[static_cast<size_t> (dst)] = nullptr;
-            juce::SpinLock::ScopedLockType lock (_engineLock);
-            _engine.clearSnapshot (dst);
-        }
+        activeQurveCounts[static_cast<size_t> (dst)] = activeQurveCounts[static_cast<size_t> (src)];
     }
 
     // Clear the vacated top slot and shrink the active count.
     clearSnapshot (activeLaneCount - 1);
+    activeQurveCounts[static_cast<size_t> (activeLaneCount - 1)] = 1;
     --activeLaneCount;
 }
 
@@ -1121,34 +1201,39 @@ bool DrawnCurveProcessor::isTeachPending (int lane) const noexcept
 // Query API
 //==============================================================================
 
-bool DrawnCurveProcessor::hasCurve (int lane) const noexcept
+bool DrawnCurveProcessor::hasCurve (int lane, int qurve) const noexcept
 {
     if (lane < 0 || lane >= kMaxLanes) return false;
-    return _laneSnaps[static_cast<size_t>(lane)] != nullptr && _laneSnaps[static_cast<size_t>(lane)]->valid;
+    if (qurve < 0 || qurve >= kMaxQurves) return false;
+    const auto* s = _qurveSnaps[static_cast<size_t>(qslot (lane, qurve))];
+    return s != nullptr && s->valid;
 }
 
 bool DrawnCurveProcessor::anyLaneHasCurve() const noexcept
 {
     for (int i = 0; i < kMaxLanes; ++i)
-        if (hasCurve (i)) return true;
+        for (int q = 0; q < kMaxQurves; ++q)
+            if (hasCurve (i, q)) return true;
     return false;
 }
 
 float DrawnCurveProcessor::currentPhase()            const noexcept { return _engine.getCurrentPhase(); }
 float DrawnCurveProcessor::currentPhaseForLane (int l) const noexcept { return _engine.getCurrentPhaseForLane (l); }
 int   DrawnCurveProcessor::currentSentValueForLane (int l) const noexcept { return _engine.getLastSentValue (l); }
+float DrawnCurveProcessor::currentPhaseForQurve (int l, int q) const noexcept { return _engine.getCurrentPhaseForQurve (l, q); }
+int   DrawnCurveProcessor::currentSentValueForQurve (int l, int q) const noexcept { return _engine.getLastSentValueForQurve (l, q); }
 
-std::array<float, 256> DrawnCurveProcessor::getCurveTable (int lane) const noexcept
+std::array<float, 256> DrawnCurveProcessor::getCurveTable (int lane, int qurve) const noexcept
 {
-    if (lane >= 0 && lane < kMaxLanes && _laneSnaps[static_cast<size_t>(lane)] && _laneSnaps[static_cast<size_t>(lane)]->valid)
-        return _laneSnaps[static_cast<size_t>(lane)]->table;
+    if (lane >= 0 && lane < kMaxLanes && hasCurve (lane, qurve))
+        return _qurveSnaps[static_cast<size_t>(qslot (lane, qurve))]->table;
     return {};
 }
 
-float DrawnCurveProcessor::curveDuration (int lane) const noexcept
+float DrawnCurveProcessor::curveDuration (int lane, int qurve) const noexcept
 {
-    if (lane >= 0 && lane < kMaxLanes && _laneSnaps[static_cast<size_t>(lane)] && _laneSnaps[static_cast<size_t>(lane)]->valid)
-        return _laneSnaps[static_cast<size_t>(lane)]->durationSeconds;
+    if (lane >= 0 && lane < kMaxLanes && hasCurve (lane, qurve))
+        return _qurveSnaps[static_cast<size_t>(qslot (lane, qurve))]->durationSeconds;
     return 0.0f;
 }
 
@@ -1161,25 +1246,39 @@ void DrawnCurveProcessor::getStateInformation (juce::MemoryBlock& destData)
     auto state = apvts.copyState();
 
     // Increment when making breaking schema changes.
-    state.setProperty ("stateVersion", 2, nullptr);
+    // v3: per-qurve curves ("L{lane}Q{qurve}_" prefixes + per-lane qurve counts).
+    //     Qurve 0 is ALSO written under the legacy "L{lane}_" prefix so presets
+    //     saved here still load (mono, first qurve only) in older builds.
+    state.setProperty ("stateVersion", 3, nullptr);
     state.setProperty ("activeLaneCount", activeLaneCount, nullptr);
+
+    auto writeSnap = [&state] (const juce::String& pfx, const LaneSnapshot& snap)
+    {
+        juce::MemoryBlock tableBlock (snap.table.data(), 256 * sizeof (float));
+        state.setProperty (pfx + "tableData", tableBlock.toBase64Encoding(), nullptr);
+        state.setProperty (pfx + "duration",  snap.durationSeconds,         nullptr);
+        state.setProperty (pfx + "ccNum",     static_cast<int> (snap.ccNumber),    nullptr);
+        state.setProperty (pfx + "midiCh",    static_cast<int> (snap.midiChannel), nullptr);
+        state.setProperty (pfx + "minOut",    snap.minOut,                   nullptr);
+        state.setProperty (pfx + "maxOut",    snap.maxOut,                   nullptr);
+        state.setProperty (pfx + "smooth",    snap.smoothing,                nullptr);
+        state.setProperty (pfx + "msgType",   static_cast<int> (snap.messageType),   nullptr);
+        state.setProperty (pfx + "noteVel",   static_cast<int> (snap.noteVelocity),  nullptr);
+    };
 
     for (int L = 0; L < kMaxLanes; ++L)
     {
-        const auto* snap = _laneSnaps[static_cast<size_t>(L)];
-        if (snap && snap->valid)
+        state.setProperty ("L" + juce::String (L) + "_qurveCount",
+                           qurveCount (L), nullptr);
+        for (int q = 0; q < kMaxQurves; ++q)
         {
-            const juce::String pfx = "L" + juce::String (L) + "_";
-            juce::MemoryBlock tableBlock (snap->table.data(), 256 * sizeof (float));
-            state.setProperty (pfx + "tableData", tableBlock.toBase64Encoding(), nullptr);
-            state.setProperty (pfx + "duration",  snap->durationSeconds,         nullptr);
-            state.setProperty (pfx + "ccNum",     static_cast<int> (snap->ccNumber),    nullptr);
-            state.setProperty (pfx + "midiCh",    static_cast<int> (snap->midiChannel), nullptr);
-            state.setProperty (pfx + "minOut",    snap->minOut,                   nullptr);
-            state.setProperty (pfx + "maxOut",    snap->maxOut,                   nullptr);
-            state.setProperty (pfx + "smooth",    snap->smoothing,                nullptr);
-            state.setProperty (pfx + "msgType",   static_cast<int> (snap->messageType),   nullptr);
-            state.setProperty (pfx + "noteVel",   static_cast<int> (snap->noteVelocity),  nullptr);
+            const auto* snap = _qurveSnaps[static_cast<size_t>(qslot (L, q))];
+            if (snap && snap->valid)
+            {
+                writeSnap ("L" + juce::String (L) + "Q" + juce::String (q) + "_", *snap);
+                if (q == 0)   // legacy mirror for older builds
+                    writeSnap ("L" + juce::String (L) + "_", *snap);
+            }
         }
     }
 
@@ -1205,41 +1304,67 @@ void DrawnCurveProcessor::setStateInformation (const void* data, int sizeInBytes
 
     updateAllLaneScales();
 
+    // Parse one persisted snapshot under the given key prefix (nullptr = absent).
+    auto readSnap = [&state] (const juce::String& pfx) -> LaneSnapshot*
+    {
+        const juce::String tableB64 = state.getProperty (pfx + "tableData", juce::String());
+        if (tableB64.isEmpty()) return nullptr;
+        juce::MemoryBlock tableBlock;
+        if (! tableBlock.fromBase64Encoding (tableB64) ||
+            tableBlock.getSize() != 256 * sizeof (float)) return nullptr;
+
+        auto* snap = new LaneSnapshot();
+        memcpy (snap->table.data(), tableBlock.getData(), 256 * sizeof (float));
+        snap->durationSeconds = static_cast<float> (static_cast<double> (
+            state.getProperty (pfx + "duration", 1.0)));
+        snap->ccNumber    = static_cast<uint8_t>  (static_cast<int> (
+            state.getProperty (pfx + "ccNum",   74)));
+        snap->midiChannel = static_cast<uint8_t>  (static_cast<int> (
+            state.getProperty (pfx + "midiCh",  0)));
+        snap->minOut      = static_cast<float>    (static_cast<double> (
+            state.getProperty (pfx + "minOut",   0.0)));
+        snap->maxOut      = static_cast<float>    (static_cast<double> (
+            state.getProperty (pfx + "maxOut",   1.0)));
+        snap->smoothing   = static_cast<float>    (static_cast<double> (
+            state.getProperty (pfx + "smooth",  0.08)));
+        snap->messageType  = static_cast<MessageType> (static_cast<int> (
+            state.getProperty (pfx + "msgType", 0)));
+        snap->noteVelocity = static_cast<uint8_t> (static_cast<int> (
+            state.getProperty (pfx + "noteVel", 100)));
+        snap->valid = true;
+        return snap;
+    };
+
     for (int L = 0; L < kMaxLanes; ++L)
     {
-        const juce::String pfx = "L" + juce::String (L) + "_";
-        const juce::String tableB64 = state.getProperty (pfx + "tableData", juce::String());
-        if (tableB64.isNotEmpty())
-        {
-            juce::MemoryBlock tableBlock;
-            if (tableBlock.fromBase64Encoding (tableB64) &&
-                tableBlock.getSize() == 256 * sizeof (float))
-            {
-                auto* snap = new LaneSnapshot();
-                memcpy (snap->table.data(), tableBlock.getData(), 256 * sizeof (float));
-                snap->durationSeconds = static_cast<float> (static_cast<double> (
-                    state.getProperty (pfx + "duration", 1.0)));
-                snap->ccNumber    = static_cast<uint8_t>  (static_cast<int> (
-                    state.getProperty (pfx + "ccNum",   74)));
-                snap->midiChannel = static_cast<uint8_t>  (static_cast<int> (
-                    state.getProperty (pfx + "midiCh",  0)));
-                snap->minOut      = static_cast<float>    (static_cast<double> (
-                    state.getProperty (pfx + "minOut",   0.0)));
-                snap->maxOut      = static_cast<float>    (static_cast<double> (
-                    state.getProperty (pfx + "maxOut",   1.0)));
-                snap->smoothing   = static_cast<float>    (static_cast<double> (
-                    state.getProperty (pfx + "smooth",  0.08)));
-                snap->messageType  = static_cast<MessageType> (static_cast<int> (
-                    state.getProperty (pfx + "msgType", 0)));
-                snap->noteVelocity = static_cast<uint8_t> (static_cast<int> (
-                    state.getProperty (pfx + "noteVel", 100)));
-                snap->valid = true;
+        // v3 layout: per-qurve prefixes + a per-lane qurve count.
+        activeQurveCounts[static_cast<size_t> (L)] = juce::jlimit (1, kMaxQurves,
+            (int) state.getProperty ("L" + juce::String (L) + "_qurveCount", 1));
 
-                _laneSnaps[static_cast<size_t>(L)] = snap;
-                {
-                    juce::SpinLock::ScopedLockType lock (_engineLock);
-                    _engine.setSnapshot (L, snap);
-                }
+        bool anyQurveLoaded = false;
+        for (int q = 0; q < kMaxQurves; ++q)
+        {
+            if (auto* snap = readSnap ("L" + juce::String (L) + "Q" + juce::String (q) + "_"))
+            {
+                _qurveSnaps[static_cast<size_t>(qslot (L, q))] = snap;
+                anyQurveLoaded = true;
+                juce::SpinLock::ScopedLockType lock (_engineLock);
+                // Non-Note lanes stay monophonic: only qurve 0 reaches the engine.
+                if (q == 0 || snap->messageType == MessageType::Note)
+                    _engine.setSnapshot (L, q, snap);
+            }
+        }
+
+        // v2 layout: one curve per lane under the legacy "L{lane}_" prefix.
+        // (Also written by v3 saves as a mirror, so only load it when no
+        // Q-prefixed data was found — otherwise it would double-install qurve 0.)
+        if (! anyQurveLoaded)
+        {
+            if (auto* snap = readSnap ("L" + juce::String (L) + "_"))
+            {
+                _qurveSnaps[static_cast<size_t>(qslot (L, 0))] = snap;
+                juce::SpinLock::ScopedLockType lock (_engineLock);
+                _engine.setSnapshot (L, 0, snap);
             }
         }
     }
@@ -1255,32 +1380,13 @@ void DrawnCurveProcessor::setStateInformation (const void* data, int sizeInBytes
     // If lane 0 has no curve from the loop above, try the old keys.
     if (! hasCurve (0))
     {
-        const juce::String tableB64 = state.getProperty ("tableData", juce::String());
-        if (tableB64.isNotEmpty())
+        if (auto* snap = readSnap (juce::String()))   // v1: unprefixed keys
         {
-            juce::MemoryBlock tableBlock;
-            if (tableBlock.fromBase64Encoding (tableB64) &&
-                tableBlock.getSize() == 256 * sizeof (float))
+            _qurveSnaps[static_cast<size_t>(qslot (0, 0))] = snap;
             {
-                auto* snap = new LaneSnapshot();
-                memcpy (snap->table.data(), tableBlock.getData(), 256 * sizeof (float));
-                snap->durationSeconds = static_cast<float> (static_cast<double> (
-                    state.getProperty ("duration", 1.0)));
-                snap->ccNumber    = static_cast<uint8_t>  (static_cast<int> (state.getProperty ("ccNum",   74)));
-                snap->midiChannel = static_cast<uint8_t>  (static_cast<int> (state.getProperty ("midiCh",  0)));
-                snap->minOut      = static_cast<float>    (static_cast<double> (state.getProperty ("minOut",  0.0)));
-                snap->maxOut      = static_cast<float>    (static_cast<double> (state.getProperty ("maxOut",  1.0)));
-                snap->smoothing   = static_cast<float>    (static_cast<double> (state.getProperty ("smooth",  0.08)));
-                snap->messageType  = static_cast<MessageType> (static_cast<int> (state.getProperty ("msgType", 0)));
-                snap->noteVelocity = static_cast<uint8_t> (static_cast<int> (state.getProperty ("noteVel", 100)));
-                snap->valid = true;
-
-                _laneSnaps[0u] = snap;
-                {
-                    juce::SpinLock::ScopedLockType lock (_engineLock);
-                    _engine.setSnapshot (0, snap);
-                    _engine.reset();
-                }
+                juce::SpinLock::ScopedLockType lock (_engineLock);
+                _engine.setSnapshot (0, 0, snap);
+                _engine.reset();
             }
         }
     }

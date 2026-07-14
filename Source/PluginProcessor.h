@@ -153,6 +153,27 @@ public:
     /// Persisted in state; defaults to 1 so new instances start with a single lane.
     int activeLaneCount { 1 };
 
+    /// How many qurves each lane exposes (1..kMaxQurves).  Note lanes may hold
+    /// several; CC/PB/AT lanes stay at 1 by policy (the UI offers '+' only on
+    /// Note lanes, and the engine is only fed qurve 0 for non-Note types).
+    /// Persisted in state; defaults to 1 per lane.
+    std::array<int, kMaxLanes> activeQurveCounts {};   // zero-init; ctor sets 1s
+
+    /// Current qurve count for a lane (1..kMaxQurves).
+    int  qurveCount (int lane) const noexcept
+    {
+        return (lane >= 0 && lane < kMaxLanes)
+             ? std::max (1, activeQurveCounts[static_cast<size_t> (lane)]) : 1;
+    }
+    /// Grow a lane's qurve list by one empty slot.  Returns the new qurve's
+    /// index, or -1 when the lane is already at kMaxQurves.
+    int  addQurve (int lane);
+    /// Remove one qurve, shifting higher qurves down (mirrors deleteLane).
+    /// Removing the last remaining qurve just clears it.  UI thread only.
+    void removeQurve (int lane, int qurve);
+    /// Clear one qurve's curve without removing its slot.
+    void clearQurve (int lane, int qurve);
+
     // ── Parameters ────────────────────────────────────────────────────────────
     /// Public so the editor can add listeners and read raw values directly.
     juce::AudioProcessorValueTreeState apvts;
@@ -161,15 +182,15 @@ public:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParams();
 
     // ── Gesture capture API (UI thread) ──────────────────────────────────────
-    /// Signal the start of a drawing gesture on the given lane.
-    void beginCapture (int lane = 0);
+    /// Signal the start of a drawing gesture on the given lane/qurve.
+    void beginCapture (int lane = 0, int qurve = 0);
 
     /// Append a normalised point to the ongoing gesture.
     void addCapturePoint (double t, float x, float y, float pressure = 1.0f);
 
     /// Finalise the capture: bake current APVTS param values into a LaneSnapshot
-    /// and load it into the engine for the given lane.
-    void finalizeCapture (int lane = 0);
+    /// and load it into the engine for the given lane/qurve.
+    void finalizeCapture (int lane = 0, int qurve = 0);
 
     /// Re-bake params (type, CC#, channel, range, smoothing, velocity) into the
     /// existing snapshot table without requiring a redraw.  No-op if no curve exists.
@@ -182,7 +203,11 @@ public:
 
     /// Install a curve directly from a float array (called by the WebView bridge).
     /// Reads current APVTS values for CC#, channel, smoothing, etc.
-    void setSnapshotFromArray (int lane, const float* data, int size);
+    void setSnapshotFromArray (int lane, int qurve, const float* data, int size);
+    void setSnapshotFromArray (int lane, const float* data, int size)
+    {
+        setSnapshotFromArray (lane, 0, data, size);
+    }
 
     /// Clear the curve for one lane and stop it from playing.
     void clearSnapshot (int lane);
@@ -200,24 +225,26 @@ public:
     bool getLanePaused (int lane) const noexcept;
 
     // ── Query API (any thread) ────────────────────────────────────────────────
-    /// true if the given lane has a valid recorded curve.
-    bool  hasCurve (int lane = 0)     const noexcept;
+    /// true if the given lane/qurve has a valid recorded curve.
+    bool  hasCurve (int lane = 0, int qurve = 0) const noexcept;
     /// true if ANY lane has a valid curve (used by the fallback timer).
     bool  anyLaneHasCurve()           const noexcept;
 
     /// Approximate playhead phase [0, 1] — shared across all lanes.
     float currentPhase()            const noexcept;
     float currentPhaseForLane (int lane) const noexcept;
+    float currentPhaseForQurve (int lane, int qurve) const noexcept;
 
     /// Last MIDI value emitted on this lane (-1 = nothing sent yet).
     /// Used by the cursor readout in CurveDisplay; updated by the render thread.
     int   currentSentValueForLane (int lane) const noexcept;
+    int   currentSentValueForQurve (int lane, int qurve) const noexcept;
 
-    /// Copy of the 256-sample lookup table for the given lane (zero-filled if empty).
-    std::array<float, 256> getCurveTable (int lane = 0) const noexcept;
+    /// Copy of the 256-sample lookup table for the given lane/qurve (zero-filled if empty).
+    std::array<float, 256> getCurveTable (int lane = 0, int qurve = 0) const noexcept;
 
-    /// Original recorded gesture duration for the given lane (0 if no curve).
-    float curveDuration (int lane = 0) const noexcept;
+    /// Original recorded gesture duration for the given lane/qurve (0 if no curve).
+    float curveDuration (int lane = 0, int qurve = 0) const noexcept;
 
     /// Last computed speed ratio (manual or host-synced).
     float getEffectiveSpeedRatio() const noexcept
@@ -300,8 +327,9 @@ private:
     GestureEngine         _engine;
     GestureCaptureSession _capture;
 
-    /// UI-thread ownership of per-lane snapshots (checked for hasCurve).
-    std::array<const LaneSnapshot*, kMaxLanes> _laneSnaps;
+    /// UI-thread ownership of per-(lane,qurve) snapshots (checked for hasCurve).
+    static constexpr int qslot (int lane, int qurve) noexcept { return lane * kMaxQurves + qurve; }
+    std::array<const LaneSnapshot*, kMaxLanes * kMaxQurves> _qurveSnaps;
 
     // ── Teach / Learn ─────────────────────────────────────────────────────────
     /// Lane index currently waiting for a CC learn message (-1 = none).

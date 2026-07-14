@@ -152,24 +152,27 @@ juce::WebBrowserComponent::Options WebCurveEditor::buildOptions (WebCurveEditor*
                 p->setValueNotifyingHost (p->convertTo0to1 (val));
         })
 
-        // "setCurve" — { lane: 0, data: [0.0, …, 1.0] (256 floats or null) }
+        // "setCurve" — { lane: 0, qurve: 0, data: [0.0, …, 1.0] (256 floats or null) }
+        // `qurve` is optional (missing → 0) so older page bundles keep working.
+        // Empty data clears that one qurve; whole-lane clears go via "clearLane".
         .withEventListener ("setCurve", [owner] (const Array<var>& args)
         {
             if (args.isEmpty()) return;
             const auto& obj = args[0];
             const int lane  = static_cast<int> (obj["lane"]);
+            const int qurve = obj.hasProperty ("qurve") ? static_cast<int> (obj["qurve"]) : 0;
             const auto& arr = *obj["data"].getArray();
 
             if (arr.isEmpty())
             {
-                owner->proc.clearSnapshot (lane);
+                owner->proc.clearQurve (lane, qurve);
             }
             else
             {
                 auto snap = std::make_unique<float[]> (256);
                 for (int i = 0; i < 256; ++i)
                     snap[static_cast<std::size_t> (i)] = static_cast<float> (static_cast<double> (arr[i]));
-                owner->proc.setSnapshotFromArray (lane, snap.get(), 256);
+                owner->proc.setSnapshotFromArray (lane, qurve, snap.get(), 256);
             }
         })
 
@@ -219,6 +222,25 @@ juce::WebBrowserComponent::Options WebCurveEditor::buildOptions (WebCurveEditor*
             if (args.isEmpty()) return;
             const int lane = static_cast<int> (args[0]["lane"]);
             owner->proc.deleteLane (lane);
+            owner->sendStateSnapshot();
+        })
+
+        // "addQurve" — { lane: N } — grow a NOTE lane's qurve list by one.
+        .withEventListener ("addQurve", [owner] (const Array<var>& args)
+        {
+            if (args.isEmpty()) return;
+            const int lane = static_cast<int> (args[0]["lane"]);
+            if (owner->proc.addQurve (lane) >= 0)
+                owner->sendStateSnapshot();
+        })
+
+        // "removeQurve" — { lane: N, qurve: Q } — remove one qurve (shifts down).
+        .withEventListener ("removeQurve", [owner] (const Array<var>& args)
+        {
+            if (args.isEmpty()) return;
+            const int lane  = static_cast<int> (args[0]["lane"]);
+            const int qurve = static_cast<int> (args[0]["qurve"]);
+            owner->proc.removeQurve (lane, qurve);
             owner->sendStateSnapshot();
         })
 
@@ -391,12 +413,20 @@ void WebCurveEditor::timerCallback()
     lastEmittedPlaying = playing;
 
     juce::Array<juce::var> lanePhases;
+    juce::Array<juce::var> qurvePhases;   // per lane: array of per-qurve phases
     for (int L = 0; L < proc.activeLaneCount; ++L)
+    {
         lanePhases.add (proc.currentPhaseForLane (L));
+        juce::Array<juce::var> qs;
+        for (int q = 0; q < proc.qurveCount (L); ++q)
+            qs.add (proc.currentPhaseForQurve (L, q));
+        qurvePhases.add (juce::var (qs));
+    }
 
     webView.emitEventIfBrowserIsVisible ("phase",
         makeObj ({ { "phase",   phase },
                    { "lanes",   juce::var (lanePhases) },
+                   { "qurves",  juce::var (qurvePhases) },
                    { "playing", playing } }));
 }
 
@@ -538,20 +568,27 @@ void WebCurveEditor::sendStateSnapshot()
         lane->setProperty ("laneDirection",     "fwd");
 #endif
 
-        // Curve data (Float32Array → JSON array of 256 floats)
-        if (proc.hasCurve (L))
-        {
+        // Curve data (Float32Array → JSON array of 256 floats).
+        // "curve"  — qurve 0 (legacy shape, kept for older page bundles).
+        // "curves" — every qurve slot (null where empty) + "qurveCount".
+        auto tableToVar = [&] (int q) -> juce::var {
+            if (! proc.hasCurve (L, q)) return juce::var();   // null
             juce::var curveArr (juce::Array<juce::var>{});
             auto& ref = *curveArr.getArray();
             ref.resize (256);
-            const auto table = proc.getCurveTable (L);
+            const auto table = proc.getCurveTable (L, q);
             for (int i = 0; i < 256; ++i)
                 ref.set (i, table[static_cast<std::size_t> (i)]);
-            lane->setProperty ("curve", curveArr);
-        }
-        else
+            return curveArr;
+        };
+        lane->setProperty ("curve", tableToVar (0));
         {
-            lane->setProperty ("curve", juce::var());   // null
+            juce::var curvesArr (juce::Array<juce::var>{});
+            auto& curvesRef = *curvesArr.getArray();
+            for (int q = 0; q < proc.qurveCount (L); ++q)
+                curvesRef.add (tableToVar (q));
+            lane->setProperty ("curves",     curvesArr);
+            lane->setProperty ("qurveCount", proc.qurveCount (L));
         }
 
         lanesArrRef.add (juce::var (lane.release()));
