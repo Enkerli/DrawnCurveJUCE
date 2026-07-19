@@ -1,0 +1,4 @@
+# Per-machine Apple signing override — copy to `signing.local.cmake` (gitignored).
+# Pin the 10-character team id from Xcode ▸ Settings ▸ Accounts; leave the file
+# absent to let Xcode use the machine's default account.
+set(DRAWNQURVE_TEAM_ID "ABCDE12345" CACHE STRING "" FORCE)

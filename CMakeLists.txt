@@ -191,6 +191,20 @@ target_link_libraries(DrawnCurve PRIVATE DrawnCurveFonts)
 set(DRAWNQURVE_WEBUI_DIR "${CMAKE_SOURCE_DIR}/../music-suite/apps/drawnqurve"
     CACHE PATH "Path to the DrawnQurve WebUI source (music-suite/apps/drawnqurve)")
 include("${CMAKE_CURRENT_SOURCE_DIR}/webui.local.cmake" OPTIONAL)
+# The default above assumes music-suite is a SIBLING checkout. Before failing,
+# probe the other supported layouts: this repo nested INSIDE the monorepo
+# (…/music-suite/DrawnQurve), and a MUSIC_SUITE environment variable pointing at
+# the monorepo checkout. webui.local.cmake still wins when present.
+if(NOT EXISTS "${DRAWNQURVE_WEBUI_DIR}/main.jsx")
+    foreach(_webui_cand "${CMAKE_SOURCE_DIR}/../apps/drawnqurve" "$ENV{MUSIC_SUITE}/apps/drawnqurve")
+        if(EXISTS "${_webui_cand}/main.jsx")
+            set(DRAWNQURVE_WEBUI_DIR "${_webui_cand}" CACHE PATH
+                "Path to the DrawnQurve WebUI source (music-suite/apps/drawnqurve)" FORCE)
+            message(STATUS "DrawnQurve WebUI: found at ${_webui_cand}")
+            break()
+        endif()
+    endforeach()
+endif()
 set(WEBUI_DIR "${DRAWNQURVE_WEBUI_DIR}")
 set(WEBUI_DIST "${CMAKE_CURRENT_BINARY_DIR}/webui")
 
@@ -198,7 +212,7 @@ if(NOT EXISTS "${WEBUI_DIR}/main.jsx")
     message(FATAL_ERROR
         "DrawnQurve WebUI source not found at ${WEBUI_DIR}. It now lives in the "
         "music-suite monorepo (apps/drawnqurve). Check out music-suite next to this "
-        "repo, or set DRAWNQURVE_WEBUI_DIR in webui.local.cmake.")
+        "repo, or set DRAWNQURVE_WEBUI_DIR in webui.local.cmake, or export MUSIC_SUITE=/path/to/music-suite. Layouts probed automatically: sibling checkout (../music-suite) and this repo nested inside the monorepo (../apps/drawnqurve).")
 endif()
 
 find_program(NPXCMD npx)
@@ -272,7 +286,7 @@ target_include_directories(DrawnCurve PRIVATE Source/Engine Source Source/UI Sou
 #
 #   1. Open build-ios/DrawnCurve.xcodeproj
 #   2. Select the target → Signing & Capabilities tab
-#   3. Confirm Team = "Alexandre Enkerli (P8W7XXJN6C)"
+#   3. Confirm YOUR team is selected (pin one via signing.local.cmake)
 #   4. Confirm "Automatically manage signing" is checked
 #   5. If Xcode shows "Failed to register bundle identifier" or a stale
 #      provisioning-profile warning, click "Try Again" / let Xcode refresh
@@ -301,17 +315,30 @@ if(IS_MACOS)
 endif()
 
 if(IS_IOS)
+    # Apple team: default is EMPTY so Xcode picks the machine's own default
+    # account (a hardcoded team broke everyone else's builds — and lapsed
+    # accounts broke the maintainer's too). Pin a specific 10-char team id in
+    # a gitignored signing.local.cmake (see signing.local.cmake.example),
+    # same pattern as Serpe.
+    set(DRAWNQURVE_TEAM_ID "" CACHE STRING "Apple Developer team id (empty = Xcode default account)")
+    include("${CMAKE_CURRENT_SOURCE_DIR}/signing.local.cmake" OPTIONAL)
     if(TARGET DrawnCurve_AUv3)
         set_target_properties (DrawnCurve_AUv3 PROPERTIES
-            XCODE_ATTRIBUTE_DEVELOPMENT_TEAM        "P8W7XXJN6C"
             XCODE_ATTRIBUTE_CODE_SIGN_STYLE         "Automatic"
             XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY      "Apple Development")
+        if(DRAWNQURVE_TEAM_ID)
+            set_target_properties (DrawnCurve_AUv3 PROPERTIES
+                XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${DRAWNQURVE_TEAM_ID}")
+        endif()
     endif()
     if(TARGET DrawnCurve_Standalone)
         set_target_properties (DrawnCurve_Standalone PROPERTIES
-            XCODE_ATTRIBUTE_DEVELOPMENT_TEAM        "P8W7XXJN6C"
             XCODE_ATTRIBUTE_CODE_SIGN_STYLE         "Automatic"
             XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY      "Apple Development")
+        if(DRAWNQURVE_TEAM_ID)
+            set_target_properties (DrawnCurve_Standalone PROPERTIES
+                XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${DRAWNQURVE_TEAM_ID}")
+        endif()
     endif()
 endif()
 

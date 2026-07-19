@@ -44,3 +44,4 @@ DrawnQurve-*/
 Source/WebUI/node_modules/
 Source/WebUI/dist/
 webui.local.cmake
+signing.local.cmake
