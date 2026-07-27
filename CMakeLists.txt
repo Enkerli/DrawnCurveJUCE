@@ -135,6 +135,13 @@ endif()
 # enkerli-juce/cmake/EnkerliPlugin.cmake by hand rather than calling it.
 if(NOT IS_IOS)
     set(CLAP_JUCE_PATH "${CMAKE_SOURCE_DIR}/clap-juce-extensions" CACHE PATH "Path to clap-juce-extensions")
+    # One shared clap-juce-extensions for every repo: probe $CLAP_JUCE_PATH
+    # before FetchContent, exactly as JUCE_PATH is probed above. It pulls the
+    # CLAP SDK as submodules, so a private copy per repo is the slowest
+    # dependency in the tree (2026-07-27).
+    if(NOT EXISTS "${CLAP_JUCE_PATH}/CMakeLists.txt" AND EXISTS "$ENV{CLAP_JUCE_PATH}/CMakeLists.txt")
+        set(CLAP_JUCE_PATH "$ENV{CLAP_JUCE_PATH}")
+    endif()
     if(EXISTS "${CLAP_JUCE_PATH}/CMakeLists.txt")
         add_subdirectory("${CLAP_JUCE_PATH}" "${CMAKE_BINARY_DIR}/clap-juce-extensions")
     else()
