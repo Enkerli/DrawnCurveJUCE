@@ -23,6 +23,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED YES)
 find_package(JUCE CONFIG QUIET)
 if(NOT JUCE_FOUND)
     set(JUCE_PATH "${CMAKE_SOURCE_DIR}/JUCE" CACHE PATH "Path to JUCE directory")
+    # Probe a JUCE_PATH environment variable (one local JUCE for every repo —
+    # export it once; on Linux there is no standard location) and the macOS
+    # install, before falling back to fetching a private copy.
+    if(NOT EXISTS "${JUCE_PATH}/CMakeLists.txt" AND EXISTS "$ENV{JUCE_PATH}/CMakeLists.txt")
+        set(JUCE_PATH "$ENV{JUCE_PATH}")
+    endif()
+    if(NOT EXISTS "${JUCE_PATH}/CMakeLists.txt" AND EXISTS "/Applications/JUCE/CMakeLists.txt")
+        set(JUCE_PATH "/Applications/JUCE")
+    endif()
     if(EXISTS "${JUCE_PATH}/CMakeLists.txt")
         add_subdirectory("${JUCE_PATH}" JUCE)   # local path/symlink (dev machines)
     else()
