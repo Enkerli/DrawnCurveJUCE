@@ -52,6 +52,35 @@ WebCurveEditor::provideResource (const juce::String& path)
 
 // ── Options builder ───────────────────────────────────────────────────────────
 
+// ── Build stamps ──────────────────────────────────────────────────────────────
+/**
+ * JS run before the page loads, publishing the NATIVE side's build stamps. The
+ * WebUI bundle stamps itself at bundle time; this is the other half, and the
+ * pair is what makes a mismatch visible:
+ *
+ *   UI newer than the binary   the bundle was rebuilt but never embedded and
+ *                              relinked, so the running UI is not what you built
+ *   both old                   the built plugin never replaced the installed one
+ *
+ * Both happened on 2026-07-29/30 — a stale bundle whose UI rejected a string its
+ * own engine parsed, and a repo whose COPY_PLUGIN_AFTER_BUILD was hardcoded
+ * FALSE — and neither was visible from the running plugin.
+ *
+ * `binary` is the running bundle's own file time: no build-system support, no
+ * rebuild churn. `compiled` is this TU's compile time, which moves whenever the
+ * embedded UI does.
+ */
+static juce::String buildStampScript()
+{
+    const auto self = juce::File::getSpecialLocation (juce::File::currentApplicationFile);
+    const auto when = self.exists()
+        ? self.getLastModificationTime().formatted ("%Y-%m-%d %H:%M")
+        : juce::String ("unknown");
+    return "window.__CPP_BUILD_TAG__ = " + juce::JSON::toString (when)
+         + "; window.__CPP_COMPILED__ = "
+         + juce::JSON::toString (juce::String (__DATE__ " " __TIME__)) + ";";
+}
+
 juce::WebBrowserComponent::Options WebCurveEditor::buildOptions (WebCurveEditor* owner)
 {
     using juce::WebBrowserComponent;
@@ -62,6 +91,7 @@ juce::WebBrowserComponent::Options WebCurveEditor::buildOptions (WebCurveEditor*
         .withResourceProvider ([](const juce::String& path)
             { return WebCurveEditor::provideResource (path); },
             WebBrowserComponent::getResourceProviderRoot())
+        .withUserScript (buildStampScript())
         .withNativeIntegrationEnabled()
        #if JUCE_MAC
         // macOS only: prevent JUCE navigating to about:blank when isShowing()
