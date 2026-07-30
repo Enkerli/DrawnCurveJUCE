@@ -242,6 +242,19 @@ endif()
 
 find_program(NPXCMD npx)
 if(NPXCMD)
+    # The monorepo packages this app imports are ALSO inputs: esbuild runs with
+    # --conditions=source, so @enkerli/* resolves to packages/*/src rather than a
+    # built dist. Listing only ${WEBUI_DIR} let Serpe ship a stale bundle on
+    # 2026-07-29 — its UI rejected a string its own C++ engine parsed fine.
+    # CONFIGURE_DEPENDS so a newly added package file counts too.
+    get_filename_component(_suite_root "${WEBUI_DIR}/../.." ABSOLUTE)
+    if(EXISTS "${_suite_root}/packages")
+        file(GLOB_RECURSE WEBUI_PKG_SRC CONFIGURE_DEPENDS "${_suite_root}/packages/*/src/*.js")
+    else()
+        set(WEBUI_PKG_SRC "")
+        message(WARNING "no packages/ at ${_suite_root} — this WebUI bundle will not rebuild when @enkerli/* sources change")
+    endif()
+
     add_custom_command(
         OUTPUT  "${WEBUI_DIST}/bundle.js"
         COMMAND "${NPXCMD}" esbuild "${WEBUI_DIR}/main.jsx"
@@ -260,6 +273,7 @@ if(NPXCMD)
                 "${WEBUI_DIR}/design/curve-canvas.jsx"
                 "${WEBUI_DIR}/design/scale-editor.jsx"
                 "${WEBUI_DIR}/design/juce-ipad.jsx"
+                ${WEBUI_PKG_SRC}
         WORKING_DIRECTORY "${WEBUI_DIR}"
         COMMENT "Bundling WebUI with esbuild"
         VERBATIM
