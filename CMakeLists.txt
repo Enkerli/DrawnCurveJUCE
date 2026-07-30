@@ -257,13 +257,18 @@ if(NPXCMD)
 
     add_custom_command(
         OUTPUT  "${WEBUI_DIST}/bundle.js"
+        # Build tag, written now so it reflects THIS bundle (see the script).
+        COMMAND "${CMAKE_COMMAND}" -DOUT=${WEBUI_DIST}/build-tag.js
+                    -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/write-build-tag.cmake"
         COMMAND "${NPXCMD}" esbuild "${WEBUI_DIR}/main.jsx"
                     --bundle
                     "--inject:${WEBUI_DIR}/react-globals.js"
+                    "--inject:${WEBUI_DIST}/build-tag.js"
                     "--define:process.env.NODE_ENV=\"production\""
                     --minify
                     "--outfile=${WEBUI_DIST}/bundle.js"
-        DEPENDS "${WEBUI_DIR}/main.jsx"
+        DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/cmake/write-build-tag.cmake" "${WEBUI_DIR}/main.jsx"
                 "${WEBUI_DIR}/juce-bridge.js"
                 "${WEBUI_DIR}/react-globals.js"
                 "${WEBUI_DIR}/index.html"
