@@ -72,6 +72,15 @@ endif()
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Build base plugin properties (common to all platforms)
+# ── Installing built plugins ──────────────────────────────────────────────────
+# Mirrors enkerli-juce/cmake/EnkerliPlugin.cmake, which DrawnQurve reimplements
+# by hand (see the CLAP note below). This was hardcoded FALSE, so no build here
+# ever reached ~/Library/Audio/Plug-Ins — suite-build appeared to succeed while
+# the installed DrawnQurve stayed three weeks behind its source (found by a
+# sanity check, 2026-07-29). ON by default like the rest of the suite;
+# suite-build --no-install turns it off for branch/experiment builds.
+option(ENKERLI_INSTALL_PLUGINS "Copy built plugins into the user plug-in folders" ON)
+
 set(PLUGIN_BASE_PROPS
     COMPANY_NAME                "Enkerli"
     COMPANY_WEBSITE             "https://enkerli.com"
@@ -86,7 +95,7 @@ set(PLUGIN_BASE_PROPS
     NEEDS_MIDI_OUTPUT           TRUE
     IS_MIDI_EFFECT              TRUE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
-    COPY_PLUGIN_AFTER_BUILD     FALSE
+    COPY_PLUGIN_AFTER_BUILD     ${ENKERLI_INSTALL_PLUGINS}
 )
 
 # Add platform-specific properties
