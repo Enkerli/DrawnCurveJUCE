@@ -59,7 +59,21 @@ struct ScaleID
 
 // ── 0: Diatonic ──────────────────────────────────────────────────────────────
 //    All seven modes of the diatonic (major) scale.
-//    Ionian mask 0xAD5 verified against kScalePresetMasks in PluginProcessor.
+//
+//    Ionian is 0xAB5. This line said 0xAD5 until 2026-09, which is LYDIAN —
+//    three rows down, and correct there. The two masks are each other's
+//    bit-reverse, which is why the wrong one is always a real scale and never
+//    reads like a typo: suite-wide the convention is leftmost = LSB, pc 0 =
+//    bit 0, so C major is 0xAB5 = 2741 and 0xAD5 = 2773 is what you get
+//    reading it backwards. The same swap was written down in three other files
+//    across the suite, always with correct code beside it; music-suite's
+//    CONVENTIONS.md now names the trap.
+//
+//    The line also said "verified against kScalePresetMasks in
+//    PluginProcessor", and there is no such symbol in this repo — so whatever
+//    it once checked against is gone and the claim was unverifiable as well as
+//    wrong. What can be checked is right here: the masks below spell out their
+//    own pitch classes in the trailing comments, and those agree.
 static constexpr Entry kDiatonic[] =
 {
     { "Ionian",      0xAB5 },   // 0 2 4 5 7 9 11  — Major
