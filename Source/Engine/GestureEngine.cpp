@@ -262,8 +262,16 @@ int GestureEngine::quantizeNote (int rawNote, ScaleConfig sc, bool movingUp)
     const int pc       = rawNote % 12;
     const int interval = (pc - (int)sc.root + 12) % 12;
 
-    // Bitmask convention: bit (interval) = interval present in scale.
-    // Bit 11 = root (interval 0), bit 0 = major-7th (interval 11).
+    // Bitmask convention: bit (interval) = interval present in scale, so bit 0
+    // is the root and bit 11 the major seventh — which is what the line below
+    // does, what GestureEngine.hpp documents, and what the suite uses
+    // everywhere (leftmost = LSB; music-suite's CONVENTIONS.md).
+    //
+    // The second line here used to read "Bit 11 = root (interval 0), bit 0 =
+    // major-7th (interval 11)", contradicting the line above it in the same
+    // comment and the header it implements. Same swap as the Ionian/Lydian mask
+    // in ScaleData.h, and the same shape as three more across the suite: the
+    // code was right every time and only the prose was wrong.
     if ((sc.mask >> (interval)) & 1) return rawNote;
 
     int downNote = -1, upNote = -1;
